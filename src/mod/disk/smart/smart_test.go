@@ -342,6 +342,9 @@ func TestScanAvailableDevicesEmptyOutput(t *testing.T) {
 // TestExecCommandSuccessfulBinary verifies execCommand returns non-empty output
 // for a command that succeeds (e.g. echo).
 func TestExecCommandSuccessfulBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-only: /bin/echo not available on Windows")
+	}
 	result := execCommand("/bin/echo", "hello")
 	if result == "" {
 		t.Error("expected non-empty result from /bin/echo")
@@ -359,6 +362,9 @@ func TestExecCommandReturnsOutputOnError(t *testing.T) {
 
 // TestExecCommandWithArgs verifies execCommand passes arguments correctly.
 func TestExecCommandWithArgs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-only: /bin/echo not available on Windows")
+	}
 	result := execCommand("/bin/echo", "arg1", "arg2")
 	if result == "" {
 		t.Error("expected non-empty output from /bin/echo with args")

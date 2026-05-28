@@ -20,6 +20,9 @@ func TestIsHidden_NonRecursive_DotFile(t *testing.T) {
 }
 
 func TestIsHidden_NonRecursive_NormalFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows IsHidden calls GetFileAttributes which requires the file to exist")
+	}
 	hidden, err := IsHidden("normalfile.txt", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -202,6 +205,9 @@ func TestHideFile_NonExistentFile(t *testing.T) {
 // --- isHidden (internal, tested indirectly via non-recursive IsHidden) ---
 
 func TestIsHidden_NonRecursive_VariousNames(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows IsHidden calls GetFileAttributes which requires the file to exist")
+	}
 	cases := []struct {
 		name   string
 		hidden bool

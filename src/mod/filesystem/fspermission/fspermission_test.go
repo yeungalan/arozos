@@ -3,6 +3,7 @@ package fspermission
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -77,6 +78,9 @@ func TestGetFilePermissions_Directory(t *testing.T) {
 // --- SetFilePermisson ---
 
 func TestSetFilePermisson_ValidPermission(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not honor Unix permission bits")
+	}
 	fsh, dir := newTestFSH(t)
 	target := filepath.Join(dir, "testfile.txt")
 	if err := os.WriteFile(target, []byte("hello"), 0644); err != nil {

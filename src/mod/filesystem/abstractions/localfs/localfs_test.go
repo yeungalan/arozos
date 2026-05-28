@@ -3,6 +3,7 @@ package localfs
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -172,6 +173,9 @@ func TestLocalFS_RealPathToVirtualPath(t *testing.T) {
 // ── Additional coverage tests ─────────────────────────────────────────────────
 
 func TestLocalFS_Chmod(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not honor Unix permission bits")
+	}
 	lfs, tmpDir := newTestLocalFS(t)
 	filename := filepath.Join(tmpDir, "chmod_test.txt")
 	os.WriteFile(filename, []byte("data"), 0644)
