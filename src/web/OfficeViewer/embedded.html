@@ -314,8 +314,9 @@ ao_module_setWindowTitle('OfficeViewer — ' + fileName);
 async function renderDocx(url) {
   document.getElementById('loading-label').textContent = 'Rendering document…';
 
-  // docx-preview needs JSZip on window.JSZip
-  await loadScript('./include/PPTXjs/js/jszip.min.js');
+  // docx-preview requires JSZip v3 (has loadAsync).
+  // PPTXjs ships v2 which is incompatible — load the correct version here.
+  await loadScript('./include/docx/jszip3.min.js');
   await loadScript('./include/docx/docx-preview.min.js');
 
   const res = await fetch(url);
