@@ -1,24 +1,25 @@
 /*
-	Office Viewer - Basic office file renderer
+	Office Viewer - Modern office file viewer
 */
 
-//Setup the module information
 var moduleLaunchInfo = {
     Name: "OfficeViewer",
-	Desc: "Basic office file viewer for docx, pptx and xlsx",
+	Desc: "Modern office file viewer for documents, spreadsheets and presentations",
 	Group: "Office",
 	IconPath: "OfficeViewer/img/module_icon.png",
-	Version: "1.0",
+	Version: "2.0",
 	StartDir: "OfficeViewer/index.html",
 	SupportFW: true,
-	InitFWSize: [350, 170],
+	InitFWSize: [320, 210],
 	LaunchFWDir: "OfficeViewer/index.html",
 	SupportEmb: true,
 	LaunchEmb: "OfficeViewer/embedded.html",
 	InitEmbSize: [1060, 680],
-	SupportedExt: [".docx",".pptx",".xlsx", ".csv"]
+	SupportedExt: [
+		".docx", ".pptx", ".xlsx", ".csv",
+		".pdf", ".xls", ".ods", ".odp",
+		".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".bmp"
+	]
 }
 
-
-//Register the module
 registerModule(JSON.stringify(moduleLaunchInfo));
