@@ -125,6 +125,7 @@ func RunStartup() {
 	IoTHubInit()  //Inialize ArozOS IoT Hub module
 
 	ModuleInstallerInit() //Start Module Installer
+	OfficeViewer_init()   //Office document → PDF conversion API
 
 	//Finally
 	moduleHandler.ModuleSortList() //Sort the system module list
