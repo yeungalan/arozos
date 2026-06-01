@@ -88,7 +88,10 @@
     #view-docx .docx-wrapper > section.docx {
       box-shadow: 0 2px 14px rgba(0,0,0,.18) !important;
       margin: 12px auto !important;
+      /* Do not override width — let docx-preview set page width from document */
     }
+    /* Ensure images inside docx render correctly */
+    #view-docx img { max-width: 100%; height: auto; }
 
     /* ── XLSX / CSV ── */
     #view-sheet { display: none; flex-direction: column; height: 100%; overflow: hidden; }
@@ -324,23 +327,28 @@ async function renderDocx(url) {
   const buf = await res.arrayBuffer();
 
   const container = document.getElementById('view-docx');
+  // Make container visible before rendering so docx-preview can read correct
+  // container dimensions for multi-column / page-width calculations.
+  container.style.cssText = 'display:block;visibility:hidden;';
+
   await window.docx.renderAsync(buf, container, null, {
-    className:           'docx',      // CSS class prefix injected by the library
-    inWrapper:           true,         // wrap each page in a page-sized div
-    ignoreWidth:         false,        // honour the document's page width
-    ignoreHeight:        false,
-    ignoreFonts:         false,
-    breakPages:          true,         // render page breaks visually
-    useBase64URL:        true,         // embed images as data URIs (no extra requests)
-    trimXmlDeclaration:  true,
-    renderChanges:       false,
-    renderHeaders:       true,
-    renderFooters:       true,
-    renderFootnotes:     true,
-    renderEndnotes:      true,
-    experimental:        true,         // enables more formatting features
+    className:            'docx',
+    inWrapper:            true,
+    ignoreWidth:          false,
+    ignoreHeight:         false,
+    ignoreFonts:          false,
+    breakPages:           true,
+    useBase64URL:         false,   // use blob object-URLs (more reliable than base64)
+    trimXmlDeclaration:   true,
+    renderChanges:        false,
+    renderHeaders:        true,
+    renderFooters:        true,
+    renderFootnotes:      true,
+    renderEndnotes:       true,
+    experimental:         true,   // needed for multi-column layouts
   });
 
+  container.style.cssText = '';
   showPanel('view-docx');
 }
 
