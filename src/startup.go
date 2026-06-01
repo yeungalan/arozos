@@ -126,6 +126,8 @@ func RunStartup() {
 
 	ModuleInstallerInit() //Start Module Installer
 
+	OfficeViewerInit() //Office Viewer WMF conversion endpoint
+
 	//Finally
 	moduleHandler.ModuleSortList() //Sort the system module list
 

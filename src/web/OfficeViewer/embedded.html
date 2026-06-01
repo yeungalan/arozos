@@ -348,50 +348,87 @@ async function renderDocx(url) {
     experimental:         true,   // needed for multi-column layouts
   });
 
-  // Replace broken images (EMF/WMF are not renderable in browsers)
-  fixDocxImages(container);
+  // Convert WMF/EMF images via server-side endpoint (browsers can't render WMF).
+  await fixDocxImages(container);
 
   container.style.cssText = '';
   showPanel('view-docx');
 }
 
-// Replace broken img elements (typically EMF/WMF format) with a styled placeholder.
-// Also sends absolutely-positioned anchor shapes behind text so they don't cover content.
-function fixDocxImages(container) {
-  // Fix each image
-  container.querySelectorAll('img').forEach(img => {
-    const tryFix = () => {
-      if (img.naturalWidth !== 0) return; // loaded fine
-      // Compute size from inline style or fallback
-      const w = img.style.width  || img.width  || '120px';
-      const h = img.style.height || img.height || '90px';
-      const ph = document.createElement('div');
-      ph.style.cssText = [
-        'display:inline-flex', 'flex-direction:column',
-        'align-items:center', 'justify-content:center',
-        `width:${w}`, `height:${h}`,
-        'min-width:80px', 'min-height:56px',
-        'background:#f6f6f6', 'border:1px dashed #bbb',
-        'border-radius:4px', 'color:#999',
-        'font-size:11px', 'text-align:center',
-        'gap:4px', 'padding:8px',
-        'box-sizing:border-box',
-      ].join(';');
-      ph.innerHTML = '<span style="font-size:22px">🖼️</span>' +
-                     '<span>Image<br>(EMF/WMF format<br>not supported)</span>';
-      img.replaceWith(ph);
-    };
-    if (img.complete) { tryFix(); } else { img.addEventListener('error', tryFix); }
-  });
-
-  // Push anchor-positioned shapes (absolutely placed decorative elements) behind text
-  // so they don't cover the page content. docx-preview v0.3.7 doesn't honour behindDoc.
+// For each broken img in the docx container, fetch its blob data and send it
+// to the server-side WMF → SVG converter. On success swap in the SVG;
+// on failure show a styled placeholder.
+async function fixDocxImages(container) {
+  // Push anchor-positioned shapes behind text first so they don't cover content.
+  // docx-preview v0.3.7 doesn't honour the DOCX behindDoc flag.
   container.querySelectorAll('[style]').forEach(el => {
     if (el.style.position === 'absolute' && el !== container) {
       el.style.zIndex = '-1';
     }
   });
+
+  const imgs = Array.from(container.querySelectorAll('img'));
+  await Promise.all(imgs.map(img => convertOrPlaceholder(img)));
 }
+
+async function convertOrPlaceholder(img) {
+  // Wait a tick so the browser has a chance to attempt loading the image.
+  await new Promise(r => setTimeout(r, 0));
+
+  if (img.naturalWidth > 0) return; // already loaded fine
+
+  // Preserve the visual size so the placeholder/SVG has the same footprint.
+  const w = img.style.width  || (img.width  ? img.width  + 'px' : null);
+  const h = img.style.height || (img.height ? img.height + 'px' : null);
+
+  try {
+    // docx-preview creates a blob: URL containing the raw WMF/EMF bytes.
+    const blobResp = await fetch(img.src);
+    if (!blobResp.ok) throw new Error('blob fetch failed');
+    const wmfBytes = await blobResp.arrayBuffer();
+
+    // POST raw bytes to the Go server-side converter.
+    const convResp = await fetch('/api/office-viewer/wmf', {
+      method:      'POST',
+      credentials: 'include',
+      headers:     { 'Content-Type': 'application/octet-stream' },
+      body:        wmfBytes,
+    });
+
+    if (convResp.ok) {
+      const svgBlob = await convResp.blob();
+      const svgURL  = URL.createObjectURL(svgBlob);
+      // Replace with an <img> pointing at the SVG blob URL.
+      const newImg = document.createElement('img');
+      if (w) newImg.style.width  = w;
+      if (h) newImg.style.height = h;
+      newImg.style.maxWidth  = '100%';
+      newImg.style.display   = 'block';
+      newImg.src = svgURL;
+      img.replaceWith(newImg);
+      return;
+    }
+  } catch (_) { /* fall through to placeholder */ }
+
+  // Fallback: styled placeholder when conversion fails.
+  showImgPlaceholder(img, w, h);
+}
+
+function showImgPlaceholder(img, w, h) {
+  const ph = document.createElement('div');
+  ph.style.cssText = [
+    'display:inline-flex', 'flex-direction:column',
+    'align-items:center', 'justify-content:center',
+    w ? `width:${w}` : 'min-width:80px',
+    h ? `height:${h}` : 'min-height:56px',
+    'background:#f6f6f6', 'border:1px dashed #bbb',
+    'border-radius:4px', 'color:#999',
+    'font-size:11px', 'text-align:center',
+    'gap:4px', 'padding:8px', 'box-sizing:border-box',
+  ].join(';');
+  ph.innerHTML = '<span style="font-size:22px">🖼️</span>' +
+                 '<span style="font-size:10px">WMF/EMF image</span>';
+  img.replaceWith(ph);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
