@@ -348,8 +348,50 @@ async function renderDocx(url) {
     experimental:         true,   // needed for multi-column layouts
   });
 
+  // Replace broken images (EMF/WMF are not renderable in browsers)
+  fixDocxImages(container);
+
   container.style.cssText = '';
   showPanel('view-docx');
+}
+
+// Replace broken img elements (typically EMF/WMF format) with a styled placeholder.
+// Also sends absolutely-positioned anchor shapes behind text so they don't cover content.
+function fixDocxImages(container) {
+  // Fix each image
+  container.querySelectorAll('img').forEach(img => {
+    const tryFix = () => {
+      if (img.naturalWidth !== 0) return; // loaded fine
+      // Compute size from inline style or fallback
+      const w = img.style.width  || img.width  || '120px';
+      const h = img.style.height || img.height || '90px';
+      const ph = document.createElement('div');
+      ph.style.cssText = [
+        'display:inline-flex', 'flex-direction:column',
+        'align-items:center', 'justify-content:center',
+        `width:${w}`, `height:${h}`,
+        'min-width:80px', 'min-height:56px',
+        'background:#f6f6f6', 'border:1px dashed #bbb',
+        'border-radius:4px', 'color:#999',
+        'font-size:11px', 'text-align:center',
+        'gap:4px', 'padding:8px',
+        'box-sizing:border-box',
+      ].join(';');
+      ph.innerHTML = '<span style="font-size:22px">🖼️</span>' +
+                     '<span>Image<br>(EMF/WMF format<br>not supported)</span>';
+      img.replaceWith(ph);
+    };
+    if (img.complete) { tryFix(); } else { img.addEventListener('error', tryFix); }
+  });
+
+  // Push anchor-positioned shapes (absolutely placed decorative elements) behind text
+  // so they don't cover the page content. docx-preview v0.3.7 doesn't honour behindDoc.
+  container.querySelectorAll('[style]').forEach(el => {
+    if (el.style.position === 'absolute' && el !== container) {
+      el.style.zIndex = '-1';
+    }
+  });
+}
 }
 
 // ═══════════════════════════════════════════════════════════════════════
