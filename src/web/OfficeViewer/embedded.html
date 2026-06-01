@@ -5,320 +5,632 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Office Viewer</title>
 
-  <!-- jQuery (required by ao_module.js) -->
+  <!-- Always required: jQuery (ao_module needs it) + module bridge -->
   <script src="./include/jquery/jquery-1.12.4.min.js"></script>
   <script src="../script/ao_module.js"></script>
 
   <style>
     :root {
-      --toolbar-bg:   #1c2128;
-      --toolbar-text: #cdd9e5;
-      --bg:           #f0f2f5;
-      --surface:      #ffffff;
-      --border:       #d0d7de;
-      --text:         #24292f;
-      --text-muted:   #57606a;
-      --accent:       #0969da;
-      --radius:       6px;
+      --toolbar-h:   46px;
+      --toolbar-bg:  #1c2128;
+      --toolbar-fg:  #cdd9e5;
+      --bg:          #f0f2f5;
+      --surface:     #fff;
+      --border:      #d0d7de;
+      --text:        #24292f;
+      --muted:       #57606a;
+      --accent:      #0969da;
+      --radius:      5px;
     }
-
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg:        #0d1117;
-        --surface:   #161b22;
-        --border:    #30363d;
-        --text:      #c9d1d9;
-        --text-muted:#8b949e;
-        --accent:    #58a6ff;
+        --bg:#0d1117; --surface:#161b22; --border:#30363d;
+        --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff;
       }
     }
-
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html, body {
-      height: 100%;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      overflow: hidden;
-    }
+    html, body { height: 100%; overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text); }
 
     /* ── Toolbar ── */
     #toolbar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 0 14px;
-      height: 46px;
-      background: var(--toolbar-bg);
-      color: var(--toolbar-text);
-      flex-shrink: 0;
-      border-bottom: 1px solid rgba(0,0,0,.35);
-      user-select: none;
+      position: fixed; top: 0; left: 0; right: 0; height: var(--toolbar-h);
+      z-index: 100; display: flex; align-items: center; gap: 10px;
+      padding: 0 14px; background: var(--toolbar-bg); color: var(--toolbar-fg);
+      border-bottom: 1px solid rgba(0,0,0,.4); user-select: none;
     }
-
-    #file-icon  { font-size: 17px; flex-shrink: 0; line-height: 1; }
-    #file-name  {
-      flex: 1;
-      font-size: 13px;
-      font-weight: 500;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .badge {
-      padding: 2px 7px;
-      border-radius: 20px;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: .5px;
-      text-transform: uppercase;
-      flex-shrink: 0;
-    }
-    .badge-doc  { background:#1f6feb; color:#fff; }
-    .badge-xls  { background:#2ea043; color:#fff; }
-    .badge-ppt  { background:#da3633; color:#fff; }
-    .badge-pdf  { background:#e16328; color:#fff; }
-    .badge-img  { background:#6e7681; color:#fff; }
-    .badge-misc { background:#484f58; color:#fff; }
-
-    #toolbar-actions { display:flex; gap:6px; }
-
+    #file-icon  { font-size: 17px; flex-shrink: 0; }
+    #file-name  { flex: 1; font-size: 13px; font-weight: 500;
+                  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .badge { padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700;
+             letter-spacing: .5px; text-transform: uppercase; flex-shrink: 0; }
+    .b-doc{background:#1f6feb;color:#fff} .b-xls{background:#2ea043;color:#fff}
+    .b-ppt{background:#da3633;color:#fff} .b-pdf{background:#e16328;color:#fff}
+    .b-img{background:#6e7681;color:#fff} .b-def{background:#484f58;color:#fff}
+    #toolbar-btns { display: flex; gap: 6px; flex-shrink: 0; }
     .tbtn {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      background: rgba(255,255,255,.08);
-      border: 1px solid rgba(255,255,255,.14);
-      border-radius: var(--radius);
-      color: var(--toolbar-text);
-      padding: 4px 10px;
-      font-size: 12px;
-      font-family: inherit;
-      cursor: pointer;
-      text-decoration: none;
-      white-space: nowrap;
-      transition: background .12s;
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
+      border-radius: var(--radius); color: var(--toolbar-fg); padding: 4px 10px;
+      font-size: 12px; font-family: inherit; cursor: pointer;
+      text-decoration: none; transition: background .12s; white-space: nowrap;
     }
     .tbtn:hover { background: rgba(255,255,255,.18); }
 
-    /* ── Viewer area ── */
-    #wrap {
-      position: absolute;
-      inset: 46px 0 0 0;
-      display: flex;
-      flex-direction: column;
+    /* ── Content wrap ── */
+    #content {
+      position: fixed; inset: var(--toolbar-h) 0 0 0;
+      overflow: auto; display: flex; flex-direction: column;
     }
 
     /* ── States ── */
-    .state {
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      gap: 14px;
-      padding: 40px;
-      text-align: center;
-    }
-    .state.visible { display: flex; }
-
-    .spinner {
-      width: 40px; height: 40px;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin .7s linear infinite;
-    }
+    .state { display: none; flex-direction: column; align-items: center;
+             justify-content: center; height: 100%; gap: 14px; padding: 40px; text-align: center; }
+    .state.on { display: flex; }
+    .spinner { width: 38px; height: 38px; border: 3px solid var(--border);
+               border-top-color: var(--accent); border-radius: 50%;
+               animation: spin .7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    #loading-label { color: var(--muted); font-size: 13px; }
+    .s-icon  { font-size: 42px; }
+    .s-title { font-size: 17px; font-weight: 600; }
+    .s-detail{ font-size: 13px; color: var(--muted); max-width: 420px; line-height: 1.5; }
 
-    #loading-label { color: var(--text-muted); font-size: 13px; }
-
-    .state-icon   { font-size: 44px; }
-    .state-title  { font-size: 17px; font-weight: 600; }
-    .state-detail { font-size: 13px; color: var(--text-muted); max-width: 420px; }
-
-    /* ── PDF viewer (primary rendering surface) ── */
-    #pdf-frame {
-      display: none;
-      width: 100%;
-      height: 100%;
-      border: none;
+    /* ── DOCX (docx-preview injects its own styles) ── */
+    #view-docx {
+      display: none; width: 100%; min-height: 100%;
+      background: #e8e8e8;
+      padding: 20px 0;
     }
-    #pdf-frame.visible { display: block; }
+    /* Override docx-preview page wrapper to look clean */
+    #view-docx .docx-wrapper { padding: 0 !important; background: #e8e8e8 !important; }
+    #view-docx .docx-wrapper > section.docx {
+      box-shadow: 0 2px 14px rgba(0,0,0,.18) !important;
+      margin: 12px auto !important;
+    }
 
-    /* ── Image viewer ── */
-    #img-view {
-      display: none;
-      width: 100%;
-      height: 100%;
-      align-items: center;
-      justify-content: center;
-      background: var(--bg);
-      padding: 20px;
-      overflow: auto;
+    /* ── XLSX / CSV ── */
+    #view-sheet { display: none; flex-direction: column; height: 100%; overflow: hidden; }
+    #sheet-tabs {
+      display: flex; flex-wrap: wrap; gap: 3px; padding: 5px 8px;
+      background: #e8eaec; border-bottom: 1px solid #c8cacc; flex-shrink: 0;
     }
-    #img-view.visible { display: flex; }
-    #img-view img {
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
-      border-radius: var(--radius);
-      box-shadow: 0 2px 12px rgba(0,0,0,.15);
+    .s-tab {
+      padding: 3px 14px; border: 1px solid #bbb; border-radius: 3px;
+      background: #fff; cursor: pointer; font-size: 11pt; font-family: inherit;
+      white-space: nowrap; transition: background .1s;
     }
+    .s-tab.active { background: #217346; color: #fff; border-color: #217346; }
+    #sheet-panes { flex: 1; overflow: hidden; position: relative; }
+    .s-pane { position: absolute; inset: 0; overflow: auto; display: none; }
+    .s-pane.on { display: block; }
+
+    .data-table { border-collapse: collapse; font-size: 10pt; white-space: nowrap;
+                  font-family: "Calibri","Segoe UI",Arial,sans-serif; }
+    .data-table thead th {
+      position: sticky; top: 0; z-index: 2; background: #f2f2f2;
+      border: 1px solid #d0d0d0; padding: 2px 7px; text-align: center;
+      font-weight: 600; color: #444; min-width: 48px; user-select: none;
+    }
+    .data-table td { border: 1px solid #d8d8d8; padding: 2px 7px;
+                     vertical-align: middle; max-width: 300px;
+                     overflow: hidden; text-overflow: ellipsis; }
+    .data-table .rn {
+      background: #f2f2f2; text-align: center; color: #888; font-size: 9pt;
+      border: 1px solid #d0d0d0; min-width: 36px; position: sticky; left: 0; z-index: 1;
+    }
+    .data-table thead th:first-child { position: sticky; top: 0; left: 0; z-index: 3; }
+    .data-table tr:hover td:not(.rn) { background-color: rgba(33,115,70,.06); }
+
+    /* ── PPTX ── */
+    #view-pptx { display: none; width: 100%; min-height: 100%; }
+    #view-pptx .slides-toolbar { width: 100% !important; }
+    #view-pptx .slide { margin: 0 auto !important; max-width: calc(100% - 8px) !important; }
+
+    /* ── PDF ── */
+    #view-pdf { display: none; width: 100%; height: 100%; }
+    #view-pdf embed { display: block; width: 100%; height: 100%; border: none; }
+
+    /* ── Image ── */
+    #view-img { display: none; width: 100%; height: 100%;
+               align-items: center; justify-content: center;
+               background: var(--bg); padding: 20px; }
+    #view-img img { max-width: 100%; max-height: 100%; object-fit: contain;
+                    border-radius: var(--radius);
+                    box-shadow: 0 2px 14px rgba(0,0,0,.15); }
   </style>
 </head>
 <body>
 
-  <div id="toolbar">
-    <span id="file-icon"></span>
-    <span id="file-name">Loading…</span>
-    <span id="file-badge" class="badge badge-misc"></span>
-    <div id="toolbar-actions">
-      <a id="dl-btn" class="tbtn" href="#">↓&nbsp;Download</a>
-    </div>
+<!-- ── Toolbar ── -->
+<div id="toolbar">
+  <span id="file-icon"></span>
+  <span id="file-name">Loading…</span>
+  <span id="file-badge" class="badge b-def"></span>
+  <div id="toolbar-btns">
+    <a id="dl-btn" class="tbtn" href="#">↓ Download</a>
+  </div>
+</div>
+
+<!-- ── Content ── -->
+<div id="content">
+
+  <!-- Loading -->
+  <div id="state-loading" class="state on">
+    <div class="spinner"></div>
+    <div id="loading-label">Loading…</div>
   </div>
 
-  <div id="wrap">
-    <!-- Loading -->
-    <div id="state-loading" class="state visible">
-      <div class="spinner"></div>
-      <div id="loading-label">Preparing document…</div>
-    </div>
-
-    <!-- Error -->
-    <div id="state-error" class="state">
-      <div class="state-icon">⚠️</div>
-      <div class="state-title">Could not open this file</div>
-      <div id="error-detail" class="state-detail"></div>
-    </div>
-
-    <!-- Unsupported -->
-    <div id="state-unsupported" class="state">
-      <div class="state-icon">📄</div>
-      <div id="uns-title" class="state-title">Preview not available</div>
-      <div id="uns-hint"  class="state-detail"></div>
-    </div>
-
-    <!-- PDF (used for all converted documents) -->
-    <embed id="pdf-frame" type="application/pdf" src="">
-
-    <!-- Image -->
-    <div id="img-view">
-      <img id="img-el" src="" alt="">
-    </div>
+  <!-- Error -->
+  <div id="state-error" class="state">
+    <div class="s-icon">⚠️</div>
+    <div class="s-title">Failed to open file</div>
+    <div id="err-msg" class="s-detail"></div>
   </div>
+
+  <!-- Unsupported -->
+  <div id="state-unsupported" class="state">
+    <div class="s-icon">📄</div>
+    <div id="uns-title" class="s-title"></div>
+    <div id="uns-hint"  class="s-detail"></div>
+  </div>
+
+  <!-- DOCX -->
+  <div id="view-docx"></div>
+
+  <!-- XLSX / CSV -->
+  <div id="view-sheet">
+    <div id="sheet-tabs"></div>
+    <div id="sheet-panes"></div>
+  </div>
+
+  <!-- PPTX -->
+  <div id="view-pptx"></div>
+
+  <!-- PDF -->
+  <div id="view-pdf">
+    <embed id="pdf-embed" type="application/pdf" src="">
+  </div>
+
+  <!-- Image -->
+  <div id="view-img">
+    <img id="img-el" src="" alt="">
+  </div>
+
+</div>
 
 <script>
 'use strict';
 
 // ── Metadata ─────────────────────────────────────────────────────────
 const ICONS = {
-  doc:'📝', docx:'📝', odt:'📝', fodt:'📝', rtf:'📝',
-  xls:'📊', xlsx:'📊', ods:'📊', fods:'📊', csv:'📋',
-  ppt:'🎞️', pptx:'🎞️', odp:'🎞️', fodp:'🎞️',
+  docx:'📝',doc:'📝',odt:'📝',rtf:'📝',
+  xlsx:'📊',xls:'📊',ods:'📊',csv:'📋',
+  pptx:'🎞️',ppt:'🎞️',odp:'🎞️',
   pdf:'📕',
-  jpg:'🖼️', jpeg:'🖼️', png:'🖼️', gif:'🖼️',
-  svg:'🖼️', bmp:'🖼️', webp:'🖼️', tiff:'🖼️', tif:'🖼️',
+  jpg:'🖼️',jpeg:'🖼️',png:'🖼️',gif:'🖼️',svg:'🖼️',bmp:'🖼️',webp:'🖼️',tif:'🖼️',tiff:'🖼️',
 };
-
 const BADGES = {
-  doc:'badge-doc', docx:'badge-doc', odt:'badge-doc', fodt:'badge-doc', rtf:'badge-doc',
-  xls:'badge-xls', xlsx:'badge-xls', ods:'badge-xls', fods:'badge-xls', csv:'badge-xls',
-  ppt:'badge-ppt', pptx:'badge-ppt', odp:'badge-ppt', fodp:'badge-ppt',
-  pdf:'badge-pdf',
-  jpg:'badge-img', jpeg:'badge-img', png:'badge-img', gif:'badge-img',
-  svg:'badge-img', bmp:'badge-img', webp:'badge-img', tiff:'badge-img', tif:'badge-img',
+  docx:'b-doc',doc:'b-doc',odt:'b-doc',rtf:'b-doc',
+  xlsx:'b-xls',xls:'b-xls',ods:'b-xls',csv:'b-xls',
+  pptx:'b-ppt',ppt:'b-ppt',odp:'b-ppt',
+  pdf:'b-pdf',
+  jpg:'b-img',jpeg:'b-img',png:'b-img',gif:'b-img',
+  svg:'b-img',bmp:'b-img',webp:'b-img',tif:'b-img',tiff:'b-img',
 };
+const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','bmp','svg','webp','tif','tiff']);
+const SHEET_EXTS = new Set(['xlsx','xls','xlsm','xlsb','ods','csv']);
 
-const IMAGE_EXTS = new Set([
-  'jpg','jpeg','png','gif','bmp','svg','webp','tiff','tif'
-]);
-
-// ── Panels ────────────────────────────────────────────────────────────
-function show(id) {
-  ['state-loading','state-error','state-unsupported','pdf-frame','img-view']
-    .forEach(p => {
-      const el = document.getElementById(p);
-      if (el) el.classList.toggle('visible', p === id);
-    });
+// ── Panel management ──────────────────────────────────────────────────
+const PANELS = ['state-loading','state-error','state-unsupported',
+                'view-docx','view-sheet','view-pptx','view-pdf','view-img'];
+function showPanel(id) {
+  PANELS.forEach(p => {
+    const el = document.getElementById(p);
+    if (!el) return;
+    const flex = ['state-loading','state-error','state-unsupported','view-img'].includes(p);
+    if (p === id) {
+      el.style.display = flex ? 'flex' : (p === 'view-sheet' ? 'flex' : 'block');
+    } else {
+      el.style.display = 'none';
+    }
+  });
+}
+function showError(msg) {
+  document.getElementById('err-msg').textContent = msg;
+  showPanel('state-error');
 }
 
-function showError(msg) {
-  document.getElementById('error-detail').textContent = msg;
-  show('state-error');
+// ── Lazy loader ───────────────────────────────────────────────────────
+const loaded = {};
+function loadScript(src) {
+  if (loaded[src]) return loaded[src];
+  loaded[src] = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+  return loaded[src];
+}
+function loadCSS(href) {
+  if (loaded[href]) return loaded[href];
+  loaded[href] = new Promise(res => {
+    const l = document.createElement('link');
+    l.rel = 'stylesheet'; l.href = href;
+    l.onload = res; l.onerror = res;
+    document.head.appendChild(l);
+  });
+  return loaded[href];
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────
 const inputFiles = ao_module_loadInputFiles();
-if (!inputFiles || !inputFiles.length) {
-  window.location.href = './index.html';
-}
+if (!inputFiles || !inputFiles.length) { window.location.href = './index.html'; }
 
 const lf       = inputFiles[0];
 const filePath = lf.filepath;
 const fileName = lf.filename;
 const ext      = filePath.split('.').pop().toLowerCase();
+const mediaURL = '/media?file='            + encodeURIComponent(filePath);
 const dlURL    = '/media?download=true&file=' + encodeURIComponent(filePath);
 
-// Populate toolbar
 document.getElementById('file-icon').textContent = ICONS[ext] || '📄';
 document.getElementById('file-name').textContent  = fileName;
 const badge = document.getElementById('file-badge');
 badge.textContent = ext.toUpperCase();
-badge.className   = 'badge ' + (BADGES[ext] || 'badge-misc');
+badge.className   = 'badge ' + (BADGES[ext] || 'b-def');
 document.getElementById('dl-btn').href = dlURL;
 ao_module_setWindowTitle('OfficeViewer — ' + fileName);
 
-// ── Render ────────────────────────────────────────────────────────────
-if (IMAGE_EXTS.has(ext)) {
-  // Images: render natively
-  const img = document.getElementById('img-el');
-  img.onload  = () => show('img-view');
-  img.onerror = () => showError('Could not load the image file.');
-  img.alt     = fileName;
-  img.src     = '/media?file=' + encodeURIComponent(filePath);
+// ── Dispatch ──────────────────────────────────────────────────────────
+(async () => {
+  try {
+    if (ext === 'docx') {
+      await renderDocx(mediaURL);
+    } else if (ext === 'pptx') {
+      await renderPptx(mediaURL);
+    } else if (SHEET_EXTS.has(ext)) {
+      await renderSheet(mediaURL, ext);
+    } else if (ext === 'pdf') {
+      renderPDF(mediaURL);
+    } else if (IMAGE_EXTS.has(ext)) {
+      renderImage(mediaURL);
+    } else if (ext === 'txt' || ext === 'md') {
+      await renderText(mediaURL);
+    } else {
+      document.getElementById('uns-title').textContent = '.' + ext.toUpperCase() + ' preview is not available';
+      document.getElementById('uns-hint').textContent  = 'Download the file to open it locally.';
+      showPanel('state-unsupported');
+    }
+  } catch(e) {
+    showError(e.message || String(e));
+  }
+})();
 
-} else if (ext === 'pdf') {
-  // PDF: serve directly via native browser renderer
-  renderPDF('/media?file=' + encodeURIComponent(filePath));
+// ═══════════════════════════════════════════════════════════════════════
+//  DOCX — docx-preview (high-fidelity OOXML rendering)
+// ═══════════════════════════════════════════════════════════════════════
+async function renderDocx(url) {
+  document.getElementById('loading-label').textContent = 'Rendering document…';
 
-} else if (ext === 'txt' || ext === 'md') {
-  // Plain text: fetch and show in a pre
-  fetch('/media?file=' + encodeURIComponent(filePath))
-    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.text(); })
-    .then(text => {
-      const pre = document.createElement('pre');
-      pre.style.cssText = 'padding:24px;font-size:13px;white-space:pre-wrap;word-break:break-word;height:100%;overflow:auto;background:var(--surface);color:var(--text)';
-      pre.textContent = text;
-      document.getElementById('wrap').appendChild(pre);
-      show('');
-    })
-    .catch(e => showError(e.message));
+  // docx-preview needs JSZip on window.JSZip
+  await loadScript('./include/PPTXjs/js/jszip.min.js');
+  await loadScript('./include/docx/docx-preview.min.js');
 
-} else {
-  // All other formats: let Go convert to PDF via LibreOffice
-  const convertURL = '/OfficeViewer/api/convert?file=' + encodeURIComponent(filePath);
-  document.getElementById('loading-label').textContent = 'Converting with LibreOffice…';
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Failed to fetch document (' + res.status + ')');
+  const buf = await res.arrayBuffer();
 
-  // Probe the endpoint first to surface a clean error message
-  fetch(convertURL, { method: 'HEAD' })
-    .then(r => {
-      if (!r.ok) return r.text().then(t => { throw new Error(t || r.statusText); });
-      renderPDF(convertURL);
-    })
-    .catch(e => showError(e.message));
+  const container = document.getElementById('view-docx');
+  await window.docx.renderAsync(buf, container, null, {
+    className:           'docx',      // CSS class prefix injected by the library
+    inWrapper:           true,         // wrap each page in a page-sized div
+    ignoreWidth:         false,        // honour the document's page width
+    ignoreHeight:        false,
+    ignoreFonts:         false,
+    breakPages:          true,         // render page breaks visually
+    useBase64URL:        true,         // embed images as data URIs (no extra requests)
+    trimXmlDeclaration:  true,
+    renderChanges:       false,
+    renderHeaders:       true,
+    renderFooters:       true,
+    renderFootnotes:     true,
+    renderEndnotes:      true,
+    experimental:        true,         // enables more formatting features
+  });
+
+  showPanel('view-docx');
 }
 
-function renderPDF(src) {
-  const embed = document.getElementById('pdf-frame');
-  embed.onload = () => show('pdf-frame');
-  // Fallback: some browsers fire no events for embed; show after a short delay
-  setTimeout(() => {
-    if (!embed.classList.contains('visible')) show('pdf-frame');
-  }, 800);
-  embed.src = src;
+// ═══════════════════════════════════════════════════════════════════════
+//  XLSX / CSV — SheetJS with full cell-style extraction
+// ═══════════════════════════════════════════════════════════════════════
+async function renderSheet(url, fileExt) {
+  document.getElementById('loading-label').textContent = 'Loading spreadsheet…';
+  await loadScript('./include/SheetJS/xlsx.full.min.js');
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Failed to fetch file (' + res.status + ')');
+  const buf = await res.arrayBuffer();
+
+  let wb;
+  if (fileExt === 'csv') {
+    // Parse CSV as text and create a workbook
+    const text = new TextDecoder().decode(buf);
+    wb = XLSX.read(text, { type: 'string' });
+  } else {
+    wb = XLSX.read(new Uint8Array(buf), {
+      type:         'array',
+      cellStyles:   true,   // parse fill/font/border/alignment styles
+      cellDates:    true,   // parse date serials as JS Date objects
+      cellNF:       true,   // keep number format strings
+      cellHTML:     false,
+      dense:        false,
+    });
+  }
+
+  const tabsEl   = document.getElementById('sheet-tabs');
+  const panesEl  = document.getElementById('sheet-panes');
+  tabsEl.innerHTML = '';
+  panesEl.innerHTML = '';
+
+  wb.SheetNames.forEach((name, idx) => {
+    // Tab button
+    const tab = document.createElement('button');
+    tab.className   = 's-tab' + (idx === 0 ? ' active' : '');
+    tab.textContent = name;
+    tab.onclick     = () => switchSheet(idx);
+    tabsEl.appendChild(tab);
+
+    // Sheet pane
+    const pane = document.createElement('div');
+    pane.id        = 'sp-' + idx;
+    pane.className = 's-pane' + (idx === 0 ? ' on' : '');
+    pane.innerHTML = buildSheetTable(wb.Sheets[name]);
+    panesEl.appendChild(pane);
+  });
+
+  showPanel('view-sheet');
+}
+
+function switchSheet(idx) {
+  document.querySelectorAll('.s-tab').forEach((t, i)  => t.classList.toggle('active', i === idx));
+  document.querySelectorAll('.s-pane').forEach((p, i) => p.classList.toggle('on',     i === idx));
+}
+
+function buildSheetTable(ws) {
+  if (!ws || !ws['!ref']) return '<p style="padding:20px;color:#888">This sheet is empty.</p>';
+
+  const range   = XLSX.utils.decode_range(ws['!ref']);
+  const merges  = ws['!merges']  || [];
+  const colDefs = ws['!cols']    || [];
+  const rowDefs = ws['!rows']    || [];
+
+  // ── Merge maps ──────────────────────────────────────────────────────
+  // skip[r][c] = true  → cell is covered by a merge
+  // spanAt[r][c] = {rs, cs}  → cell starts a merge with these spans
+  const skip   = {};
+  const spanAt = {};
+  for (const m of merges) {
+    const sk = m.s.r + ',' + m.s.c;
+    spanAt[sk] = { rs: m.e.r - m.s.r + 1, cs: m.e.c - m.s.c + 1 };
+    for (let r = m.s.r; r <= m.e.r; r++) {
+      for (let c = m.s.c; c <= m.e.c; c++) {
+        if (r === m.s.r && c === m.s.c) continue;
+        if (!skip[r]) skip[r] = {};
+        skip[r][c] = true;
+      }
+    }
+  }
+
+  let h = '<table class="data-table"><colgroup>';
+  h += '<col style="width:40px">'; // row-number column
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const cd = colDefs[c];
+    let w = 0;
+    if (cd) w = cd.wpx || (cd.wch ? cd.wch * 7 : 0) || (cd.width ? cd.width * 7 : 0);
+    h += w > 0 ? `<col style="width:${Math.round(w)}px">` : '<col>';
+  }
+  h += '</colgroup>';
+
+  // Column header row (A B C …)
+  h += '<thead><tr><th class="rn"></th>';
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    h += '<th>' + XLSX.utils.encode_col(c) + '</th>';
+  }
+  h += '</tr></thead><tbody>';
+
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    const rd  = rowDefs[r];
+    const rhs = (rd && rd.hpx && rd.hpx !== 20) ? ` style="height:${rd.hpx}px"` : '';
+    h += `<tr${rhs}><td class="rn">${r + 1}</td>`;
+
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      // Skip cells covered by a merge
+      if (skip[r] && skip[r][c]) continue;
+
+      const addr = XLSX.utils.encode_cell({ r, c });
+      const cell = ws[addr];
+
+      // Display value: use pre-formatted string (cell.w) whenever possible
+      let val = '';
+      if (cell) {
+        if (cell.w !== undefined) {
+          val = cell.w;
+        } else if (cell.v !== undefined) {
+          val = cell.t === 'b' ? (cell.v ? 'TRUE' : 'FALSE') : String(cell.v);
+        }
+      }
+
+      // Inline style from cell.s
+      const inlineStyle = cell && cell.s ? buildCellCSS(cell.s) : '';
+
+      // Span attributes
+      let spanAttrs = '';
+      const sp = spanAt[r + ',' + c];
+      if (sp) {
+        if (sp.rs > 1) spanAttrs += ` rowspan="${sp.rs}"`;
+        if (sp.cs > 1) spanAttrs += ` colspan="${sp.cs}"`;
+      }
+
+      h += `<td${spanAttrs}${inlineStyle ? ` style="${inlineStyle}"` : ''}>${escHtml(val)}</td>`;
+    }
+    h += '</tr>';
+  }
+
+  h += '</tbody></table>';
+  return h;
+}
+
+// Build inline CSS string from a SheetJS cell style object.
+function buildCellCSS(s) {
+  const parts = [];
+
+  // ── Font ──────────────────────────────────────────────────────────
+  if (s.font) {
+    const f = s.font;
+    if (f.bold)      parts.push('font-weight:bold');
+    if (f.italic)    parts.push('font-style:italic');
+    if (f.underline) parts.push('text-decoration:underline');
+    if (f.strike)    parts.push('text-decoration:line-through');
+    if (f.sz  && f.sz  > 0) parts.push(`font-size:${f.sz / 2}pt`);
+    if (f.name)      parts.push(`font-family:"${f.name}",sans-serif`);
+    if (f.color) {
+      const fc = resolveExcelColor(f.color);
+      if (fc) parts.push('color:' + fc);
+    }
+  }
+
+  // ── Fill ──────────────────────────────────────────────────────────
+  if (s.fill && s.fill.patternType && s.fill.patternType !== 'none') {
+    const fc = resolveExcelColor(s.fill.fgColor);
+    if (fc && fc !== '#FFFFFF' && fc !== '#ffffff') {
+      parts.push('background-color:' + fc);
+    }
+  }
+
+  // ── Alignment ─────────────────────────────────────────────────────
+  if (s.alignment) {
+    const al = s.alignment;
+    const hMap = { center:'center', right:'right', fill:'left',
+                   justify:'justify', distributed:'justify', general:'left' };
+    if (al.horizontal && al.horizontal !== 'general') {
+      parts.push('text-align:' + (hMap[al.horizontal] || al.horizontal));
+    }
+    const vMap = { top:'top', center:'middle', distributed:'middle' };
+    if (al.vertical && al.vertical !== 'bottom') {
+      parts.push('vertical-align:' + (vMap[al.vertical] || al.vertical));
+    }
+    if (al.wrapText) parts.push('white-space:normal');
+  }
+
+  // ── Borders ───────────────────────────────────────────────────────
+  if (s.border) {
+    for (const side of ['top', 'bottom', 'left', 'right']) {
+      const b = s.border[side];
+      if (!b || !b.style || b.style === 'none') continue;
+      const widthMap  = { thin:'1px', hair:'1px', medium:'2px', thick:'3px',
+                          mediumDashed:'2px', mediumDashDot:'2px', mediumDashDotDot:'2px' };
+      const styleMap  = { dashed:'dashed', dotted:'dotted', hair:'solid',
+                          dashDot:'dashed', dashDotDot:'dashed',
+                          mediumDashed:'dashed', slantDashDot:'dashed' };
+      const w = widthMap[b.style]  || '1px';
+      const t = styleMap[b.style]  || 'solid';
+      const c = resolveExcelColor(b.color) || '#000';
+      parts.push(`border-${side}:${w} ${t} ${c}`);
+    }
+  }
+
+  return parts.join(';');
+}
+
+// Resolve an Excel colour object { rgb, theme, tint } to a CSS hex string.
+// RGB is the direct 6/8-digit hex. Theme colours require the theme XML which
+// we don't load here; for those cells we fall back to transparent.
+function resolveExcelColor(col) {
+  if (!col) return '';
+  if (col.rgb) {
+    let rgb = col.rgb.toUpperCase();
+    if (rgb.length === 8) rgb = rgb.slice(2); // strip alpha
+    if (rgb.length === 6) return '#' + rgb;
+  }
+  return '';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  PPTX — PPTXjs
+// ═══════════════════════════════════════════════════════════════════════
+async function renderPptx(url) {
+  document.getElementById('loading-label').textContent = 'Loading presentation…';
+
+  await loadCSS('./include/PPTXjs/css/pptxjs.css');
+  await loadCSS('./include/PPTXjs/css/nv.d3.min.css');
+  await loadScript('./include/PPTXjs/js/jszip.min.js');
+  await loadScript('./include/PPTXjs/js/filereader.js');
+  await loadScript('./include/PPTXjs/js/d3.min.js');
+  await loadScript('./include/PPTXjs/js/nv.d3.min.js');
+  await loadScript('./include/PPTXjs/js/pptxjs.js');
+  await loadScript('./include/PPTXjs/js/divs2slides.js');
+
+  showPanel('view-pptx');
+
+  $('#view-pptx').pptxToHtml({
+    pptxFileUrl: url,
+    slideMode:   true,
+    slideModeConfig: {
+      nav:              true,
+      keyBoardShortCut: true,
+      showSlideNum:     true,
+      showTotalSlideNum:true,
+      autoSlide:        false,
+      loop:             false,
+      transition:       'default',
+      transitionTime:   0.4,
+    },
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  PDF — native browser embed
+// ═══════════════════════════════════════════════════════════════════════
+function renderPDF(url) {
+  const embed = document.getElementById('pdf-embed');
+  embed.src = url;
+  // Show immediately; embed fires no reliable load event in all browsers
+  showPanel('view-pdf');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Images
+// ═══════════════════════════════════════════════════════════════════════
+function renderImage(url) {
+  const img = document.getElementById('img-el');
+  img.onload  = () => showPanel('view-img');
+  img.onerror = () => showError('Could not load image.');
+  img.alt     = fileName;
+  img.src     = url;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Plain text / Markdown
+// ═══════════════════════════════════════════════════════════════════════
+async function renderText(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Fetch failed (' + res.status + ')');
+  const text = await res.text();
+  const pre = document.createElement('pre');
+  pre.style.cssText = 'padding:24px;font-size:13px;white-space:pre-wrap;' +
+                      'word-break:break-word;min-height:100%;background:var(--surface);color:var(--text);';
+  pre.textContent = text;
+  document.getElementById('content').appendChild(pre);
+  showPanel('');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
 </body>
