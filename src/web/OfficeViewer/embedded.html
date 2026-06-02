@@ -9,7 +9,11 @@
   <script src="./include/jquery/jquery-3.3.1.min.js"></script>
   <script src="../script/ao_module.js"></script>
 
-  <!-- Modern viewer styles (no external deps) -->
+  <!-- DOCX rendering: JSZip must come before docx-preview -->
+  <script src="./include/docxjs/jszip.min.js"></script>
+  <script src="./include/docxjs/docx-preview.min.js"></script>
+
+  <!-- Modern viewer styles -->
   <link rel="stylesheet" href="./include/officeViewer/viewer.css">
 </head>
 <body>

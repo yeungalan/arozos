@@ -1,6 +1,7 @@
 /**
  * Office Viewer — modern vanilla JS viewer
- * Supports: DOCX, XLSX, PPTX via /api/officepreview/convert
+ * DOCX: rendered client-side by docx-preview (useBase64URL for images)
+ * XLSX / PPTX: converted server-side via /api/officepreview/convert
  */
 
 (function () {
@@ -68,6 +69,67 @@
   /*  File loading                                                        */
   /* ------------------------------------------------------------------ */
   function loadFile(vpath, ext) {
+    if (ext === 'docx' || ext === 'docm') {
+      loadDocx(vpath);
+    } else {
+      loadViaBackend(vpath, ext);
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  DOCX — client-side via docx-preview + useBase64URL                 */
+  /* ------------------------------------------------------------------ */
+  function loadDocx(vpath) {
+    showLoading('Loading document…');
+
+    // Fetch the raw DOCX bytes from the media endpoint
+    fetch('/media?file=' + encodeURIComponent(vpath))
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' — ' + res.statusText);
+        return res.arrayBuffer();
+      })
+      .then(function (buffer) {
+        renderDocx(buffer);
+      })
+      .catch(function (err) {
+        showError('Failed to load document: ' + err.message);
+      });
+  }
+
+  function renderDocx(buffer) {
+    if (typeof window.docx === 'undefined') {
+      showError('docx-preview library not loaded.');
+      return;
+    }
+
+    const content = document.getElementById('ov-content');
+    content.innerHTML = '<div id="ov-docx-scroll"><div id="ov-docx-page"></div></div>';
+
+    const container    = document.getElementById('ov-docx-page');
+    // docx-preview injects its own <style> tag; we pass null to let it use document.head
+    const styleTarget  = null;
+
+    window.docx.renderAsync(buffer, container, styleTarget, {
+      className:        'docx',        // CSS class prefix → .docx-wrapper, .docx
+      inWrapper:        true,          // wrap in .docx-wrapper for background/padding
+      ignoreWidth:      false,         // respect actual page width
+      ignoreHeight:     false,
+      ignoreFonts:      false,
+      breakPages:       true,
+      useBase64URL:     true,          // KEY: embed images as data: URIs instead of blob:
+      experimental:     true,          // enables extra OOXML features
+      trimXmlDeclaration: true,
+      debug:            false,
+    })
+    .catch(function (err) {
+      showError('DOCX render error: ' + (err && err.message ? err.message : String(err)));
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  XLSX / PPTX — server-side conversion                               */
+  /* ------------------------------------------------------------------ */
+  function loadViaBackend(vpath, ext) {
     showLoading('Converting document…');
 
     fetch('/api/officepreview/convert?file=' + encodeURIComponent(vpath))
@@ -78,28 +140,14 @@
           return;
         }
         switch (data.type) {
-          case 'docx': renderDocx(data); break;
           case 'xlsx': renderXlsx(data); break;
           case 'pptx': renderPptx(data); break;
-          default:     showError('Unknown document type: ' + data.type);
+          default:     showError('Unsupported document type: ' + data.type);
         }
       })
       .catch(function (err) {
         showError('Failed to load document: ' + err.message);
       });
-  }
-
-  /* ------------------------------------------------------------------ */
-  /*  DOCX Renderer                                                       */
-  /* ------------------------------------------------------------------ */
-  function renderDocx(data) {
-    const content = document.getElementById('ov-content');
-    content.innerHTML =
-      '<div id="ov-docx-scroll">' +
-        '<div id="ov-docx-page">' +
-          '<div class="ov-docx-body">' + data.html + '</div>' +
-        '</div>' +
-      '</div>';
   }
 
   /* ------------------------------------------------------------------ */

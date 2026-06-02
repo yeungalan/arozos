@@ -162,109 +162,56 @@ html, body {
   line-height: 1.5;
 }
 
-/* ===== DOCX styles ===== */
+/* ===== DOCX styles — wraps docx-preview output ===== */
 
 #ov-docx-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 32px 24px;
   background: var(--ov-bg);
 }
 
-#ov-docx-page {
-  max-width: 820px;
-  margin: 0 auto;
-  background: var(--ov-doc-bg);
-  box-shadow: var(--ov-doc-shadow);
-  padding: 60px 72px;
-  border-radius: var(--ov-radius);
-  min-height: 400px;
+/* docx-preview renders its own .docx-wrapper > section.docx hierarchy.
+   We reset its default background and padding to match our design. */
+
+/* Outer scroll area that docx-preview adds */
+#ov-docx-page .docx-wrapper {
+  background: var(--ov-bg) !important;
+  padding: 24px !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+/* Each page/section */
+#ov-docx-page .docx {
+  background: #ffffff !important;
+  box-shadow: var(--ov-doc-shadow) !important;
+  border-radius: var(--ov-radius) !important;
+  /* docx-preview sets explicit width/height from page size; let that stand */
+  max-width: 100% !important;
+}
+
+/* Ensure images embedded as base64 data URIs display correctly */
+#ov-docx-page img {
+  max-width: 100% !important;
+  height: auto !important;
+  display: inline-block !important;
+}
+
+/* SVG images from OOXML drawings */
+#ov-docx-page svg {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+/* docx-preview may set overflow:hidden on the section; allow content to show */
+#ov-docx-page section.docx {
+  overflow: visible !important;
 }
 
 @media (max-width: 700px) {
-  #ov-docx-scroll { padding: 16px 8px; }
-  #ov-docx-page  { padding: 28px 20px; }
-}
-
-/* Document body elements */
-.ov-docx-body { line-height: 1.6; }
-
-.ov-docx-body h1,
-.ov-docx-body h2,
-.ov-docx-body h3,
-.ov-docx-body h4,
-.ov-docx-body h5,
-.ov-docx-body h6 {
-  margin-top: 1.1em;
-  margin-bottom: 0.4em;
-  font-weight: 600;
-  line-height: 1.2;
-  color: #1a1c2e;
-}
-
-.ov-docx-body h1 { font-size: 2em; }
-.ov-docx-body h2 { font-size: 1.6em; }
-.ov-docx-body h3 { font-size: 1.35em; }
-.ov-docx-body h4 { font-size: 1.15em; }
-.ov-docx-body h5, .ov-docx-body h6 { font-size: 1em; }
-
-.ov-docx-body .ov-p {
-  margin-bottom: 0.6em;
-}
-
-.ov-docx-body .ov-empty {
-  margin-bottom: 0.4em;
-  line-height: 0.8;
-}
-
-.ov-docx-body .ov-b  { font-weight: 700; }
-.ov-docx-body .ov-i  { font-style: italic; }
-.ov-docx-body .ov-sup { vertical-align: super; font-size: 0.75em; }
-.ov-docx-body .ov-sub { vertical-align: sub;   font-size: 0.75em; }
-
-.ov-docx-body .ov-img {
-  max-width: 100%;
-  height: auto;
-  display: inline-block;
-  vertical-align: middle;
-  margin: 4px 0;
-}
-
-.ov-docx-body .ov-list {
-  margin: 0.4em 0 0.4em 1.8em;
-}
-
-.ov-docx-body .ov-list li {
-  margin-bottom: 0.25em;
-}
-
-.ov-docx-body a {
-  color: var(--ov-accent);
-  text-decoration: none;
-}
-.ov-docx-body a:hover {
-  text-decoration: underline;
-}
-
-.ov-docx-body .ov-pagebreak {
-  border-top: 2px dashed #ccc;
-  margin: 1.5em 0;
-}
-
-/* Tables in DOCX */
-.ov-docx-body .ov-table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 0.8em 0;
-  font-size: 0.93em;
-}
-
-.ov-docx-body .ov-table td,
-.ov-docx-body .ov-table th {
-  border: 1px solid var(--ov-table-border);
-  padding: 6px 10px;
-  vertical-align: top;
-  min-width: 40px;
+  #ov-docx-page .docx-wrapper { padding: 8px !important; }
 }
 
 /* ===== XLSX styles ===== */
