@@ -77,12 +77,11 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /*  DOCX — client-side via docx-preview + useBase64URL                 */
+  /*  DOCX — client-side via mammoth.js                                  */
   /* ------------------------------------------------------------------ */
   function loadDocx(vpath) {
     showLoading('Loading document…');
 
-    // Fetch the raw DOCX bytes from the media endpoint
     fetch('/media?file=' + encodeURIComponent(vpath))
       .then(function (res) {
         if (!res.ok) throw new Error('HTTP ' + res.status + ' — ' + res.statusText);
@@ -97,41 +96,26 @@
   }
 
   function renderDocx(buffer) {
-    if (typeof window.docx === 'undefined') {
-      showError('docx-preview library not loaded.');
+    if (typeof mammoth === 'undefined') {
+      showError('mammoth library not loaded.');
       return;
     }
 
     const content = document.getElementById('ov-content');
-    // Render directly into the scroll container — no extra wrapper div.
-    // docx-preview will inject .docx-wrapper as a direct child.
-    content.innerHTML = '<div id="ov-docx-scroll"></div>';
+    content.innerHTML = '<div id="ov-docx-scroll"><div id="ov-docx-body"></div></div>';
+    const body = document.getElementById('ov-docx-body');
 
-    const container = document.getElementById('ov-docx-scroll');
-
-    window.docx.renderAsync(buffer, container, null, {
-      className:          'docx',
-      inWrapper:          true,
-      // ignoreWidth lets docx-preview reflow content to the container width
-      // rather than attempting to reproduce fixed multi-column/text-box layouts
-      // that it cannot render correctly, preventing column-overlap garbling.
-      ignoreWidth:        true,
-      ignoreHeight:       false,
-      ignoreFonts:        false,
-      breakPages:         true,
-      experimental:       true,
-      trimXmlDeclaration: true,
-      debug:              false,
-    })
-    .then(function () {
-      // Hide images in formats browsers can't render (EMF, WMF, unknown) rather
-      // than showing a broken-image icon.
-      var imgs = container.querySelectorAll('img');
-      for (var i = 0; i < imgs.length; i++) {
-        imgs[i].addEventListener('error', function () {
-          this.style.visibility = 'hidden';
+    // mammoth reads the content type of each image from the OOXML relationships,
+    // so the MIME type in the data URI is always correct — no sniffing needed.
+    mammoth.convertToHtml({ arrayBuffer: buffer }, {
+      convertImage: mammoth.images.imgElement(function (image) {
+        return image.read('base64').then(function (b64) {
+          return { src: 'data:' + image.contentType + ';base64,' + b64 };
         });
-      }
+      }),
+    })
+    .then(function (result) {
+      body.innerHTML = result.value;
     })
     .catch(function (err) {
       showError('DOCX render error: ' + (err && err.message ? err.message : String(err)));

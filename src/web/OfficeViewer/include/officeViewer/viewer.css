@@ -173,40 +173,86 @@ body {
   line-height: 1.5;
 }
 
-/* ===== DOCX styles — wraps docx-preview output ===== */
+/* ===== DOCX styles — mammoth.js semantic HTML output ===== */
 
 #ov-docx-scroll {
   flex: 1;
-  overflow: auto;   /* allow horizontal scroll for wide documents */
+  overflow-y: auto;
   background: var(--ov-bg);
 }
 
-/* docx-preview renders its own .docx-wrapper > section.docx hierarchy.
-   We reset its default background and padding to match our design. */
-
-/* Outer scroll area that docx-preview adds */
-#ov-docx-scroll .docx-wrapper {
-  background: var(--ov-bg) !important;
-  padding: 24px !important;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
+/* mammoth renders into #ov-docx-body — styled as a centred A4-ish card */
+#ov-docx-body {
+  background: var(--ov-doc-bg);
+  box-shadow: var(--ov-doc-shadow);
+  border-radius: var(--ov-radius);
+  max-width: 860px;
+  margin: 24px auto;
+  padding: 48px 52px;
+  line-height: 1.6;
+  font-size: 14px;
+  color: #1a1c2e;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
-/* Each page/section */
-#ov-docx-scroll .docx {
-  background: #ffffff !important;
-  box-shadow: var(--ov-doc-shadow) !important;
-  border-radius: var(--ov-radius) !important;
-  /* Do NOT add max-width here. docx-preview sets explicit pixel widths via
-     inline styles. Overriding with max-width compresses the page box while
-     internal element coordinates remain at their original scale, causing
-     text boxes and columns to overlap. */
+#ov-docx-body h1,
+#ov-docx-body h2,
+#ov-docx-body h3,
+#ov-docx-body h4,
+#ov-docx-body h5,
+#ov-docx-body h6 {
+  margin: 1.2em 0 0.4em;
+  line-height: 1.3;
+  font-weight: 700;
+  color: #111;
+}
+
+#ov-docx-body h1 { font-size: 1.6em; }
+#ov-docx-body h2 { font-size: 1.35em; }
+#ov-docx-body h3 { font-size: 1.15em; }
+
+#ov-docx-body p {
+  margin: 0 0 0.7em;
+}
+
+#ov-docx-body ul,
+#ov-docx-body ol {
+  margin: 0.5em 0 0.5em 2em;
+}
+
+#ov-docx-body li {
+  margin-bottom: 0.25em;
+}
+
+#ov-docx-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  font-size: 13px;
+}
+
+#ov-docx-body td,
+#ov-docx-body th {
+  border: 1px solid var(--ov-table-border);
+  padding: 5px 9px;
+  vertical-align: top;
+}
+
+#ov-docx-body th {
+  background: var(--ov-table-header);
+  font-weight: 600;
+}
+
+#ov-docx-body img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0.5em 0;
 }
 
 @media (max-width: 700px) {
-  #ov-docx-scroll .docx-wrapper { padding: 8px !important; }
+  #ov-docx-body { margin: 8px; padding: 20px 16px; }
 }
 
 /* ===== XLSX styles ===== */
