@@ -103,27 +103,95 @@
     }
 
     const content = document.getElementById('ov-content');
-    content.innerHTML = '<div id="ov-docx-scroll"><div id="ov-docx-page"></div></div>';
+    // Render directly into the scroll container — no extra wrapper div.
+    // docx-preview will inject .docx-wrapper as a direct child.
+    content.innerHTML = '<div id="ov-docx-scroll"></div>';
 
-    const container    = document.getElementById('ov-docx-page');
-    // docx-preview injects its own <style> tag; we pass null to let it use document.head
-    const styleTarget  = null;
+    const container = document.getElementById('ov-docx-scroll');
 
-    window.docx.renderAsync(buffer, container, styleTarget, {
-      className:        'docx',        // CSS class prefix → .docx-wrapper, .docx
-      inWrapper:        true,          // wrap in .docx-wrapper for background/padding
-      ignoreWidth:      false,         // respect actual page width
-      ignoreHeight:     false,
-      ignoreFonts:      false,
-      breakPages:       true,
-      useBase64URL:     true,          // KEY: embed images as data: URIs instead of blob:
-      experimental:     true,          // enables extra OOXML features
+    window.docx.renderAsync(buffer, container, null, {
+      className:          'docx',
+      inWrapper:          true,
+      ignoreWidth:        false,
+      ignoreHeight:       false,
+      ignoreFonts:        false,
+      breakPages:         true,
+      useBase64URL:       true,   // embed images as data: URIs
+      experimental:       true,
       trimXmlDeclaration: true,
-      debug:            false,
+      debug:              false,
+    })
+    .then(function () {
+      // docx-preview creates Blobs without a MIME type; FileReader then
+      // produces data:application/octet-stream;base64,… which browsers
+      // refuse to render as images.  Fix every affected <img> by sniffing
+      // the binary magic bytes and rewriting the src.
+      fixDocxImageMimeTypes(container);
     })
     .catch(function (err) {
       showError('DOCX render error: ' + (err && err.message ? err.message : String(err)));
     });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Image MIME-type fix                                                 */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Walks every <img> inside container and replaces any
+   * data:application/octet-stream src with the correct MIME type,
+   * detected from the image's own magic bytes.
+   */
+  function fixDocxImageMimeTypes(container) {
+    var imgs = container.querySelectorAll('img');
+    for (var i = 0; i < imgs.length; i++) {
+      var src = imgs[i].getAttribute('src') || '';
+      var b64 = '';
+
+      if (src.indexOf('data:application/octet-stream;base64,') === 0) {
+        b64 = src.slice('data:application/octet-stream;base64,'.length);
+      } else if (src.indexOf('data:;base64,') === 0) {
+        b64 = src.slice('data:;base64,'.length);
+      }
+
+      if (b64) {
+        var mime = sniffImageMime(b64);
+        if (mime) {
+          imgs[i].src = 'data:' + mime + ';base64,' + b64;
+        }
+        // If mime is null (e.g. EMF/WMF), leave src broken — nothing we can do.
+      }
+    }
+  }
+
+  /**
+   * Returns the image MIME type by reading the first few bytes of
+   * a base64-encoded image, or null if the format is unrecognised.
+   */
+  function sniffImageMime(b64) {
+    try {
+      // Decode only the first 16 bytes (22 base64 chars covers 16 bytes safely)
+      var raw = atob(b64.substring(0, 24));
+      var b = function (n) { return raw.charCodeAt(n); };
+
+      // PNG  89 50 4E 47
+      if (b(0) === 0x89 && b(1) === 0x50 && b(2) === 0x4E && b(3) === 0x47) return 'image/png';
+      // JPEG FF D8 FF
+      if (b(0) === 0xFF && b(1) === 0xD8 && b(2) === 0xFF)                   return 'image/jpeg';
+      // GIF  47 49 46 38
+      if (b(0) === 0x47 && b(1) === 0x49 && b(2) === 0x46 && b(3) === 0x38)  return 'image/gif';
+      // WebP RIFF????WEBP
+      if (b(0) === 0x52 && b(1) === 0x49 && b(2) === 0x46 && b(3) === 0x46 &&
+          b(8) === 0x57 && b(9) === 0x45 && b(10) === 0x42 && b(11) === 0x50) return 'image/webp';
+      // BMP  42 4D
+      if (b(0) === 0x42 && b(1) === 0x4D)                                    return 'image/bmp';
+      // TIFF 49 49 2A 00  or  4D 4D 00 2A
+      if ((b(0) === 0x49 && b(1) === 0x49 && b(2) === 0x2A && b(3) === 0x00) ||
+          (b(0) === 0x4D && b(1) === 0x4D && b(2) === 0x00 && b(3) === 0x2A)) return 'image/tiff';
+      // SVG  starts with '<'
+      if (b(0) === 0x3C)                                                      return 'image/svg+xml';
+    } catch (e) { /* ignore decode errors */ }
+    return null; // EMF/WMF/unknown — browser can't render anyway
   }
 
   /* ------------------------------------------------------------------ */
