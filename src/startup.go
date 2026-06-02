@@ -111,6 +111,7 @@ func RunStartup() {
 	util_init()
 	system_resetpw_init()
 	mediaServer_init()
+	officeViewer_init()
 	security_init()
 	storageHeartbeatTickerInit()
 	OAuthInit()        //Oauth system init

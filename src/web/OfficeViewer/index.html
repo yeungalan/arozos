@@ -1,56 +1,132 @@
 <!DOCTYPE html>
-<html>
-	<head>
-		<meta charset="UTF-8">
-		<meta name="apple-mobile-web-app-capable" content="yes" />
-		<meta name="viewport" content="user-scalable=no, width=device-width, initial-scale=1, maximum-scale=1"/>
-		<meta name="theme-color" content="#4b75ff">
-		<link rel="stylesheet" href="../script/semantic/semantic.min.css">
-		<script src="../script/jquery.min.js"></script>
-		<script src="../script/ao_module.js"></script>
-		<script src="../script/semantic/semantic.min.js"></script>
-        <script src="message.js"></script>
-		<link rel="icon" type="image/png" href="img/module_icon.png">
-		<link rel="manifest" crossorigin="use-credentials" href="manifest.json">
-		<title>OfficeViewer</title>
-		<style>
-            body{
-                border-top: 5px solid #445b80;
-                background-color: white;
-            }
-		</style>
-	</head>
-	<body>
-        <br>
-        <div class="ui container">
-            <button class="ui basic fluid button" onclick="openFileSelector();">Open File</button>
-            <div class="ui divider"></div>
-            ArozOS Office Viewer
-        </div>
-		<script>
-            $(document).ready(function(){
-                openFileSelector();
-            });
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1e2234">
+  <title>Office Viewer</title>
+  <link rel="icon" type="image/png" href="img/module_icon.png">
+  <script src="../script/jquery.min.js"></script>
+  <script src="../script/ao_module.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-            function openFileSelector(){
-                ao_module_openFileSelector(fileSelected, "user:/Document", "file",false, {
-                    filter: ["docx", "pptx", "xlsx"]
-                });
-            }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      background: #f0f2f8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      color: #1a1c2e;
+    }
 
-            function fileSelected(filedata){
-                if (filedata.length == 0){
-                    alert("No file selected")
-                }else{
-                    console.log(encodeURIComponent(JSON.stringify(filedata)));
-                    ao_module_setWindowSize(1060, 680);
-                    let redirectionURL = "embedded.html#" + encodeURIComponent(JSON.stringify(filedata));
-                    if (window.location.href.substr(window.location.href.length - 1) != "/"){
-                        redirectionURL = "/" + redirectionURL;
-                    }
-                    window.location.href= window.location.href + redirectionURL;
-                }
-            }
-		</script>
-	</body>
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+      padding: 36px 32px;
+      max-width: 380px;
+      width: 90%;
+      text-align: center;
+    }
+
+    .card-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+      line-height: 1;
+    }
+
+    .card h1 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .card p {
+      font-size: 0.88rem;
+      color: #666;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    .btn-open {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #4f7df3;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 24px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .btn-open:hover { background: #3a68e0; }
+
+    .supported {
+      margin-top: 18px;
+      font-size: 0.78rem;
+      color: #aaa;
+    }
+
+    .badge {
+      display: inline-block;
+      background: #f0f2f8;
+      color: #555;
+      border-radius: 4px;
+      padding: 2px 6px;
+      margin: 2px;
+      font-size: 0.78rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-icon">📄</div>
+    <h1>Office Viewer</h1>
+    <p>Open a document to view it in your browser.<br>No plugins required.</p>
+    <button class="btn-open" onclick="openFileSelector()">
+      &#128194; Open File
+    </button>
+    <div class="supported">
+      Supported formats:
+      <span class="badge">DOCX</span>
+      <span class="badge">XLSX</span>
+      <span class="badge">PPTX</span>
+      <span class="badge">CSV</span>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      // Immediately open file selector on load
+      $(document).ready(function () {
+        openFileSelector();
+      });
+
+      window.openFileSelector = function () {
+        ao_module_openFileSelector(fileSelected, 'user:/Document', 'file', false, {
+          filter: ['docx', 'pptx', 'xlsx', 'csv']
+        });
+      };
+
+      function fileSelected(filedata) {
+        if (!filedata || filedata.length === 0) {
+          return;
+        }
+        ao_module_setWindowSize(1200, 780);
+        var redirectURL = 'embedded.html#' + encodeURIComponent(JSON.stringify(filedata));
+        // Ensure we append to the correct base path
+        var base = window.location.href.replace(/index\.html.*$/, '');
+        if (base[base.length - 1] !== '/') base += '/';
+        window.location.href = base + redirectURL;
+      }
+    })();
+  </script>
+</body>
 </html>

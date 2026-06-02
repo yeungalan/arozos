@@ -1,0 +1,513 @@
+/* ===== Office Viewer Modern Styles ===== */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --ov-toolbar-h: 46px;
+  --ov-toolbar-bg: #1e2234;
+  --ov-toolbar-text: #c8cfe8;
+  --ov-toolbar-border: #2d3354;
+  --ov-accent: #4f7df3;
+  --ov-accent-hover: #6b94ff;
+  --ov-bg: #e8eaf0;
+  --ov-doc-bg: #ffffff;
+  --ov-doc-shadow: 0 2px 16px rgba(0,0,0,0.12);
+  --ov-radius: 6px;
+  --ov-tab-active: #4f7df3;
+  --ov-slide-panel: #16182a;
+  --ov-slide-thumb-bg: #252840;
+  --ov-slide-thumb-hover: #2e3155;
+  --ov-slide-thumb-active: #3d4475;
+  --ov-table-border: #d0d4e0;
+  --ov-table-header: #f0f2f8;
+  --ov-error: #e53935;
+  --ov-spinner: #4f7df3;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  color: #1a1c2e;
+  background: var(--ov-bg);
+}
+
+/* ===== Toolbar ===== */
+
+#ov-toolbar {
+  display: flex;
+  align-items: center;
+  height: var(--ov-toolbar-h);
+  background: var(--ov-toolbar-bg);
+  color: var(--ov-toolbar-text);
+  border-bottom: 1px solid var(--ov-toolbar-border);
+  padding: 0 12px;
+  gap: 8px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+#ov-toolbar .ov-toolbar-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+#ov-toolbar .ov-toolbar-icon.docx { background: #2b5797; color: #fff; }
+#ov-toolbar .ov-toolbar-icon.xlsx { background: #1e7145; color: #fff; }
+#ov-toolbar .ov-toolbar-icon.pptx { background: #c55a11; color: #fff; }
+
+#ov-filename {
+  flex: 1;
+  font-size: 13px;
+  color: var(--ov-toolbar-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ov-toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--ov-radius);
+  background: transparent;
+  color: var(--ov-toolbar-text);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ov-toolbar-btn:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.ov-toolbar-btn.primary {
+  background: var(--ov-accent);
+  color: #fff;
+}
+
+.ov-toolbar-btn.primary:hover {
+  background: var(--ov-accent-hover);
+}
+
+.ov-toolbar-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--ov-toolbar-border);
+  flex-shrink: 0;
+}
+
+/* ===== Layout ===== */
+
+#ov-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+#ov-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  min-height: 0;
+}
+
+/* ===== Loading / Error ===== */
+
+#ov-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #555;
+  background: var(--ov-bg);
+}
+
+.ov-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(79,125,243,0.2);
+  border-top-color: var(--ov-spinner);
+  border-radius: 50%;
+  animation: ov-spin 0.7s linear infinite;
+}
+
+@keyframes ov-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ov-error-msg {
+  color: var(--ov-error);
+  font-size: 13px;
+  max-width: 480px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ===== DOCX styles ===== */
+
+#ov-docx-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 24px;
+  background: var(--ov-bg);
+}
+
+#ov-docx-page {
+  max-width: 820px;
+  margin: 0 auto;
+  background: var(--ov-doc-bg);
+  box-shadow: var(--ov-doc-shadow);
+  padding: 60px 72px;
+  border-radius: var(--ov-radius);
+  min-height: 400px;
+}
+
+@media (max-width: 700px) {
+  #ov-docx-scroll { padding: 16px 8px; }
+  #ov-docx-page  { padding: 28px 20px; }
+}
+
+/* Document body elements */
+.ov-docx-body { line-height: 1.6; }
+
+.ov-docx-body h1,
+.ov-docx-body h2,
+.ov-docx-body h3,
+.ov-docx-body h4,
+.ov-docx-body h5,
+.ov-docx-body h6 {
+  margin-top: 1.1em;
+  margin-bottom: 0.4em;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #1a1c2e;
+}
+
+.ov-docx-body h1 { font-size: 2em; }
+.ov-docx-body h2 { font-size: 1.6em; }
+.ov-docx-body h3 { font-size: 1.35em; }
+.ov-docx-body h4 { font-size: 1.15em; }
+.ov-docx-body h5, .ov-docx-body h6 { font-size: 1em; }
+
+.ov-docx-body .ov-p {
+  margin-bottom: 0.6em;
+}
+
+.ov-docx-body .ov-empty {
+  margin-bottom: 0.4em;
+  line-height: 0.8;
+}
+
+.ov-docx-body .ov-b  { font-weight: 700; }
+.ov-docx-body .ov-i  { font-style: italic; }
+.ov-docx-body .ov-sup { vertical-align: super; font-size: 0.75em; }
+.ov-docx-body .ov-sub { vertical-align: sub;   font-size: 0.75em; }
+
+.ov-docx-body .ov-img {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+  vertical-align: middle;
+  margin: 4px 0;
+}
+
+.ov-docx-body .ov-list {
+  margin: 0.4em 0 0.4em 1.8em;
+}
+
+.ov-docx-body .ov-list li {
+  margin-bottom: 0.25em;
+}
+
+.ov-docx-body a {
+  color: var(--ov-accent);
+  text-decoration: none;
+}
+.ov-docx-body a:hover {
+  text-decoration: underline;
+}
+
+.ov-docx-body .ov-pagebreak {
+  border-top: 2px dashed #ccc;
+  margin: 1.5em 0;
+}
+
+/* Tables in DOCX */
+.ov-docx-body .ov-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.8em 0;
+  font-size: 0.93em;
+}
+
+.ov-docx-body .ov-table td,
+.ov-docx-body .ov-table th {
+  border: 1px solid var(--ov-table-border);
+  padding: 6px 10px;
+  vertical-align: top;
+  min-width: 40px;
+}
+
+/* ===== XLSX styles ===== */
+
+#ov-xlsx-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+#ov-xlsx-table-scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.ov-xlsx-table {
+  border-collapse: collapse;
+  font-size: 12.5px;
+  white-space: nowrap;
+  width: max-content;
+}
+
+.ov-xlsx-table th,
+.ov-xlsx-table td {
+  border: 1px solid var(--ov-table-border);
+  padding: 3px 7px;
+  min-width: 60px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ov-xlsx-table th {
+  background: var(--ov-table-header);
+  font-weight: 600;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  color: #444;
+  min-width: 24px;
+}
+
+.ov-xlsx-table td.ov-row-hdr {
+  background: var(--ov-table-header);
+  font-weight: 600;
+  text-align: right;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  color: #444;
+  min-width: 36px;
+}
+
+.ov-xlsx-table th:first-child {
+  left: 0;
+  z-index: 3;
+}
+
+.ov-xlsx-sheet-tabs {
+  display: flex;
+  align-items: flex-end;
+  background: #dde0ea;
+  border-top: 1px solid var(--ov-table-border);
+  padding: 4px 8px 0;
+  gap: 3px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  height: 34px;
+}
+
+.ov-sheet-tab {
+  padding: 4px 14px;
+  border-radius: 4px 4px 0 0;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  color: #555;
+  white-space: nowrap;
+  transition: background 0.15s;
+  line-height: 1.4;
+}
+
+.ov-sheet-tab:hover {
+  background: rgba(0,0,0,0.07);
+}
+
+.ov-sheet-tab.active {
+  background: #fff;
+  border-color: var(--ov-table-border) var(--ov-table-border) transparent;
+  color: var(--ov-tab-active);
+  font-weight: 600;
+}
+
+/* ===== PPTX styles ===== */
+
+#ov-pptx-wrap {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+#ov-slide-panel {
+  width: 160px;
+  min-width: 120px;
+  max-width: 220px;
+  background: var(--ov-slide-panel);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex-shrink: 0;
+  padding: 8px 6px;
+  gap: 6px;
+}
+
+#ov-slide-panel .ov-slide-thumb-wrap {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 4px;
+  background: var(--ov-slide-thumb-bg);
+  transition: background 0.15s;
+}
+
+#ov-slide-panel .ov-slide-thumb-wrap:hover {
+  background: var(--ov-slide-thumb-hover);
+}
+
+#ov-slide-panel .ov-slide-thumb-wrap.active {
+  background: var(--ov-slide-thumb-active);
+  outline: 2px solid var(--ov-accent);
+}
+
+#ov-slide-panel .ov-slide-num {
+  font-size: 10px;
+  color: rgba(200,207,232,0.6);
+  text-align: center;
+  margin-top: 3px;
+}
+
+.ov-thumb-frame {
+  width: 100%;
+  aspect-ratio: var(--slide-ratio, 4/3);
+  overflow: hidden;
+  border-radius: 2px;
+  position: relative;
+}
+
+#ov-slide-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--ov-slide-panel);
+  overflow: hidden;
+  gap: 8px;
+  padding: 16px;
+  min-width: 0;
+}
+
+#ov-slide-view {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  flex-shrink: 0;
+}
+
+#ov-slide-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: rgba(200,207,232,0.8);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.ov-nav-btn {
+  background: rgba(255,255,255,0.1);
+  border: none;
+  color: rgba(200,207,232,0.8);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+
+.ov-nav-btn:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+.ov-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* Slide canvas rendering */
+.ov-slide-canvas {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.ov-slide-el {
+  position: absolute;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.ov-slide-el-text {
+  display: flex;
+  flex-direction: column;
+  padding: 2px;
+  line-height: 1.2;
+}
+
+.ov-slide-el-text p {
+  margin: 0;
+  line-height: inherit;
+}
+
+.ov-slide-el-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Responsive for small screens */
+@media (max-width: 600px) {
+  #ov-slide-panel {
+    width: 80px;
+    min-width: 60px;
+  }
+}
