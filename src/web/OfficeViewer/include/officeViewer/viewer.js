@@ -112,15 +112,13 @@
     window.docx.renderAsync(buffer, container, null, {
       className:          'docx',
       inWrapper:          true,
-      ignoreWidth:        false,
+      // ignoreWidth lets docx-preview reflow content to the container width
+      // rather than attempting to reproduce fixed multi-column/text-box layouts
+      // that it cannot render correctly, preventing column-overlap garbling.
+      ignoreWidth:        true,
       ignoreHeight:       false,
       ignoreFonts:        false,
       breakPages:         true,
-      // Do NOT use useBase64URL here. Without it docx-preview creates blob: URLs.
-      // Per WHATWG MIME Sniffing §6.2, browsers sniff the bytes when an <img> loads
-      // a resource with application/octet-stream, so PNG/JPEG/GIF render correctly.
-      // data: URIs are authoritative and do NOT get sniffed, which is why
-      // useBase64URL:true produces unrenderable data:application/octet-stream URIs.
       experimental:       true,
       trimXmlDeclaration: true,
       debug:              false,
