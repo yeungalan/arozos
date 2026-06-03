@@ -1089,6 +1089,12 @@
     let _zoomMouseUpHandler = null;
     let _zoomWheelHandler = null;
 
+    // Wheel throttle state — accumulate sign across events in a single frame
+    let _wheelRAF = null;
+    let _wheelSign = 0;
+    let _wheelCX = 0;
+    let _wheelCY = 0;
+
     // Initialize zoom and pan when photo viewer is shown
     function initZoomPan() {
         const img = document.getElementById('fullImage');
@@ -1141,9 +1147,19 @@
             _zoomWheelHandler = function(e) {
                 if (!$('#photo-viewer').is(':visible')) return;
                 e.preventDefault();
-                const factor = e.deltaY < 0 ? 1.05 : 1 / 1.05;
-                const newZoom = Math.max(1, Math.min(5, zoomLevel * factor));
-                zoomAtPoint(newZoom, e.clientX, e.clientY);
+                // Accumulate direction; only apply one step per animation frame
+                // so burst events at scroll-start don't cause a large jump.
+                _wheelSign += e.deltaY < 0 ? 1 : -1;
+                _wheelCX = e.clientX;
+                _wheelCY = e.clientY;
+                if (_wheelRAF) return;
+                _wheelRAF = requestAnimationFrame(function() {
+                    const factor = _wheelSign > 0 ? 1.05 : 1 / 1.05;
+                    const newZoom = Math.max(1, Math.min(5, zoomLevel * factor));
+                    zoomAtPoint(newZoom, _wheelCX, _wheelCY);
+                    _wheelSign = 0;
+                    _wheelRAF = null;
+                });
             };
 
             img.addEventListener('mousedown', _zoomMouseDownHandler);
