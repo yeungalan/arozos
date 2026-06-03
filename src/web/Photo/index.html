@@ -1127,15 +1127,25 @@
                 }
             };
 
+            let handleWheel = function(e) {
+                e.preventDefault();
+                const zoomStep = 0.15;
+                const delta = e.deltaY < 0 ? zoomStep : -zoomStep;
+                const newZoom = Math.max(1, Math.min(5, zoomLevel + delta));
+                zoomAtPoint(newZoom, e.clientX, e.clientY);
+            };
+
             // Remove existing listeners to prevent double triggering
             img.removeEventListener('mousedown', handleMouseDown);
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
+            container.removeEventListener('wheel', handleWheel);
 
             // Add listeners back
             img.addEventListener('mousedown', handleMouseDown);
             document.addEventListener('mousemove', handleMouseMove);
             document.addEventListener('mouseup', handleMouseUp);
+            container.addEventListener('wheel', handleWheel, { passive: false });
         }
     }
 
