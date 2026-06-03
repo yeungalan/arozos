@@ -2,7 +2,6 @@ package agi
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -212,7 +211,7 @@ func (g *Gateway) ExtAPIHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !fsh.FileSystemAbstraction.FileExists(realPath) {
-		log.Println("[Remote AGI] ", pathFromDb, " cannot be found on "+realPath)
+		g.Option.Logger.PrintAndLog("AGI", "Remote script "+pathFromDb+" cannot be found on "+realPath, nil)
 		http.Error(w, "invalid request: backend script not exists", http.StatusBadRequest)
 		return
 	}
@@ -227,7 +226,7 @@ func (g *Gateway) ExtAPIHandler(w http.ResponseWriter, r *http.Request) {
 	g.recordExecution(endpointUUID, pathFromDb, execID, r.Method, durationMs, execErr)
 
 	if execErr != nil {
-		log.Println("[Remote AGI] ", pathFromDb, " failed to execute", execErr.Error())
+		g.Option.Logger.PrintAndLog("AGI", "Remote script "+pathFromDb+" failed to execute: "+execErr.Error(), execErr)
 		utils.SendErrorResponse(w, execErr.Error())
 		return
 	}

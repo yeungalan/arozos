@@ -3,7 +3,6 @@ package agi
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -337,7 +336,7 @@ func (g *Gateway) injectStandardLibs(vm *otto.Otto, scriptFile string, scriptSco
 			_, err = vm.Run(string(scriptContent))
 			if err != nil {
 				//Script execution failed
-				log.Println("Script Execution Failed: ", err.Error())
+				g.Option.Logger.PrintAndLog("AGI", "Script Execution Failed: "+err.Error(), err)
 				g.RaiseError(err)
 				return otto.FalseValue()
 			}
@@ -346,6 +345,18 @@ func (g *Gateway) injectStandardLibs(vm *otto.Otto, scriptFile string, scriptSco
 		})
 
 	}
+
+	// Implement console.log routing to the arozos logger, tagged with the execution ID.
+	vm.Set("_agiConsoleLog", func(call otto.FunctionCall) otto.Value {
+		parts := make([]string, len(call.ArgumentList))
+		for i, arg := range call.ArgumentList {
+			parts[i], _ = arg.ToString()
+		}
+		message := strings.Join(parts, " ")
+		g.Option.Logger.PrintAndLog("AGI", "["+execID+"] "+message, nil)
+		return otto.UndefinedValue()
+	})
+	vm.Run(`var console = { log: function() { _agiConsoleLog.apply(this, arguments); } };`)
 
 	//Delay, sleep given ms
 	vm.Set("delay", func(call otto.FunctionCall) otto.Value {
