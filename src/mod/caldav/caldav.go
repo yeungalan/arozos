@@ -64,6 +64,7 @@ type notesMeta struct {
 
 // NewManager creates a Manager and reads the persisted enabled state.
 func NewManager(userHandler *user.UserHandler, database *db.Database) *Manager {
+	database.NewTable("caldav") // create bucket if it doesn't exist yet
 	enabled := false
 	database.Read("caldav", "enabled", &enabled)
 	return &Manager{
