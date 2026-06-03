@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,6 +20,7 @@ import (
 	"imuslab.com/arozos/mod/filesystem"
 	"imuslab.com/arozos/mod/filesystem/arozfs"
 	metadata "imuslab.com/arozos/mod/filesystem/metadata"
+	logger "imuslab.com/arozos/mod/info/logger"
 	"imuslab.com/arozos/mod/iot"
 	"imuslab.com/arozos/mod/share"
 	"imuslab.com/arozos/mod/time/nightly"
@@ -64,6 +64,7 @@ type AgiSysInfo struct {
 	IotManager           *iot.Manager
 	ShareManager         *share.Manager
 	NightlyManager       *nightly.TaskManager
+	Logger               *logger.Logger
 
 	//Scanning Roots
 	StartupRoot    string
@@ -116,12 +117,12 @@ func (g *Gateway) RegisterNightlyOperations() {
 					if static.CheckUserAccessToScript(userinfo, scriptFile, "") {
 						//This user can access the module that provide this script.
 						//Execute this script on his account.
-						log.Println("[AGI_Nightly] WIP (" + scriptFile + ")")
+						g.Option.Logger.PrintAndLog("AGI_Nightly", "WIP ("+scriptFile+")", nil)
 					}
 				}
 			} else {
 				//Invalid script. Skipping
-				log.Println("[AGI_Nightly] Invalid script file: " + scriptFile)
+				g.Option.Logger.PrintAndLog("AGI_Nightly", "Invalid script file: "+scriptFile, nil)
 			}
 		}
 	})
@@ -132,7 +133,7 @@ func (g *Gateway) InitiateAllWebAppModules() {
 	for _, script := range startupScripts {
 		scriptContentByte, _ := os.ReadFile(script)
 		scriptContent := string(scriptContentByte)
-		log.Println("[AGI] Gateway script loaded (" + script + ")")
+		g.Option.Logger.PrintAndLog("AGI", "Gateway script loaded ("+script+")", nil)
 		//Create a new vm for this request
 		vm := otto.New()
 
@@ -143,8 +144,7 @@ func (g *Gateway) InitiateAllWebAppModules() {
 		})
 		_, err := vm.Run(scriptContent)
 		if err != nil {
-			log.Println("[AGI] Load Failed: " + script + ". Skipping.")
-			log.Println(err)
+			g.Option.Logger.PrintAndLog("AGI", "Load Failed: "+script+". Skipping.", err)
 			continue
 		}
 	}
@@ -159,7 +159,7 @@ func (g *Gateway) RunScript(script string) error {
 
 	_, err := vm.Run(script)
 	if err != nil {
-		log.Println("[AGI] Script Execution Failed: ", err.Error())
+		g.Option.Logger.PrintAndLog("AGI", "Script Execution Failed: "+err.Error(), err)
 		return err
 	}
 
@@ -170,7 +170,7 @@ func (g *Gateway) RaiseError(err error) {
 	if err == nil {
 		return
 	}
-	log.Println("[AGI] Runtime Error " + err.Error())
+	g.Option.Logger.PrintAndLog("AGI", "Runtime Error: "+err.Error(), err)
 
 	//To be implemented
 }
@@ -323,7 +323,7 @@ func (g *Gateway) ExecuteAGIScript(scriptContent string, fsh *filesystem.FileSys
 		if thisuser != nil {
 			username = thisuser.Username
 		}
-		log.Printf("[AGI] Script error in %s (user: %s): %s", scriptFile, username, err.Error())
+		g.Option.Logger.PrintAndLog("AGI", fmt.Sprintf("Script error in %s (user: %s): %s", scriptFile, username, err.Error()), err)
 
 		if devMode {
 			// Return a detailed JSON error payload for developer inspection
@@ -393,14 +393,14 @@ func (g *Gateway) ExecuteAGIScriptAsUser(fsh *filesystem.FileSystemHandler, scri
 	defer func() {
 		if caught := recover(); caught != nil {
 			if caught == errTimeout {
-				log.Printf("[AGI] Execution timeout: %s (user: %s)", scriptFile, targetUser.Username)
+				g.Option.Logger.PrintAndLog("AGI", fmt.Sprintf("Execution timeout: %s (user: %s)", scriptFile, targetUser.Username), nil)
 				return
 			} else if caught == errExitcall {
 				//Exit gracefully
 				return
 			} else {
 				//Something screwed. Return Internal Server Error
-				log.Printf("[AGI] VM crash in %s (user: %s): %v", scriptFile, targetUser.Username, caught)
+				g.Option.Logger.PrintAndLog("AGI", fmt.Sprintf("VM crash in %s (user: %s): %v", scriptFile, targetUser.Username, caught), nil)
 				if w != nil {
 					devMode := r != nil && r.URL.Query().Get("agi_devmode") == "true"
 					if devMode {
@@ -446,7 +446,7 @@ func (g *Gateway) ExecuteAGIScriptAsUser(fsh *filesystem.FileSystemHandler, scri
 
 	_, err = vm.Run(scriptContent)
 	if err != nil {
-		log.Printf("[AGI] Script error in %s (user: %s): %s", scriptFile, targetUser.Username, err.Error())
+		g.Option.Logger.PrintAndLog("AGI", fmt.Sprintf("Script error in %s (user: %s): %s", scriptFile, targetUser.Username, err.Error()), err)
 		return execID, "", err
 	}
 

@@ -29,6 +29,7 @@ func AGIInit() {
 		ShareManager:         shareManager,
 		NightlyManager:       nightlyManager,
 		TempFolderPath:       *tmp_directory,
+		Logger:               systemWideLogger,
 	})
 	if err != nil {
 		systemWideLogger.PrintAndLog("AGI", "AGI Gateway Initialization Failed", err)
