@@ -69,7 +69,7 @@
         </div>
 
         <div class="instruction-block">
-            <strong>CalDAV Server URL:</strong> <code id="caldavUrl"></code><br><br>
+            <strong>CalDAV Server URL (enter this in iOS):</strong> <code id="caldavUrl"></code><br><br>
             <strong>Notes calendar path:</strong> <code id="notesPath"></code>
         </div>
 
@@ -85,9 +85,15 @@
 
         <div class="ui info message">
             <i class="info circle icon"></i>
-            <strong>Apple Reminders (iOS/macOS):</strong> After adding the CalDAV account, open the
-            Reminders app and you will see a list named <em>Notes</em>. Each reminder corresponds to
-            one ArozOS note — the title maps to the reminder title and the body maps to its notes field.
+            <strong>Apple Reminders (iOS/macOS):</strong> After adding the CalDAV account you will see
+            a list named <em>Notes</em> appear in the Reminders app. Each reminder corresponds to one
+            ArozOS note — the reminder title = first line of the note, notes field = full body.
+            Changes sync bidirectionally: edits made in ArozOS Notes or in Reminders propagate to both sides.
+        </div>
+        <div class="ui warning message">
+            <i class="warning icon"></i>
+            <strong>Apple Notes app</strong> does not support CalDAV — use <strong>Reminders</strong> instead.
+            The CalDAV protocol maps ArozOS notes to Reminders items (VTODO).
         </div>
     </div>
 
@@ -139,9 +145,9 @@
         // Populate server address from current page URL
         var base = window.location.protocol + "//" + window.location.host;
         $("#serverAddr").text(window.location.host);
+        // /caldav/ is both the discovery URL and the calendar home
         $("#caldavUrl").text(base + "/caldav/");
-        // Note: notes path is per-user; show a template
-        $("#notesPath").text(base + "/caldav/{username}/notes/");
+        $("#notesPath").text(base + "/caldav/notes/");
 
         $.get("../../system/caldav/status", function(data) {
             currentEnabled = data.enabled;
