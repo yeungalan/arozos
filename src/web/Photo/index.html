@@ -1141,7 +1141,7 @@
             _zoomWheelHandler = function(e) {
                 if (!$('#photo-viewer').is(':visible')) return;
                 e.preventDefault();
-                const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+                const factor = e.deltaY < 0 ? 1.05 : 1 / 1.05;
                 const newZoom = Math.max(1, Math.min(5, zoomLevel * factor));
                 zoomAtPoint(newZoom, e.clientX, e.clientY);
             };
