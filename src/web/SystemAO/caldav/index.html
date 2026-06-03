@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="viewport" content="user-scalable=no, width=device-width, initial-scale=1, maximum-scale=1"/>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="../../script/semantic/semantic.min.css">
+    <script src="../../script/jquery.min.js"></script>
+    <script src="../../script/semantic/semantic.min.js"></script>
+    <style>
+        .instruction-block { background: #f8f8f8; border-left: 3px solid #2185d0; padding: 1em; border-radius: 4px; margin: 1em 0; }
+        code { background: #eee; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+        .step { margin-bottom: 0.5em; }
+    </style>
+</head>
+<body>
+<div class="ui form" style="padding: 0.5em;">
+
+    <h3 class="ui header">
+        <i class="calendar alternate outline icon"></i>
+        <div class="content">CalDAV Notes Sync
+            <div class="sub header">Sync ArozOS Notes with CalDAV clients (e.g. iPhone Reminders)</div>
+        </div>
+    </h3>
+
+    <div class="field">
+        <div class="ui toggle checkbox" id="enableToggle">
+            <input type="checkbox" id="enabledCheckbox" onchange="toggleService(this.checked);">
+            <label>Enable CalDAV Server</label>
+        </div>
+        <br>
+        <small>When enabled, notes are accessible as VTODO items via the CalDAV protocol on the same port as ArozOS.</small>
+    </div>
+
+    <div id="statusMsg" class="ui message" style="display:none;"></div>
+
+    <div class="ui divider"></div>
+
+    <div id="connectionInfo" style="display:none;">
+        <h4 class="ui header">How to Connect</h4>
+
+        <p>
+            Your Notes are exposed as <strong>VTODO</strong> calendar items. On iOS/macOS, add a
+            <strong>CalDAV</strong> account (Settings → Calendar → Accounts → Add Account → Other → Add CalDAV Account).
+        </p>
+
+        <div class="ui steps" style="flex-wrap:wrap;">
+            <div class="step">
+                <i class="server icon"></i>
+                <div class="content">
+                    <div class="title">Server</div>
+                    <div class="description" id="serverAddr"></div>
+                </div>
+            </div>
+            <div class="step">
+                <i class="user icon"></i>
+                <div class="content">
+                    <div class="title">Username</div>
+                    <div class="description">Your ArozOS username</div>
+                </div>
+            </div>
+            <div class="step">
+                <i class="key icon"></i>
+                <div class="content">
+                    <div class="title">Password</div>
+                    <div class="description">Your auto-login token (see below)</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="instruction-block">
+            <strong>CalDAV Server URL:</strong> <code id="caldavUrl"></code><br><br>
+            <strong>Notes calendar path:</strong> <code id="notesPath"></code>
+        </div>
+
+        <h4 class="ui header">Get your Auto-Login Token</h4>
+        <p>
+            The CalDAV password is your <strong>auto-login token</strong>. To get one:
+        </p>
+        <ol>
+            <li class="step">Open <strong>System Setting → Security → My Account</strong></li>
+            <li class="step">Scroll to <em>Auto Login Token</em> and click <strong>New Token</strong></li>
+            <li class="step">Copy the generated token and use it as the CalDAV password</li>
+        </ol>
+
+        <div class="ui info message">
+            <i class="info circle icon"></i>
+            <strong>Apple Reminders (iOS/macOS):</strong> After adding the CalDAV account, open the
+            Reminders app and you will see a list named <em>Notes</em>. Each reminder corresponds to
+            one ArozOS note — the title maps to the reminder title and the body maps to its notes field.
+        </div>
+    </div>
+
+    <div class="ui divider"></div>
+    <div id="ok" class="ui green message" style="display:none;">
+        <i class="checkmark icon"></i> Setting saved.
+    </div>
+    <div id="err" class="ui red message" style="display:none;">
+        <i class="remove icon"></i> <span id="errMsg">An error occurred.</span>
+    </div>
+</div>
+
+<script>
+    var currentEnabled = false;
+
+    function showStatus(msg, isError) {
+        var el = $("#statusMsg");
+        el.removeClass("green red").addClass(isError ? "red" : "green").text(msg).show();
+        setTimeout(function(){ el.hide(); }, 3000);
+    }
+
+    function toggleService(enabled) {
+        $.post("../../system/caldav/toggle", { enable: enabled }, function(data) {
+            if (data.ok) {
+                currentEnabled = enabled;
+                updateUI(enabled);
+                showStatus(enabled ? "CalDAV enabled." : "CalDAV disabled.", false);
+            }
+        }, "json").fail(function() {
+            showStatus("Failed to update setting.", true);
+            // Revert checkbox
+            if (enabled) {
+                $("#enableToggle").checkbox("set unchecked");
+            } else {
+                $("#enableToggle").checkbox("set checked");
+            }
+        });
+    }
+
+    function updateUI(enabled) {
+        if (enabled) {
+            $("#connectionInfo").show();
+        } else {
+            $("#connectionInfo").hide();
+        }
+    }
+
+    function init() {
+        // Populate server address from current page URL
+        var base = window.location.protocol + "//" + window.location.host;
+        $("#serverAddr").text(window.location.host);
+        $("#caldavUrl").text(base + "/caldav/");
+        // Note: notes path is per-user; show a template
+        $("#notesPath").text(base + "/caldav/{username}/notes/");
+
+        $.get("../../system/caldav/status", function(data) {
+            currentEnabled = data.enabled;
+            if (data.enabled) {
+                $("#enableToggle").checkbox("set checked");
+                updateUI(true);
+            } else {
+                $("#enableToggle").checkbox("set unchecked");
+                updateUI(false);
+            }
+        }, "json");
+    }
+
+    init();
+</script>
+</body>
+</html>
