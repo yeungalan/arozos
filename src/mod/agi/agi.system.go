@@ -346,17 +346,27 @@ func (g *Gateway) injectStandardLibs(vm *otto.Otto, scriptFile string, scriptSco
 
 	}
 
-	// Implement console.log routing to the arozos logger, tagged with the execution ID.
-	vm.Set("_agiConsoleLog", func(call otto.FunctionCall) otto.Value {
-		parts := make([]string, len(call.ArgumentList))
-		for i, arg := range call.ArgumentList {
-			parts[i], _ = arg.ToString()
-		}
-		message := strings.Join(parts, " ")
-		g.Option.Logger.PrintAndLog("AGI", "["+execID+"] "+message, nil)
-		return otto.UndefinedValue()
-	})
-	vm.Run(`var console = { log: function() { _agiConsoleLog.apply(this, arguments); } };`)
+	// Override the built-in otto console.log (which writes to os.Stdout directly)
+	// so that script log output goes through the arozos logger with the execution ID.
+	consoleVal, _ := vm.Get("console")
+	if consoleObj := consoleVal.Object(); consoleObj != nil {
+		consoleObj.Set("log", func(call otto.FunctionCall) otto.Value {
+			parts := make([]string, len(call.ArgumentList))
+			for i, arg := range call.ArgumentList {
+				parts[i], _ = arg.ToString()
+			}
+			g.Option.Logger.PrintAndLog("AGI", "["+execID+"] "+strings.Join(parts, " "), nil)
+			return otto.UndefinedValue()
+		})
+		consoleObj.Set("error", func(call otto.FunctionCall) otto.Value {
+			parts := make([]string, len(call.ArgumentList))
+			for i, arg := range call.ArgumentList {
+				parts[i], _ = arg.ToString()
+			}
+			g.Option.Logger.PrintAndLog("AGI", "["+execID+"] "+strings.Join(parts, " "), nil)
+			return otto.UndefinedValue()
+		})
+	}
 
 	//Delay, sleep given ms
 	vm.Set("delay", func(call otto.FunctionCall) otto.Value {
