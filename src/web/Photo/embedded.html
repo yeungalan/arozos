@@ -292,6 +292,14 @@
         var canvas = document.createElement('canvas');
         var ctx = canvas.getContext('2d');
 
+        // Zoom and pan state
+        var zoomScale = 1;
+        var zoomPanX = 0;
+        var zoomPanY = 0;
+        var isZoomDragging = false;
+        var lastZoomMouseX = 0;
+        var lastZoomMouseY = 0;
+
         //Only handle one file
         playbackFile = playbackFile[0];
         loadImage(playbackFile.filename, playbackFile.filepath);
@@ -325,9 +333,16 @@
         }
 
         function applyAllFilters(){
-            var transformString = `rotate(${rotation}deg)`;
             var img = document.getElementById('img');
-            img.style.transform = transformString;
+            img.style.transform = `rotate(${rotation}deg) scale(${zoomScale}) translate(${zoomPanX}px, ${zoomPanY}px)`;
+            img.style.cursor = zoomScale > 1 ? 'grab' : 'default';
+        }
+
+        function resetZoom(){
+            zoomScale = 1;
+            zoomPanX = 0;
+            zoomPanY = 0;
+            applyAllFilters();
         }
 
         function rotateImage(degrees){
@@ -340,7 +355,7 @@
             cancelCrop();
             document.getElementById('img').src = currentImageURL;
             cropData = null;
-            applyAllFilters();
+            resetZoom();
             updateImgSize();
         }
 
@@ -721,7 +736,7 @@
             $('#img').on('load', function() {
                 // Reset all edits when loading new image
                 rotation = 0;
-                applyAllFilters();
+                resetZoom();
                 updateImgSize();
                 $("#img").show();
             });
@@ -789,6 +804,56 @@
         function isZoomed(){
             return window.matchMedia('(max--moz-device-pixel-ratio:0.99), (min--moz-device-pixel-ratio:1.01)').matches;
         }
+
+        // Mouse wheel zoom
+        document.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            var zoomStep = 0.15;
+            var delta = e.deltaY < 0 ? zoomStep : -zoomStep;
+            var img = document.getElementById('img');
+            var rect = img.getBoundingClientRect();
+
+            // Point relative to image center (normalised -0.5 to 0.5)
+            var relX = (e.clientX - rect.left) / rect.width - 0.5;
+            var relY = (e.clientY - rect.top) / rect.height - 0.5;
+
+            var newScale = Math.max(1, Math.min(5, zoomScale + delta));
+            if (newScale !== zoomScale) {
+                var factor = newScale / zoomScale;
+                zoomPanX = zoomPanX * factor - relX * (newScale - 1) * 50;
+                zoomPanY = zoomPanY * factor - relY * (newScale - 1) * 50;
+                zoomScale = newScale;
+                applyAllFilters();
+            }
+        }, { passive: false });
+
+        // Pan when zoomed (mouse drag)
+        document.addEventListener('mousedown', function(e) {
+            if (zoomScale > 1 && !isEditMode) {
+                isZoomDragging = true;
+                lastZoomMouseX = e.clientX;
+                lastZoomMouseY = e.clientY;
+                document.getElementById('img').style.cursor = 'grabbing';
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (isZoomDragging && zoomScale > 1) {
+                zoomPanX += (e.clientX - lastZoomMouseX) / zoomScale;
+                zoomPanY += (e.clientY - lastZoomMouseY) / zoomScale;
+                lastZoomMouseX = e.clientX;
+                lastZoomMouseY = e.clientY;
+                applyAllFilters();
+            }
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (isZoomDragging) {
+                isZoomDragging = false;
+                document.getElementById('img').style.cursor = zoomScale > 1 ? 'grab' : 'default';
+            }
+        });
 
     </script>
 </body>

@@ -1083,18 +1083,29 @@
         panY = Math.max(-maxPanY, Math.min(maxPanY, panY));
     }
 
+    // Module-scoped handler references so removeEventListener works correctly
+    let _zoomMouseDownHandler = null;
+    let _zoomMouseMoveHandler = null;
+    let _zoomMouseUpHandler = null;
+    let _zoomWheelHandler = null;
+
     // Initialize zoom and pan when photo viewer is shown
     function initZoomPan() {
         const img = document.getElementById('fullImage');
-        const container = document.querySelector('.viewer-left');
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        
+
         // Reset zoom state
         resetZoom();
 
         // Only enable custom zoom/pan on desktop
         if (!isMobile) {
-            let handleMouseDown = function(e) {
+            // Remove previous listeners using stable references
+            if (_zoomMouseDownHandler) img.removeEventListener('mousedown', _zoomMouseDownHandler);
+            if (_zoomMouseMoveHandler) document.removeEventListener('mousemove', _zoomMouseMoveHandler);
+            if (_zoomMouseUpHandler) document.removeEventListener('mouseup', _zoomMouseUpHandler);
+            if (_zoomWheelHandler) document.removeEventListener('wheel', _zoomWheelHandler);
+
+            _zoomMouseDownHandler = function(e) {
                 if (zoomLevel > 1) {
                     e.preventDefault();
                     isDragging = true;
@@ -1104,30 +1115,31 @@
                 }
             };
 
-            let handleMouseMove = function(e) {
+            _zoomMouseMoveHandler = function(e) {
                 if (isDragging && zoomLevel > 1) {
                     const deltaX = e.clientX - lastMouseX;
                     const deltaY = e.clientY - lastMouseY;
-                    
+
                     panX += deltaX / zoomLevel;
                     panY += deltaY / zoomLevel;
-                    
+
                     constrainPan();
                     updateImageTransform();
-                    
+
                     lastMouseX = e.clientX;
                     lastMouseY = e.clientY;
                 }
             };
 
-            let handleMouseUp = function() {
+            _zoomMouseUpHandler = function() {
                 if (isDragging) {
                     isDragging = false;
                     img.classList.remove('dragging');
                 }
             };
 
-            let handleWheel = function(e) {
+            _zoomWheelHandler = function(e) {
+                if (!$('#photo-viewer').is(':visible')) return;
                 e.preventDefault();
                 const zoomStep = 0.15;
                 const delta = e.deltaY < 0 ? zoomStep : -zoomStep;
@@ -1135,17 +1147,11 @@
                 zoomAtPoint(newZoom, e.clientX, e.clientY);
             };
 
-            // Remove existing listeners to prevent double triggering
-            img.removeEventListener('mousedown', handleMouseDown);
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
-            container.removeEventListener('wheel', handleWheel);
-
-            // Add listeners back
-            img.addEventListener('mousedown', handleMouseDown);
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
-            container.addEventListener('wheel', handleWheel, { passive: false });
+            img.addEventListener('mousedown', _zoomMouseDownHandler);
+            document.addEventListener('mousemove', _zoomMouseMoveHandler);
+            document.addEventListener('mouseup', _zoomMouseUpHandler);
+            // Attach wheel to document so it fires even when cursor is on child elements
+            document.addEventListener('wheel', _zoomWheelHandler, { passive: false });
         }
     }
 
