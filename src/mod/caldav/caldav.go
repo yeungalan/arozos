@@ -379,26 +379,32 @@ func (s *Server) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		path = "/"
 	}
 
-	// RFC 6764: the root discovery endpoint must respond 207 to unauthenticated
-	// PROPFIND so macOS/iOS accountsd can verify the server exists before
-	// committing credentials.  All other paths require auth.
+	// RFC 6764 / RFC 5397: the root discovery endpoint must respond 207 to
+	// unauthenticated PROPFIND so macOS/iOS accountsd can verify the server
+	// exists before committing credentials.  When credentials ARE provided but
+	// invalid, return 401 so the client knows to ask the user to re-enter them.
+	// All other paths require auth regardless.
 	if r.Method == "PROPFIND" && (path == "/" || path == "") {
 		u, password, hasBasic := r.BasicAuth()
 		if hasBasic && u != "" && password != "" {
 			cdLog("  auth attempt on root: username=%q password_len=%d", u, len(password))
 			if username, ok := s.authenticate(r); ok {
 				cdLog("  auth OK (root): username=%q", username)
-				cdLog("  dispatching authenticated root PROPFIND")
 				s.propfindRoot(rec, username, s.prefix)
 				return
 			}
+			// Credentials were provided but are wrong → 401, not unauthenticated 207.
+			// Returning 207 here would trick accountsd into thinking setup succeeded
+			// without valid credentials, leaving Keychain empty and remindd unable to sync.
 			tokenValid, tokenOwner := s.authAgent.ValidateAutoLoginToken(password)
 			pwValid := s.authAgent.ValidateUsernameAndPassword(u, password)
-			cdLog("  auth FAILED (root): token_valid=%v token_owner=%q pw_valid=%v → returning unauthenticated discovery",
+			cdLog("  auth FAILED (root): token_valid=%v token_owner=%q pw_valid=%v → 401",
 				tokenValid, tokenOwner, pwValid)
-		} else {
-			cdLog("  no auth on root PROPFIND → returning unauthenticated discovery 207")
+			sendUnauthorized(rec)
+			return
 		}
+		// No credentials → unauthenticated discovery 207 per RFC 5397.
+		cdLog("  no auth on root PROPFIND → returning unauthenticated discovery 207")
 		s.propfindRootUnauthenticated(rec, s.prefix)
 		return
 	}
