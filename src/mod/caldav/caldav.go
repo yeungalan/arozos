@@ -396,10 +396,21 @@ func (m *Manager) handleCalendarHome(w http.ResponseWriter, r *http.Request, use
 	homeHref := "/caldav/" + username + "/"
 	calHref := "/caldav/" + username + "/notes/"
 
+	principalHref := "/caldav/current-user-principal/"
 	homeResp := xmlResp(homeHref,
 		xmlPS(http.StatusOK,
 			`<resourcetype><collection/></resourcetype>`,
 			`<displayname>`+xmlEsc(username)+`</displayname>`,
+			`<current-user-principal><href>`+xmlEsc(principalHref)+`</href></current-user-principal>`,
+			`<principal-URL><href>`+xmlEsc(principalHref)+`</href></principal-URL>`,
+			`<C:calendar-home-set><href>`+xmlEsc(homeHref)+`</href></C:calendar-home-set>`,
+		),
+		xmlPS(http.StatusNotFound,
+			`<CS:dropbox-home-URL/>`,
+			`<CS:email-address-set/>`,
+			`<CS:notification-URL/>`,
+			`<C:schedule-inbox-URL/>`,
+			`<C:schedule-outbox-URL/>`,
 		),
 	)
 

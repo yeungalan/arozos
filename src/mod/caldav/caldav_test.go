@@ -310,8 +310,11 @@ func TestCalendarHomeDepth0(t *testing.T) {
 	mgr := newTestManager()
 	rr := do(mgr, "PROPFIND", "/caldav/"+testUser+"/", "", map[string]string{"Depth": "0"})
 	assertStatus(t, rr, http.StatusMultiStatus)
-	// Depth:0 should NOT return child calendars
-	assertNotContains(t, rr, "C:calendar")
+	// Depth:0 returns home-level discovery properties including calendar-home-set
+	assertContains(t, rr, "C:calendar-home-set")
+	assertContains(t, rr, "current-user-principal")
+	// but should NOT return child calendar resources (no /notes/ listing)
+	assertNotContains(t, rr, "<C:calendar/>")
 	assertNotContains(t, rr, "/notes/")
 }
 

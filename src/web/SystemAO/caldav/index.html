@@ -44,19 +44,27 @@
             <strong>CalDAV</strong> account (Settings → Calendar → Accounts → Add Account → Other → Add CalDAV Account).
         </p>
 
+        <div class="ui warning message">
+            <i class="warning icon"></i>
+            <strong>Important:</strong> When adding the account in macOS/iOS, you <strong>must enter the full URL below</strong>
+            (including your username) as the server address — not just the hostname.
+            Entering only the hostname causes the account to appear connected but never sync,
+            because credentials are not stored for background sync daemons.
+        </div>
+
         <div class="ui steps" style="flex-wrap:wrap;">
             <div class="step">
                 <i class="server icon"></i>
                 <div class="content">
-                    <div class="title">Server</div>
-                    <div class="description" id="serverAddr"></div>
+                    <div class="title">Server URL</div>
+                    <div class="description" id="serverAddr" style="word-break:break-all;"></div>
                 </div>
             </div>
             <div class="step">
                 <i class="user icon"></i>
                 <div class="content">
                     <div class="title">Username</div>
-                    <div class="description">Your ArozOS username</div>
+                    <div class="description" id="usernameDisplay">Your ArozOS username</div>
                 </div>
             </div>
             <div class="step">
@@ -69,8 +77,9 @@
         </div>
 
         <div class="instruction-block">
-            <strong>CalDAV Server URL (enter this in iOS):</strong> <code id="caldavUrl"></code><br><br>
-            <strong>Notes calendar path:</strong> <code id="notesPath"></code>
+            <strong>CalDAV Server URL (enter this exactly as shown):</strong><br>
+            <code id="caldavUrl" style="word-break:break-all;"></code><br><br>
+            <strong>Notes calendar path:</strong> <code id="notesPath" style="word-break:break-all;"></code>
         </div>
 
         <h4 class="ui header">Get your Auto-Login Token</h4>
@@ -141,13 +150,30 @@
         }
     }
 
-    function init() {
-        // Populate server address from current page URL
+    function buildConnectionInfo(username) {
         var base = window.location.protocol + "//" + window.location.host;
-        $("#serverAddr").text(window.location.host);
-        // /caldav/ is both the discovery URL and the calendar home
-        $("#caldavUrl").text(base + "/caldav/");
-        $("#notesPath").text(base + "/caldav/notes/");
+        // Users MUST enter the user-specific URL, not just the base /caldav/ path.
+        // When macOS probes /caldav/{username}/ it receives a 401 first, causing it
+        // to prompt for credentials and store them in Keychain for background daemons.
+        // Entering just /caldav/ returns 207 without auth, so credentials are never stored.
+        var userUrl = base + "/caldav/" + encodeURIComponent(username) + "/";
+        $("#serverAddr").text(userUrl);
+        $("#usernameDisplay").text(username);
+        $("#caldavUrl").text(userUrl);
+        $("#notesPath").text(userUrl + "notes/");
+    }
+
+    function init() {
+        $.get("../../system/users/userinfo", function(udata) {
+            if (udata && udata.Username) {
+                buildConnectionInfo(udata.Username);
+            } else {
+                // Fallback: show placeholder if username fetch fails
+                buildConnectionInfo("<your-username>");
+            }
+        }, "json").fail(function() {
+            buildConnectionInfo("<your-username>");
+        });
 
         $.get("../../system/caldav/status", function(data) {
             currentEnabled = data.enabled;
