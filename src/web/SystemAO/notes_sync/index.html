@@ -19,15 +19,22 @@
             font-size: 0.9em;
             margin-top: 0.4em;
         }
-        .setup-steps li { margin-bottom: 0.5em; }
+        .setup-steps li { margin-bottom: 0.6em; }
         .warning-box {
-            background: #fff8e1;
-            border-left: 4px solid #f9a825;
-            padding: 0.7em 1em;
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 0.8em 1em;
             border-radius: 2px;
-            margin-top: 1em;
+            margin: 0.8em 0;
         }
-        #tokenList .token-entry { margin-bottom: 0.6em; }
+        .info-box {
+            background: #e8f4fd;
+            border-left: 4px solid #2196f3;
+            padding: 0.8em 1em;
+            border-radius: 2px;
+            margin: 0.8em 0;
+        }
+        #tokenList .token-entry { margin-bottom: 0.8em; }
     </style>
 </head>
 <body>
@@ -41,7 +48,7 @@
     <div class="ui divider"></div>
 
     <!-- Server Status Section (admin only) -->
-    <div id="adminSection">
+    <div id="adminSection" style="display:none">
         <h3 class="ui header">Server Settings</h3>
         <div class="ui form">
             <div class="inline field">
@@ -56,23 +63,15 @@
                     <input type="number" id="portInput" value="1143" min="1" max="65535" style="max-width:120px;">
                 </div>
                 <div class="ui pointing label">
-                    Standard IMAP port is 143 (requires root) or 993 (IMAPS).
-                    Default 1143 avoids root requirement on most systems.
+                    Standard IMAP is port 143 (needs root). IMAPS (TLS) is 993 (needs root).
+                    Default 1143 avoids needing root.
                 </div>
             </div>
             <button class="ui primary button" onclick="saveSettings()">
                 <i class="save icon"></i> Save Settings
             </button>
             <span id="statusBadge" class="ui label" style="margin-left:1em"></span>
-        </div>
-
-        <div class="ui info message" style="margin-top:1.2em">
-            <div class="header">How It Works</div>
-            <p>
-                ArozOS runs a minimal IMAP mail server that maps your Notes to email messages.
-                Your iPhone's Notes app connects to this server using your arozos username and
-                a dedicated access token (shown below). No email is actually sent anywhere.
-            </p>
+            <span id="tlsBadge" class="ui label" style="margin-left:0.4em"></span>
         </div>
         <div class="ui divider"></div>
     </div>
@@ -81,12 +80,14 @@
     <h3 class="ui header">Your IMAP Access Token</h3>
     <p>
         Use this token as the <strong>password</strong> when adding the IMAP account on your iPhone.
-        Your username stays the same as your arozos login.
+        Your <strong>username</strong> is shown next to each token and stays the same as your arozos login.
     </p>
 
-    <div id="tokenList"></div>
+    <div id="tokenSection">
+        <div class="ui active centered inline loader" style="margin:1em 0"></div>
+    </div>
 
-    <button class="ui positive button" onclick="generateToken()">
+    <button class="ui positive button" style="margin-top:0.5em" onclick="generateToken()">
         <i class="key icon"></i> Generate New Token
     </button>
 
@@ -95,56 +96,73 @@
     <!-- Setup instructions -->
     <div id="setupInstructions" style="display:none">
         <h3 class="ui header">iPhone Setup Instructions</h3>
+
+        <div id="sslWarning" class="warning-box" style="display:none">
+            <strong>⚠ No TLS certificate detected.</strong>
+            The server is running in plain-IMAP mode. You <strong>must</strong> disable SSL
+            in iPhone's Advanced settings after adding the account (step 6 below).
+        </div>
+        <div id="sslOkBox" class="info-box" style="display:none">
+            <strong>✓ TLS is enabled.</strong>
+            You can keep SSL turned on in iPhone settings.
+        </div>
+
         <ol class="setup-steps">
             <li>Open <strong>Settings</strong> on your iPhone.</li>
-            <li>Tap <strong>Mail → Accounts → Add Account → Other → Add Mail Account</strong>.</li>
-            <li>Fill in:</li>
+            <li>Go to <strong>Mail → Accounts → Add Account → Other → Add Mail Account</strong>.</li>
+            <li>Fill in the basic details:
+                <table class="ui compact definition table" style="max-width:460px;margin-top:0.5em">
+                    <tbody>
+                        <tr><td>Name</td><td>ArozOS Notes</td></tr>
+                        <tr><td>Email</td><td id="instrEmail">username@arozos</td></tr>
+                        <tr><td>Password</td><td id="instrPassword"><em>paste your token above</em></td></tr>
+                        <tr><td>Description</td><td>ArozOS Notes</td></tr>
+                    </tbody>
+                </table>
+            </li>
+            <li>Tap <strong>Next</strong>. iPhone will try to auto-discover settings and fail — that's expected. It will then show the manual server form.</li>
+            <li>Fill in the <strong>Incoming Mail Server</strong> (IMAP) details:
+                <table class="ui compact definition table" style="max-width:460px;margin-top:0.5em">
+                    <tbody>
+                        <tr><td>Host Name</td><td id="instrHost"><em>your-server-ip-or-hostname</em></td></tr>
+                        <tr><td>Port</td><td id="instrPort">1143</td></tr>
+                        <tr><td>Username</td><td id="instrUser">username</td></tr>
+                        <tr><td>Password</td><td id="instrPassword2"><em>same token</em></td></tr>
+                    </tbody>
+                </table>
+            </li>
+            <li>For <strong>Outgoing Mail Server</strong> (SMTP), set the hostname to the same value but you can leave the username/password blank — Notes sync does not need outgoing mail.</li>
+            <li id="sslStep" style="display:none">
+                <strong>Disable SSL (required for plain IMAP):</strong>
+                Tap <strong>Save</strong> even if it shows a warning. Then go to
+                <em>Settings → Mail → Accounts → ArozOS Notes → Account → (tap the account name again) →
+                Advanced</em> and set <strong>Use SSL → Off</strong> and
+                <strong>Authentication → Password</strong>.
+            </li>
+            <li>After saving, you'll be asked which services to enable.
+                Turn <strong>Mail off</strong> and <strong>Notes on</strong>, then tap Save.</li>
+            <li>Open the <strong>Notes</strong> app — your arozos notes will appear under the ArozOS Notes account.</li>
         </ol>
-        <table class="ui definition table" style="max-width:500px">
-            <tbody>
-                <tr><td>Name</td><td>ArozOS Notes</td></tr>
-                <tr><td>Email</td><td id="instrEmail">your-username@arozos</td></tr>
-                <tr><td>Password</td><td id="instrPassword"><em>(your token from above)</em></td></tr>
-                <tr><td>Description</td><td>ArozOS Notes</td></tr>
-            </tbody>
-        </table>
-        <ol class="setup-steps" start="4">
-            <li>Tap <strong>Next</strong>. When asked for incoming/outgoing server details:</li>
-        </ol>
-        <table class="ui definition table" style="max-width:500px">
-            <tbody>
-                <tr><td>Host Name</td><td id="instrHost"><em>your-arozos-host</em></td></tr>
-                <tr><td>Port</td><td id="instrPort">1143</td></tr>
-                <tr><td>Username</td><td id="instrUser">your-username</td></tr>
-                <tr><td>Password</td><td id="instrPassword2"><em>(same token)</em></td></tr>
-                <tr><td>Outgoing (SMTP)</td><td>Leave blank or tap <em>None</em></td></tr>
-            </tbody>
-        </table>
-        <ol class="setup-steps" start="5">
-            <li>Tap <strong>Save</strong>. Disable <strong>Mail</strong> for this account but keep <strong>Notes</strong> enabled.</li>
-            <li>Open the Notes app — your arozos notes will appear under this account.</li>
-        </ol>
-        <div class="warning-box">
-            <strong>Note on SSL:</strong> If your arozos instance does not have TLS, you may need to
-            disable SSL for the incoming mail server in iPhone &gt; Settings &gt; Mail &gt; Accounts &gt;
-            ArozOS Notes &gt; Account &gt; Advanced &gt; Use SSL → Off, and set Authentication to Password.
-        </div>
     </div>
 
     <script>
-        var isAdmin = false;
+        var currentUsername = "";
+        var currentPort = 1143;
+        var tlsEnabled = false;
 
         function loadStatus() {
             $.get("/system/imap_notes/status", function(resp) {
-                isAdmin = true;
                 $("#adminSection").show();
                 var data = JSON.parse(resp);
                 $("#enabledCheckbox").prop("checked", data.enabled);
                 $("#portInput").val(data.port);
+                currentPort = data.port;
+                tlsEnabled = data.tlsEnabled;
                 updateStatusBadge(data.running, data.enabled);
-                $("#instrPort").text(data.port);
+                updateTLSBadge(data.tlsEnabled);
+                updateInstructions();
             }).fail(function() {
-                // Non-admin: hide admin section
+                // Non-admin: hide admin section silently
                 $("#adminSection").hide();
             });
         }
@@ -154,9 +172,36 @@
             if (running) {
                 badge.attr("class", "ui green label").text("Running");
             } else if (enabled) {
-                badge.attr("class", "ui red label").text("Error - not running");
+                badge.attr("class", "ui orange label").text("Error — not running, check logs");
             } else {
                 badge.attr("class", "ui grey label").text("Stopped");
+            }
+        }
+
+        function updateTLSBadge(tls) {
+            var badge = $("#tlsBadge");
+            if (tls) {
+                badge.attr("class", "ui teal label").text("TLS / IMAPS");
+            } else {
+                badge.attr("class", "ui yellow label").text("Plain IMAP (no TLS)");
+            }
+        }
+
+        function updateInstructions() {
+            $("#instrPort").text(currentPort);
+            $("#instrHost").text(window.location.hostname || "your-server-address");
+            if (currentUsername) {
+                $("#instrEmail").text(currentUsername + "@arozos");
+                $("#instrUser").text(currentUsername);
+            }
+            if (tlsEnabled) {
+                $("#sslWarning").hide();
+                $("#sslOkBox").show();
+                $("#sslStep").hide();
+            } else {
+                $("#sslWarning").show();
+                $("#sslOkBox").hide();
+                $("#sslStep").show();
             }
         }
 
@@ -170,45 +215,54 @@
                 } else {
                     showMessage("Error: " + resp, "error");
                 }
+            }).fail(function(xhr) {
+                showMessage("Request failed: " + xhr.status + " " + xhr.responseText, "error");
             });
         }
 
         function loadTokens() {
             $.get("/system/imap_notes/token", function(resp) {
-                var tokens = JSON.parse(resp);
+                var data = JSON.parse(resp);
+                currentUsername = data.username || "";
+                var tokens = data.tokens || [];
+
                 var html = "";
                 if (tokens.length === 0) {
-                    html = '<div class="ui message">No tokens yet. Generate one to get started.</div>';
+                    html = '<div class="ui message"><i class="info circle icon"></i>No tokens yet. Click <strong>Generate New Token</strong> to create one.</div>';
+                    $("#setupInstructions").hide();
                 } else {
                     tokens.forEach(function(t) {
                         html += '<div class="token-entry">';
+                        html += '<div class="ui label" style="margin-bottom:0.3em"><i class="user icon"></i>' + escapeHtml(currentUsername) + '</div>';
                         html += '<div class="token-box">' + escapeHtml(t.token) + '</div>';
-                        html += '<button class="ui mini red button" style="margin-top:0.4em" onclick="revokeToken(\'' + escapeHtml(t.token) + '\')"><i class="trash icon"></i> Revoke</button>';
-                        html += '<button class="ui mini button" style="margin-top:0.4em; margin-left:0.4em" onclick="copyToClipboard(\'' + escapeHtml(t.token) + '\')"><i class="copy icon"></i> Copy</button>';
-                        html += '</div>';
+                        html += '<div style="margin-top:0.4em">';
+                        html += '<button class="ui mini red button" onclick="revokeToken(\'' + escapeHtml(t.token) + '\')"><i class="trash icon"></i> Revoke</button>';
+                        html += '<button class="ui mini button" style="margin-left:0.4em" onclick="copyToClipboard(\'' + escapeHtml(t.token) + '\')"><i class="copy icon"></i> Copy</button>';
+                        html += '</div></div>';
                     });
-                    // Show setup instructions when a token exists
+                    // Populate first token into instructions
                     $("#instrPassword").text(tokens[0].token);
                     $("#instrPassword2").text(tokens[0].token);
                     $("#setupInstructions").show();
                 }
-                $("#tokenList").html(html);
-
-                // Fill in hostname
-                $("#instrHost").text(window.location.hostname);
-                $("#instrEmail").text(getCurrentUsername() + "@arozos");
-                $("#instrUser").text(getCurrentUsername());
+                $("#tokenSection").html(html);
+                updateInstructions();
+            }).fail(function() {
+                $("#tokenSection").html('<div class="ui error message">Failed to load tokens.</div>');
             });
         }
 
         function generateToken() {
             $.post("/system/imap_notes/token?action=generate", function(resp) {
                 loadTokens();
+                loadStatus();
+            }).fail(function(xhr) {
+                showMessage("Failed to generate token: " + xhr.responseText, "error");
             });
         }
 
         function revokeToken(token) {
-            if (!confirm("Revoke this token? Your iPhone Notes will stop syncing until you generate and re-enter a new token.")) return;
+            if (!confirm("Revoke this token? Your iPhone Notes will stop syncing until you generate and enter a new token.")) return;
             $.post("/system/imap_notes/token?action=revoke&token=" + encodeURIComponent(token), function() {
                 loadTokens();
             });
@@ -230,32 +284,17 @@
             }
         }
 
-        function getCurrentUsername() {
-            // Try to get from cookie or URL; fall back to placeholder
-            var cookies = document.cookie.split(";");
-            for (var i = 0; i < cookies.length; i++) {
-                var c = cookies[i].trim();
-                if (c.indexOf("ao_username=") === 0) {
-                    return c.substring("ao_username=".length);
-                }
-            }
-            return "your-username";
-        }
-
         function showMessage(msg, type) {
             var cls = type === "success" ? "green" : "red";
-            var $m = $('<div class="ui ' + cls + ' message" style="position:fixed;top:1em;right:1em;z-index:9999">' + escapeHtml(msg) + '</div>');
+            var $m = $('<div class="ui ' + cls + ' message" style="position:fixed;top:1em;right:1em;z-index:9999;max-width:360px">' + escapeHtml(msg) + '</div>');
             $("body").append($m);
-            setTimeout(function() { $m.fadeOut(400, function() { $m.remove(); }); }, 2500);
+            setTimeout(function() { $m.fadeOut(400, function() { $m.remove(); }); }, 3000);
         }
 
         function escapeHtml(s) {
             return String(s)
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#39;");
+                .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
         }
 
         $(document).ready(function() {

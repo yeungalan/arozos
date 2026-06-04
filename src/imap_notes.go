@@ -15,11 +15,9 @@ const imapNotesLogTag = "IMAPNotes"
 var imapNotesServer *imapnotes.Server
 
 // IMAPNotesInit starts the Apple Notes IMAP sync service if enabled in the database.
-// It registers the admin settings page under the Network group.
 func IMAPNotesInit() {
 	sysdb.NewTable("imapnotes")
 
-	// Wire up the settings UI
 	registerSetting(settingModule{
 		Name:         "Apple Notes Sync",
 		Desc:         "Sync arozos Notes with iPhone Notes via IMAP",
@@ -29,7 +27,6 @@ func IMAPNotesInit() {
 		RequireAdmin: true,
 	})
 
-	// Admin-only API router
 	adminRouter := prout.NewModuleRouter(prout.RouterOption{
 		ModuleName:  "System Setting",
 		AdminOnly:   true,
@@ -38,11 +35,9 @@ func IMAPNotesInit() {
 			utils.SendErrorResponse(w, "Permission Denied")
 		},
 	})
-
 	adminRouter.HandleFunc("/system/imap_notes/enable", imapNotesHandleSetEnabled)
 	adminRouter.HandleFunc("/system/imap_notes/status", imapNotesHandleGetStatus)
 
-	// Non-admin: let any authenticated user fetch/manage their own token
 	userRouter := prout.NewModuleRouter(prout.RouterOption{
 		ModuleName:  "System Setting",
 		AdminOnly:   false,
@@ -53,7 +48,6 @@ func IMAPNotesInit() {
 	})
 	userRouter.HandleFunc("/system/imap_notes/token", imapNotesHandleToken)
 
-	// Auto-start if previously enabled
 	var enabled bool
 	sysdb.Read("imapnotes", "enabled", &enabled)
 	if enabled {
@@ -71,7 +65,14 @@ func startIMAPNotesServer() {
 		port = 1143
 	}
 
-	systemWideLogger.PrintAndLog(imapNotesLogTag, fmt.Sprintf("Starting IMAP Notes server on port %d", port), nil)
+	certFile := ""
+	keyFile := ""
+	if *use_tls {
+		certFile = *tls_cert
+		keyFile = *tls_key
+	}
+
+	systemWideLogger.PrintAndLog(imapNotesLogTag, fmt.Sprintf("Starting IMAP Notes server on port %d (TLS cert: %q)", port, certFile), nil)
 
 	imapNotesServer = imapnotes.NewServer(imapnotes.Config{
 		Port:        port,
@@ -79,6 +80,8 @@ func startIMAPNotesServer() {
 		AuthAgent:   authAgent,
 		Database:    sysdb,
 		Logger:      systemWideLogger,
+		TLSCertFile: certFile,
+		TLSKeyFile:  keyFile,
 	})
 
 	if err := imapNotesServer.Start(); err != nil {
@@ -86,22 +89,37 @@ func startIMAPNotesServer() {
 		imapNotesServer = nil
 		return
 	}
-	systemWideLogger.PrintAndLog(imapNotesLogTag, fmt.Sprintf("IMAP Notes server is now listening on port %d", port), nil)
+	tlsNote := "plain IMAP (SSL disabled on iPhone required)"
+	if imapNotesServer.TLSEnabled {
+		tlsNote = "IMAPS with TLS"
+	}
+	systemWideLogger.PrintAndLog(imapNotesLogTag,
+		fmt.Sprintf("IMAP Notes server is now listening on port %d (%s)", port, tlsNote), nil)
 }
 
-// POST /system/imap_notes/enable?enabled=true&port=1143
+// POST /system/imap_notes/enable   body: enabled=true&port=1143
+// NOTE: uses r.FormValue (not utils.GetPara) because jQuery $.post sends
+// parameters in the request body, not the URL query string.
 func imapNotesHandleSetEnabled(w http.ResponseWriter, r *http.Request) {
-	enabledStr, _ := utils.GetPara(r, "enabled")
-	portStr, _ := utils.GetPara(r, "port")
+	r.ParseForm()
+	enabledStr := r.FormValue("enabled")
+	portStr := r.FormValue("port")
 
 	enabled := enabledStr == "true"
 
-	var port int = 1143
+	port := 1143
 	if portStr != "" {
-		if p, err := parseInt(portStr); err == nil && p > 0 && p < 65536 {
-			port = p
+		if p, err := fmt.Sscanf(portStr, "%d", new(int)); p == 1 && err == nil {
+			var pv int
+			fmt.Sscanf(portStr, "%d", &pv)
+			if pv > 0 && pv < 65536 {
+				port = pv
+			}
 		}
 	}
+
+	systemWideLogger.PrintAndLog(imapNotesLogTag,
+		fmt.Sprintf("Admin requested IMAP Notes server enabled=%v port=%d", enabled, port), nil)
 
 	sysdb.Write("imapnotes", "enabled", enabled)
 	sysdb.Write("imapnotes", "port", port)
@@ -110,10 +128,11 @@ func imapNotesHandleSetEnabled(w http.ResponseWriter, r *http.Request) {
 		if imapNotesServer != nil && imapNotesServer.Running {
 			systemWideLogger.PrintAndLog(imapNotesLogTag, "Restarting IMAP Notes server due to settings change", nil)
 			imapNotesServer.Stop()
+			imapNotesServer = nil
 		}
 		startIMAPNotesServer()
 		if imapNotesServer == nil {
-			utils.SendErrorResponse(w, "Server failed to start - check system logs")
+			utils.SendErrorResponse(w, "Server failed to start — check system logs for details")
 			return
 		}
 	} else {
@@ -121,7 +140,6 @@ func imapNotesHandleSetEnabled(w http.ResponseWriter, r *http.Request) {
 			systemWideLogger.PrintAndLog(imapNotesLogTag, "Stopping IMAP Notes server (disabled by admin)", nil)
 			imapNotesServer.Stop()
 			imapNotesServer = nil
-			systemWideLogger.PrintAndLog(imapNotesLogTag, "IMAP Notes server stopped", nil)
 		}
 	}
 
@@ -139,24 +157,26 @@ func imapNotesHandleGetStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	running := imapNotesServer != nil && imapNotesServer.Running
+	tlsEnabled := imapNotesServer != nil && imapNotesServer.TLSEnabled
 
 	type statusResp struct {
-		Enabled bool `json:"enabled"`
-		Running bool `json:"running"`
-		Port    int  `json:"port"`
+		Enabled    bool `json:"enabled"`
+		Running    bool `json:"running"`
+		Port       int  `json:"port"`
+		TLSEnabled bool `json:"tlsEnabled"`
 	}
-	resp := statusResp{
-		Enabled: enabled,
-		Running: running,
-		Port:    port,
-	}
-	j, _ := json.Marshal(resp)
+	j, _ := json.Marshal(statusResp{
+		Enabled:    enabled,
+		Running:    running,
+		Port:       port,
+		TLSEnabled: tlsEnabled,
+	})
 	utils.SendJSONResponse(w, string(j))
 }
 
-// GET  /system/imap_notes/token          — return the user's current token (if any)
-// POST /system/imap_notes/token?action=generate  — create a new one
-// POST /system/imap_notes/token?action=revoke&token=<t> — remove a specific token
+// GET  /system/imap_notes/token          — list tokens + current username
+// POST /system/imap_notes/token?action=generate
+// POST /system/imap_notes/token?action=revoke&token=<t>
 func imapNotesHandleToken(w http.ResponseWriter, r *http.Request) {
 	userinfo, err := userHandler.GetUserInfoFromRequest(w, r)
 	if err != nil {
@@ -185,10 +205,13 @@ func imapNotesHandleToken(w http.ResponseWriter, r *http.Request) {
 		utils.SendTextResponse(w, "ok")
 
 	default:
-		// List existing tokens for this user
 		tokens := authAgent.GetTokensFromUsername(userinfo.Username)
 		type tokenEntry struct {
 			Token string `json:"token"`
+		}
+		type listResp struct {
+			Username string       `json:"username"`
+			Tokens   []tokenEntry `json:"tokens"`
 		}
 		var list []tokenEntry
 		for _, t := range tokens {
@@ -197,18 +220,7 @@ func imapNotesHandleToken(w http.ResponseWriter, r *http.Request) {
 		if list == nil {
 			list = []tokenEntry{}
 		}
-		j, _ := json.Marshal(list)
+		j, _ := json.Marshal(listResp{Username: userinfo.Username, Tokens: list})
 		utils.SendJSONResponse(w, string(j))
 	}
-}
-
-func parseInt(s string) (int, error) {
-	n := 0
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0, fmt.Errorf("non-digit character: %c", c)
-		}
-		n = n*10 + int(c-'0')
-	}
-	return n, nil
 }

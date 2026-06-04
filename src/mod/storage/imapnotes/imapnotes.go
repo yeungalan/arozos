@@ -6,13 +6,14 @@ Authentication uses the arozos username as the IMAP login name and an arozos
 auto-login token as the password.  Only a single virtual mailbox ("Notes") is
 exposed per user.
 
-The implementation intentionally omits features like TLS negotiation, IDLE, and
-advanced search operators that are not required for Apple Notes sync.  It is
-NOT a general-purpose mail server and deliberately does not relay email.
+When TLSCertFile and TLSKeyFile are both set the server wraps the listener with
+TLS (IMAPS), allowing iPhones to connect with SSL enabled.  Without TLS the
+server is plain IMAP and the iPhone must have SSL disabled in account settings.
 */
 package imapnotes
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net"
 	"sync"
@@ -26,11 +27,13 @@ import (
 // Server is the IMAP Notes server instance.
 type Server struct {
 	Port        int
+	TLSEnabled  bool
 	Running     bool
 	userHandler *user.UserHandler
 	authAgent   *auth.AuthAgent
 	database    *database.Database
-	sysLog      *logger.Logger // system-wide logger (writes to log file + stdout)
+	sysLog      *logger.Logger
+	tlsConfig   *tls.Config // nil when TLS is not configured
 	listener    net.Listener
 	done        chan struct{}
 	mu          sync.Mutex
@@ -45,15 +48,20 @@ type Config struct {
 	// Logger is optional; when provided (e.g. systemWideLogger from main) all
 	// important events are written to the arozos log file in addition to stdout.
 	Logger *logger.Logger
+	// TLSCertFile and TLSKeyFile are optional.  When both are set the listener is
+	// wrapped with TLS so iPhones can connect with SSL enabled (IMAPS).
+	TLSCertFile string
+	TLSKeyFile  string
 }
 
 // NewServer creates a new IMAP Notes server (not yet started).
 func NewServer(cfg Config) *Server {
 	lg := cfg.Logger
 	if lg == nil {
-		lg = imapLogger // fall back to stdout-only tmp logger
+		lg = imapLogger
 	}
-	return &Server{
+
+	srv := &Server{
 		Port:        cfg.Port,
 		userHandler: cfg.UserHandler,
 		authAgent:   cfg.AuthAgent,
@@ -61,9 +69,24 @@ func NewServer(cfg Config) *Server {
 		sysLog:      lg,
 		done:        make(chan struct{}),
 	}
+
+	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
+		cert, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
+		if err != nil {
+			lg.PrintAndLog("IMAPNotes", "TLS cert load failed, falling back to plain IMAP: "+err.Error(), err)
+		} else {
+			srv.tlsConfig = &tls.Config{
+				Certificates: []tls.Certificate{cert},
+				MinVersion:   tls.VersionTLS12,
+			}
+			srv.TLSEnabled = true
+		}
+	}
+
+	return srv
 }
 
-// log writes to the system-wide logger (file + stdout) via sysLog.
+// log writes to the system-wide logger (file + stdout).
 func (s *Server) log(msg string, err error) {
 	s.sysLog.PrintAndLog("IMAPNotes", msg, err)
 }
@@ -82,12 +105,18 @@ func (s *Server) Start() error {
 		return fmt.Errorf("IMAP Notes listen on port %d: %w", s.Port, err)
 	}
 
+	if s.tlsConfig != nil {
+		ln = tls.NewListener(ln, s.tlsConfig)
+		s.log(fmt.Sprintf("IMAP Notes server (TLS/IMAPS) listening on port %d", s.Port), nil)
+	} else {
+		s.log(fmt.Sprintf("IMAP Notes server (plain IMAP) listening on port %d", s.Port), nil)
+	}
+
 	s.listener = ln
 	s.done = make(chan struct{})
 	s.Running = true
 
 	go s.acceptLoop()
-	s.log(fmt.Sprintf("IMAP Notes server listening on port %d", s.Port), nil)
 	return nil
 }
 
