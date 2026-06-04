@@ -379,71 +379,50 @@ func (s *Server) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		path = "/"
 	}
 
-	// RFC 6764 / RFC 5397: the root discovery endpoint must respond 207 to
-	// unauthenticated PROPFIND so macOS/iOS accountsd can verify the server
-	// exists before committing credentials.  When credentials ARE provided but
-	// invalid, return 401 so the client knows to ask the user to re-enter them.
-	// All other paths require auth regardless.
-	if r.Method == "PROPFIND" && (path == "/" || path == "") {
+	// All requests — including the root discovery PROPFIND — require HTTP Basic
+	// Auth.  When macOS/iOS accountsd probes without credentials it receives 401
+	// with a WWW-Authenticate challenge.  The OS then uses the credentials the
+	// user entered in the account-setup dialog to retry, which succeeds and
+	// causes the OS to store them in Keychain.  That Keychain entry is what
+	// remindd/dataaccessd use for all subsequent sync requests.
+	//
+	// The previous <D:unauthenticated/> 207 approach let accountsd "accept" the
+	// account without ever verifying credentials, so nothing was stored in
+	// Keychain and sync daemons had nothing to send.
+	{
 		u, password, hasBasic := r.BasicAuth()
-		if hasBasic && u != "" && password != "" {
-			cdLog("  auth attempt on root: username=%q password_len=%d", u, len(password))
-			if username, ok := s.authenticate(r); ok {
-				cdLog("  auth OK (root): username=%q", username)
-				s.propfindRoot(rec, username, s.prefix)
-				return
-			}
-			// Credentials were provided but are wrong → 401, not unauthenticated 207.
-			// Returning 207 here would trick accountsd into thinking setup succeeded
-			// without valid credentials, leaving Keychain empty and remindd unable to sync.
-			tokenValid, tokenOwner := s.authAgent.ValidateAutoLoginToken(password)
-			pwValid := s.authAgent.ValidateUsernameAndPassword(u, password)
-			cdLog("  auth FAILED (root): token_valid=%v token_owner=%q pw_valid=%v → 401",
-				tokenValid, tokenOwner, pwValid)
+		if !hasBasic || u == "" || password == "" {
+			cdLog("  auth: no credentials for %s %s → 401", r.Method, path)
 			sendUnauthorized(rec)
 			return
 		}
-		// No credentials → unauthenticated discovery 207 per RFC 5397.
-		cdLog("  no auth on root PROPFIND → returning unauthenticated discovery 207")
-		s.propfindRootUnauthenticated(rec, s.prefix)
-		return
-	}
-
-	// All other methods/paths require authentication
-	u, password, hasBasic := r.BasicAuth()
-	if !hasBasic {
-		cdLog("  auth: no Authorization header for %s %s → 401", r.Method, path)
-		sendUnauthorized(rec)
-		return
-	}
-	cdLog("  auth attempt: username=%q password_len=%d path=%q", u, len(password), path)
-
-	username, ok := s.authenticate(r)
-	if !ok {
+		cdLog("  auth attempt: username=%q password_len=%d path=%q", u, len(password), path)
+		if username, ok := s.authenticate(r); ok {
+			cdLog("  auth OK: username=%q", username)
+			// Route authenticated request
+			switch r.Method {
+			case "PROPFIND":
+				s.handlePropfind(rec, r, path, username)
+			case "REPORT":
+				s.handleReport(rec, r, path, username)
+			case http.MethodGet, http.MethodHead:
+				s.handleGet(rec, r, path, username)
+			case http.MethodPut:
+				s.handlePut(rec, r, path, username)
+			case http.MethodDelete:
+				s.handleDelete(rec, r, path, username)
+			default:
+				rec.Header().Set("Allow", "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT")
+				http.Error(rec, "Method Not Allowed", http.StatusMethodNotAllowed)
+			}
+			return
+		}
 		tokenValid, tokenOwner := s.authAgent.ValidateAutoLoginToken(password)
 		pwValid := s.authAgent.ValidateUsernameAndPassword(u, password)
 		cdLog("  auth FAILED: token_valid=%v token_owner=%q pw_valid=%v → 401",
 			tokenValid, tokenOwner, pwValid)
 		sendUnauthorized(rec)
 		return
-	}
-	cdLog("  auth OK: username=%q", username)
-	cdLog("  dispatching method=%s relative_path=%q", r.Method, path)
-
-	switch r.Method {
-	case "PROPFIND":
-		s.handlePropfind(rec, r, path, username)
-	case "REPORT":
-		s.handleReport(rec, r, path, username)
-	case http.MethodGet, http.MethodHead:
-		s.handleGet(rec, r, path, username)
-	case http.MethodPut:
-		s.handlePut(rec, r, path, username)
-	case http.MethodDelete:
-		s.handleDelete(rec, r, path, username)
-	default:
-		rec.Header().Set("Allow", "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT")
-		http.Error(rec, "Method Not Allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -470,7 +449,7 @@ func (s *Server) handlePropfind(w http.ResponseWriter, r *http.Request, path, us
 		cdLog("  → propfindRoot (authenticated)")
 		s.propfindRoot(w, username, prefix)
 
-	// Generic /principals/ — macOS follows here after the unauthenticated root probe
+	// Generic /principals/ — macOS may PROPFIND here during discovery
 	case path == "/principals/" || path == "/principals":
 		cdLog("  → propfindPrincipal (generic, redirecting to user-specific)")
 		s.propfindPrincipal(w, username, prefix)
@@ -497,31 +476,6 @@ func (s *Server) handlePropfind(w http.ResponseWriter, r *http.Request, path, us
 		cdLog("  → 404 (unmatched path %q, expected paths for user %q)", path, username)
 		http.NotFound(w, r)
 	}
-}
-
-// propfindRootUnauthenticated handles unauthenticated PROPFIND on the CalDAV
-// root.  Per RFC 5397 §3, responding with <D:unauthenticated/> (inside a 207)
-// is the correct signal telling the client "you need to authenticate and
-// re-issue this request".  Returning a real href here tells the client it IS
-// already authenticated and causes macOS accountsd to follow the link, hit a
-// 401 on the principal URL, and loop instead of sending credentials.
-func (s *Server) propfindRootUnauthenticated(w http.ResponseWriter, prefix string) {
-	w.Header().Set("Content-Type", "application/xml; charset=UTF-8")
-	w.WriteHeader(207)
-	fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
-<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-  <D:response>
-    <D:href>%s/</D:href>
-    <D:propstat>
-      <D:prop>
-        <D:current-user-principal><D:unauthenticated/></D:current-user-principal>
-        <D:principal-URL><D:unauthenticated/></D:principal-URL>
-        <D:resourcetype><D:collection/></D:resourcetype>
-      </D:prop>
-      <D:status>HTTP/1.1 200 OK</D:status>
-    </D:propstat>
-  </D:response>
-</D:multistatus>`, prefix)
 }
 
 func (s *Server) propfindRoot(w http.ResponseWriter, username, prefix string) {
