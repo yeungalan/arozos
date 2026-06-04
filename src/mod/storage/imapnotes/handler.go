@@ -21,7 +21,7 @@ const (
 	stateSelected = 2
 )
 
-// deletedFlags tracks messages marked \Deleted in the current session.
+// connHandler manages the lifecycle of a single IMAP client connection.
 type connHandler struct {
 	conn        net.Conn
 	r           *bufio.Reader
@@ -31,6 +31,7 @@ type connHandler struct {
 	database    *database.Database
 	state       int
 	username    string
+	remoteAddr  string
 	// UIDs marked \Deleted this session (expunged on EXPUNGE / CLOSE)
 	deleted map[uint32]bool
 }
@@ -44,7 +45,18 @@ func newConnHandler(conn net.Conn, ag *auth.AuthAgent, uh *user.UserHandler, db 
 		userHandler: uh,
 		database:    db,
 		state:       stateNotAuth,
+		remoteAddr:  conn.RemoteAddr().String(),
 		deleted:     make(map[uint32]bool),
+	}
+}
+
+// logf emits a log line prefixed with the remote address (and username when authenticated).
+func (h *connHandler) logf(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	if h.username != "" {
+		imapLogger.PrintAndLog("IMAPNotes", fmt.Sprintf("[%s][%s] %s", h.remoteAddr, h.username, msg), nil)
+	} else {
+		imapLogger.PrintAndLog("IMAPNotes", fmt.Sprintf("[%s] %s", h.remoteAddr, msg), nil)
 	}
 }
 
@@ -64,8 +76,12 @@ func (h *connHandler) sendLiteral(tag, prefix string, data []byte) {
 }
 
 func (h *connHandler) run() {
-	defer h.conn.Close()
+	defer func() {
+		h.conn.Close()
+		h.logf("connection closed")
+	}()
 	h.conn.SetDeadline(time.Now().Add(30 * time.Minute))
+	h.logf("connection accepted")
 
 	h.send("* OK [CAPABILITY IMAP4rev1 AUTH=PLAIN LOGIN] ArozOS Notes IMAP Server ready")
 
@@ -84,7 +100,23 @@ func (h *connHandler) run() {
 		}
 		h.conn.SetDeadline(time.Now().Add(30 * time.Minute))
 
-		switch strings.ToUpper(cmd) {
+		cmdUpper := strings.ToUpper(cmd)
+
+		// Log every command except NOOP to avoid noise; mask the password in LOGIN.
+		if cmdUpper != "NOOP" {
+			if cmdUpper == "LOGIN" {
+				parts := splitArgs(args)
+				if len(parts) >= 1 {
+					h.logf(">> %s %s %s ********", tag, cmd, unquote(parts[0]))
+				} else {
+					h.logf(">> %s %s", tag, cmd)
+				}
+			} else {
+				h.logf(">> %s %s %s", tag, cmd, args)
+			}
+		}
+
+		switch cmdUpper {
 		case "CAPABILITY":
 			h.send("* CAPABILITY IMAP4rev1 AUTH=PLAIN LOGIN")
 			h.send(tag + " OK CAPABILITY completed")
@@ -93,6 +125,7 @@ func (h *connHandler) run() {
 			h.send(tag + " OK NOOP completed")
 
 		case "LOGOUT":
+			h.logf("logout requested")
 			h.send("* BYE ArozOS Notes IMAP Server logging out")
 			h.send(tag + " OK LOGOUT completed")
 			return
@@ -106,6 +139,7 @@ func (h *connHandler) run() {
 			// Read the base64 credentials line but ignore it since we expect the
 			// client to retry with LOGIN if AUTHENTICATE PLAIN fails here.
 			h.readLine()
+			h.logf("AUTHENTICATE rejected - client should use LOGIN")
 			h.send(tag + " NO AUTHENTICATE failed - please use LOGIN")
 
 		case "LIST":
@@ -115,7 +149,7 @@ func (h *connHandler) run() {
 			h.handleLsub(tag, args)
 
 		case "SUBSCRIBE", "UNSUBSCRIBE":
-			h.send(tag + " OK " + strings.ToUpper(cmd) + " completed")
+			h.send(tag + " OK " + cmdUpper + " completed")
 
 		case "STATUS":
 			h.handleStatus(tag, args)
@@ -128,6 +162,7 @@ func (h *connHandler) run() {
 
 		case "CLOSE":
 			if h.state == stateSelected {
+				h.logf("CLOSE: flushing pending expunge")
 				h.applyExpunge(false)
 				h.state = stateAuth
 			}
@@ -160,9 +195,11 @@ func (h *connHandler) run() {
 			h.send(tag + " OK CHECK completed")
 
 		case "CREATE", "DELETE", "RENAME":
+			h.logf("rejected unsupported mailbox operation: %s", cmd)
 			h.send(tag + " NO Mailbox management not supported")
 
 		default:
+			h.logf("unknown command: %s", cmd)
 			h.send(tag + " BAD Unknown command: " + cmd)
 		}
 	}
@@ -220,6 +257,7 @@ func (h *connHandler) handleLogin(tag, args string) {
 	// args: <username> <password>  (password may be quoted)
 	parts := splitArgs(args)
 	if len(parts) < 2 {
+		h.logf("LOGIN: missing username or password")
 		h.send(tag + " BAD LOGIN requires username and password")
 		return
 	}
@@ -229,14 +267,14 @@ func (h *connHandler) handleLogin(tag, args string) {
 	// Validate: password must be a valid auto-login token for this username.
 	valid, tokenOwner := h.authAgent.ValidateAutoLoginToken(password)
 	if !valid || tokenOwner != username {
-		imapLogger.PrintAndLog("IMAPNotes", "Failed login attempt for user: "+username, nil)
+		h.logf("LOGIN: authentication failed for user %q", username)
 		h.send(tag + " NO LOGIN failed")
 		return
 	}
 
 	h.username = username
 	h.state = stateAuth
-	imapLogger.PrintAndLog("IMAPNotes", "User logged in via IMAP: "+username, nil)
+	h.logf("LOGIN: authenticated successfully")
 	h.send(tag + " OK LOGIN completed")
 }
 
@@ -305,6 +343,7 @@ func (h *connHandler) handleSelect(tag, args string, readonly bool) {
 	}
 	mailbox := strings.Trim(strings.TrimSpace(args), `"`)
 	if !strings.EqualFold(mailbox, "notes") {
+		h.logf("SELECT: mailbox %q not found", mailbox)
 		h.send(tag + " NO Mailbox does not exist: " + mailbox)
 		return
 	}
@@ -318,6 +357,13 @@ func (h *connHandler) handleSelect(tag, args string, readonly bool) {
 			nextUID = n.UID + 1
 		}
 	}
+
+	mode := "READ-WRITE"
+	if readonly {
+		mode = "READ-ONLY"
+	}
+	h.logf("SELECT Notes: %d message(s), UIDVALIDITY=%d, UIDNEXT=%d, mode=%s",
+		count, uidValidity, nextUID, mode)
 
 	h.send(fmt.Sprintf("* %d EXISTS", count))
 	h.send("* 0 RECENT")
@@ -344,15 +390,19 @@ func (h *connHandler) handleAppend(tag, args, fullLine string) {
 	// We only care about the literal size at the end.
 	literalSize := parseLiteralSize(args)
 	if literalSize < 0 {
+		h.logf("APPEND: missing literal size in args: %s", args)
 		h.send(tag + " BAD APPEND missing literal size")
 		return
 	}
+
+	h.logf("APPEND: receiving %d bytes from client", literalSize)
 
 	// Signal readiness to receive literal data
 	h.send("+ Ready for literal data")
 
 	msgBytes, err := h.readLiteral(literalSize)
 	if err != nil {
+		h.logf("APPEND: read error: %v", err)
 		h.send(tag + " NO APPEND failed: read error")
 		return
 	}
@@ -364,10 +414,17 @@ func (h *connHandler) handleAppend(tag, args, fullLine string) {
 
 	uid, err := WriteNote(h.database, h.userHandler, h.username, noteID, string(msgBytes))
 	if err != nil {
-		imapLogger.PrintAndLog("IMAPNotes", "APPEND write error: "+err.Error(), err)
+		h.logf("APPEND: write error for noteID %s: %v", noteID, err)
 		h.send(tag + " NO APPEND failed: write error")
 		return
 	}
+
+	// Extract subject for logging
+	subject, _ := parseEmailMessage(string(msgBytes))
+	if subject == "" {
+		subject = "(no subject)"
+	}
+	h.logf("APPEND: created note UID=%d id=%s title=%q (%d bytes)", uid, noteID, subject, literalSize)
 
 	uidValidity := GetUIDValidity(h.database, h.username)
 	h.send(tag + fmt.Sprintf(" OK [APPENDUID %d %d] APPEND completed", uidValidity, uid))
@@ -382,6 +439,7 @@ func (h *connHandler) handleFetch(tag, args string, uidMode bool) {
 	seqStr, items := splitFirst(args)
 	seqSet := parseSequenceSet(seqStr, uint32(len(notes)), notes, uidMode)
 
+	matched := 0
 	for _, n := range notes {
 		var seq uint32
 		for i, nn := range notes {
@@ -392,8 +450,10 @@ func (h *connHandler) handleFetch(tag, args string, uidMode bool) {
 		if !seqSet[seq] {
 			continue
 		}
+		matched++
 		h.sendFetchResponse(seq, n, items, uidMode)
 	}
+	h.logf("FETCH %s %s: returned %d message(s) (uidMode=%v)", seqStr, items, matched, uidMode)
 	h.send(tag + " OK FETCH completed")
 }
 
@@ -522,6 +582,7 @@ func (h *connHandler) handleStore(tag, args string, uidMode bool) {
 
 	parts := strings.Fields(args)
 	if len(parts) < 3 {
+		h.logf("STORE: malformed args: %s", args)
 		h.send(tag + " BAD STORE requires seqset, flags-action, flags")
 		return
 	}
@@ -542,6 +603,7 @@ func (h *connHandler) handleStore(tag, args string, uidMode bool) {
 		if !seqSet[seq] {
 			continue
 		}
+		wasDeleted := h.deleted[n.UID]
 		if strings.Contains(action, "+FLAGS") && strings.Contains(flagStr, `\DELETED`) {
 			h.deleted[n.UID] = true
 		} else if strings.Contains(action, "-FLAGS") && strings.Contains(flagStr, `\DELETED`) {
@@ -551,6 +613,14 @@ func (h *connHandler) handleStore(tag, args string, uidMode bool) {
 				h.deleted[n.UID] = true
 			} else {
 				delete(h.deleted, n.UID)
+			}
+		}
+		nowDeleted := h.deleted[n.UID]
+		if nowDeleted != wasDeleted {
+			if nowDeleted {
+				h.logf("STORE: UID=%d seq=%d marked \\Deleted", n.UID, seq)
+			} else {
+				h.logf("STORE: UID=%d seq=%d \\Deleted flag cleared", n.UID, seq)
 			}
 		}
 
@@ -583,6 +653,7 @@ func (h *connHandler) handleSearch(tag, args string, uidMode bool) {
 		}
 	}
 
+	h.logf("SEARCH %q: %d result(s) (uidMode=%v)", args, len(results), uidMode)
 	h.send("* SEARCH " + strings.Join(results, " "))
 	h.send(tag + " OK SEARCH completed")
 }
@@ -599,6 +670,9 @@ func (h *connHandler) applyExpunge(notify bool) {
 		deleted = append(deleted, uid)
 	}
 
+	h.logf("EXPUNGE: purging %d flagged message(s)", len(deleted))
+
+	expunged := 0
 	// Process deletions in reverse sequence order so sequence numbers stay valid
 	// as per RFC 3501 §6.4.3.
 	for i := len(notes) - 1; i >= 0; i-- {
@@ -613,14 +687,18 @@ func (h *connHandler) applyExpunge(notify bool) {
 		if !isDeleted {
 			continue
 		}
+		h.logf("EXPUNGE: deleting note UID=%d id=%s title=%q", n.UID, n.ID, n.Title)
 		err := DeleteNote(h.database, h.userHandler, h.username, n.UID)
 		if err != nil {
-			imapLogger.PrintAndLog("IMAPNotes", "Delete note error: "+err.Error(), err)
+			h.logf("EXPUNGE: error deleting UID=%d: %v", n.UID, err)
+		} else {
+			expunged++
 		}
 		if notify {
 			h.send(fmt.Sprintf("* %d EXPUNGE", i+1))
 		}
 	}
+	h.logf("EXPUNGE: done, %d note(s) removed", expunged)
 	h.deleted = make(map[uint32]bool)
 }
 

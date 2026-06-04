@@ -104,6 +104,7 @@ func (s *Server) acceptLoop() {
 				continue
 			}
 		}
+		imapLogger.PrintAndLog("IMAPNotes", fmt.Sprintf("New connection from %s", conn.RemoteAddr()), nil)
 		go newConnHandler(conn, s.authAgent, s.userHandler, s.database).run()
 	}
 }
