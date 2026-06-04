@@ -101,6 +101,12 @@ func (m *Manager) HandleStatus(w http.ResponseWriter, r *http.Request) {
 
 // HandleRequest is the main CalDAV HTTP handler (mounted at /caldav/).
 func (m *Manager) HandleRequest(w http.ResponseWriter, r *http.Request) {
+	// Log every incoming request with all headers for diagnostics.
+	log.Printf("[CalDAV] ← %s %s (from %s)", r.Method, r.URL.RequestURI(), r.RemoteAddr)
+	for name, vals := range r.Header {
+		log.Printf("[CalDAV]   header %s: %s", name, strings.Join(vals, "; "))
+	}
+
 	if !m.Enabled {
 		log.Printf("[CalDAV] service is disabled — rejecting %s %s", r.Method, r.URL.Path)
 		http.Error(w, "CalDAV service is disabled", http.StatusServiceUnavailable)
@@ -121,7 +127,17 @@ func (m *Manager) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	// Basic Auth: username + auto-login token.
 	username, token, ok := r.BasicAuth()
 	if !ok {
-		log.Printf("[CalDAV] %s %s — no Basic Auth header, returning 401", r.Method, r.URL.Path)
+		authHdr := r.Header.Get("Authorization")
+		if authHdr == "" {
+			log.Printf("[CalDAV] %s %s — no Authorization header at all, returning 401 (iOS should retry with credentials)", r.Method, r.URL.Path)
+		} else {
+			// Header present but not parseable as Basic Auth — log first 20 chars safely
+			preview := authHdr
+			if len(preview) > 20 {
+				preview = preview[:20] + "..."
+			}
+			log.Printf("[CalDAV] %s %s — Authorization header present but not valid Basic Auth (value: %q), returning 401", r.Method, r.URL.Path, preview)
+		}
 		w.Header().Set("WWW-Authenticate", `Basic realm="ArozOS CalDAV"`)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
