@@ -267,6 +267,10 @@ func (m *Manager) route(w http.ResponseWriter, r *http.Request, path, username s
 // accountsd to give up entirely — it will never retry with credentials. Instead we return
 // a generic /caldav/current-user-principal/ URL. accountsd follows it, gets 401 there
 // (auth IS required), then retries with credentials — at which point we know the username.
+//
+// RFC 4918 §9.1: requested properties that don't exist on this resource MUST be returned
+// in a separate <propstat> with status 404. Apple clients restart discovery instead of
+// proceeding when expected propstats are absent.
 func (m *Manager) handleRootDiscovery(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "PROPFIND" {
 		w.Header().Set("Allow", "OPTIONS, PROPFIND")
@@ -275,10 +279,25 @@ func (m *Manager) handleRootDiscovery(w http.ResponseWriter, r *http.Request) {
 	}
 	body := xmlMS(
 		xmlResp("/caldav/",
+			// Properties the root collection DOES have:
 			xmlPS(http.StatusOK,
 				`<current-user-principal><href>/caldav/current-user-principal/</href></current-user-principal>`,
 				`<resourcetype><collection/></resourcetype>`,
 				`<displayname>ArozOS CalDAV</displayname>`,
+			),
+			// Root is not a principal — explicit 404 for all principal/calendar props
+			// Apple clients commonly request (omitting them triggers a discovery restart):
+			xmlPS(http.StatusNotFound,
+				`<principal-URL/>`,
+				`<principal-collection-set/>`,
+				`<C:calendar-home-set/>`,
+				`<C:calendar-user-address-set/>`,
+				`<CS:dropbox-home-URL/>`,
+				`<CS:email-address-set/>`,
+				`<CS:notification-URL/>`,
+				`<C:max-attendees-per-instance/>`,
+				`<C:schedule-inbox-URL/>`,
+				`<C:schedule-outbox-URL/>`,
 			),
 		),
 	)
@@ -298,12 +317,27 @@ func (m *Manager) handleCurrentUserPrincipal(w http.ResponseWriter, r *http.Requ
 	homeHref := "/caldav/" + username + "/"
 	body := xmlMS(
 		xmlResp(principalHref,
+			// Properties this principal resource HAS:
 			xmlPS(http.StatusOK,
 				`<displayname>`+xmlEsc(username)+`</displayname>`,
 				`<resourcetype><collection/><principal/></resourcetype>`,
 				`<current-user-principal><href>`+xmlEsc(principalHref)+`</href></current-user-principal>`,
+				// principal-URL: self-referential per RFC 3744.
+				// Apple clients explicitly request this; omitting it causes a discovery restart.
+				`<principal-URL><href>`+xmlEsc(principalHref)+`</href></principal-URL>`,
+				`<principal-collection-set><href>/caldav/principals/</href></principal-collection-set>`,
 				`<C:calendar-home-set><href>`+xmlEsc(homeHref)+`</href></C:calendar-home-set>`,
 				`<C:calendar-user-address-set><href>mailto:`+xmlEsc(username)+`@arozos.local</href></C:calendar-user-address-set>`,
+			),
+			// Apple CalendarServer-specific properties we don't implement — explicit 404
+			// so clients know these don't exist (RFC 4918 §9.1):
+			xmlPS(http.StatusNotFound,
+				`<CS:dropbox-home-URL/>`,
+				`<CS:email-address-set/>`,
+				`<CS:notification-URL/>`,
+				`<C:max-attendees-per-instance/>`,
+				`<C:schedule-inbox-URL/>`,
+				`<C:schedule-outbox-URL/>`,
 			),
 		),
 	)
@@ -333,10 +367,19 @@ func (m *Manager) handlePrincipal(w http.ResponseWriter, r *http.Request, userna
 			xmlPS(http.StatusOK,
 				`<displayname>`+xmlEsc(username)+`</displayname>`,
 				`<principal-URL><href>`+xmlEsc(principalHref)+`</href></principal-URL>`,
+				`<principal-collection-set><href>/caldav/principals/</href></principal-collection-set>`,
 				`<resourcetype><collection/><principal/></resourcetype>`,
 				`<current-user-principal><href>`+xmlEsc(principalHref)+`</href></current-user-principal>`,
 				`<C:calendar-home-set><href>`+xmlEsc(homeHref)+`</href></C:calendar-home-set>`,
 				`<C:calendar-user-address-set><href>mailto:`+xmlEsc(username)+`@arozos.local</href></C:calendar-user-address-set>`,
+			),
+			xmlPS(http.StatusNotFound,
+				`<CS:dropbox-home-URL/>`,
+				`<CS:email-address-set/>`,
+				`<CS:notification-URL/>`,
+				`<C:max-attendees-per-instance/>`,
+				`<C:schedule-inbox-URL/>`,
+				`<C:schedule-outbox-URL/>`,
 			),
 		),
 	)

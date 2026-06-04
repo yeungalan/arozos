@@ -215,8 +215,13 @@ func TestDiscoveryReturnsPrincipal(t *testing.T) {
 	assertStatus(t, rr, http.StatusMultiStatus)
 	assertContains(t, rr, "current-user-principal")
 	assertContains(t, rr, "/caldav/current-user-principal/")
-	// Root must NOT already contain calendar-home-set (that comes from step 2).
-	assertNotContains(t, rr, "calendar-home-set")
+	// Root must NOT return a real (200) calendar-home-set href; it only appears in
+	// the 404 propstat to satisfy RFC 4918 §9.1. A real href would mean step 2 is
+	// bypassed and the client tries to skip authentication.
+	body := rr.Body.String()
+	if strings.Contains(body, `<C:calendar-home-set><href>`) {
+		t.Errorf("root must not contain a real calendar-home-set href (only 404 propstat allowed)\nbody: %s", body)
+	}
 }
 
 func TestDiscoveryXMLStructure(t *testing.T) {
