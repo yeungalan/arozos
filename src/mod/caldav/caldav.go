@@ -276,17 +276,25 @@ func collectionCTag(notes []NoteMeta) string {
 
 // ---- authentication ------------------------------------------------------
 
-// authenticate validates HTTP Basic Auth. Username must match the token owner.
+// authenticate validates HTTP Basic Auth.
+// Accepts either the user's ArozOS password or an autologin token as the password.
 func (s *Server) authenticate(r *http.Request) (username string, ok bool) {
-	u, token, hasBasic := r.BasicAuth()
-	if !hasBasic {
+	u, password, hasBasic := r.BasicAuth()
+	if !hasBasic || u == "" || password == "" {
 		return "", false
 	}
-	valid, owner := s.authAgent.ValidateAutoLoginToken(token)
-	if !valid || owner != u {
-		return "", false
+
+	// Accept autologin token as password
+	if valid, owner := s.authAgent.ValidateAutoLoginToken(password); valid && owner == u {
+		return u, true
 	}
-	return u, true
+
+	// Accept regular ArozOS password
+	if s.authAgent.ValidateUsernameAndPassword(u, password) {
+		return u, true
+	}
+
+	return "", false
 }
 
 func sendUnauthorized(w http.ResponseWriter) {
