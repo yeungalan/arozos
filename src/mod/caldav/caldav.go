@@ -370,18 +370,50 @@ func (s *Server) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Log auth attempt
+	// Derive path relative to prefix (needed before auth decision)
+	path := r.URL.Path
+	if s.prefix != "" {
+		path = strings.TrimPrefix(path, s.prefix)
+	}
+	if path == "" {
+		path = "/"
+	}
+
+	// RFC 6764: the root discovery endpoint must respond 207 to unauthenticated
+	// PROPFIND so macOS/iOS accountsd can verify the server exists before
+	// committing credentials.  All other paths require auth.
+	if r.Method == "PROPFIND" && (path == "/" || path == "") {
+		u, password, hasBasic := r.BasicAuth()
+		if hasBasic && u != "" && password != "" {
+			cdLog("  auth attempt on root: username=%q password_len=%d", u, len(password))
+			if username, ok := s.authenticate(r); ok {
+				cdLog("  auth OK (root): username=%q", username)
+				cdLog("  dispatching authenticated root PROPFIND")
+				s.propfindRoot(rec, username, s.prefix)
+				return
+			}
+			tokenValid, tokenOwner := s.authAgent.ValidateAutoLoginToken(password)
+			pwValid := s.authAgent.ValidateUsernameAndPassword(u, password)
+			cdLog("  auth FAILED (root): token_valid=%v token_owner=%q pw_valid=%v → returning unauthenticated discovery",
+				tokenValid, tokenOwner, pwValid)
+		} else {
+			cdLog("  no auth on root PROPFIND → returning unauthenticated discovery 207")
+		}
+		s.propfindRootUnauthenticated(rec, s.prefix)
+		return
+	}
+
+	// All other methods/paths require authentication
 	u, password, hasBasic := r.BasicAuth()
 	if !hasBasic {
-		cdLog("  auth: no Authorization header → 401")
+		cdLog("  auth: no Authorization header for %s %s → 401", r.Method, path)
 		sendUnauthorized(rec)
 		return
 	}
-	cdLog("  auth attempt: username=%q password_len=%d", u, len(password))
+	cdLog("  auth attempt: username=%q password_len=%d path=%q", u, len(password), path)
 
 	username, ok := s.authenticate(r)
 	if !ok {
-		// More detailed failure reason
 		tokenValid, tokenOwner := s.authAgent.ValidateAutoLoginToken(password)
 		pwValid := s.authAgent.ValidateUsernameAndPassword(u, password)
 		cdLog("  auth FAILED: token_valid=%v token_owner=%q pw_valid=%v → 401",
@@ -390,15 +422,6 @@ func (s *Server) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cdLog("  auth OK: username=%q", username)
-
-	// Derive path relative to prefix
-	path := r.URL.Path
-	if s.prefix != "" {
-		path = strings.TrimPrefix(path, s.prefix)
-	}
-	if path == "" {
-		path = "/"
-	}
 	cdLog("  dispatching method=%s relative_path=%q", r.Method, path)
 
 	switch r.Method {
@@ -436,12 +459,19 @@ func (s *Server) handlePropfind(w http.ResponseWriter, r *http.Request, path, us
 	cdLog("  PROPFIND path=%q depth=%s username=%q", path, depth, username)
 
 	switch {
+	// Authenticated root
 	case path == "/" || path == "":
-		cdLog("  → propfindRoot")
+		cdLog("  → propfindRoot (authenticated)")
 		s.propfindRoot(w, username, prefix)
 
+	// Generic /principals/ — macOS follows here after the unauthenticated root probe
+	case path == "/principals/" || path == "/principals":
+		cdLog("  → propfindPrincipal (generic, redirecting to user-specific)")
+		s.propfindPrincipal(w, username, prefix)
+
+	// User-specific principal
 	case path == "/principals/"+username+"/" || path == "/principals/"+username:
-		cdLog("  → propfindPrincipal")
+		cdLog("  → propfindPrincipal (user-specific)")
 		s.propfindPrincipal(w, username, prefix)
 
 	case path == "/calendars/"+username+"/" || path == "/calendars/"+username:
@@ -461,6 +491,30 @@ func (s *Server) handlePropfind(w http.ResponseWriter, r *http.Request, path, us
 		cdLog("  → 404 (unmatched path %q, expected paths for user %q)", path, username)
 		http.NotFound(w, r)
 	}
+}
+
+// propfindRootUnauthenticated handles unauthenticated PROPFIND on the CalDAV
+// root.  macOS/iOS accountsd sends this probe before it commits credentials;
+// responding 207 (not 401) lets setup proceed.  We point current-user-principal
+// at /principals/ which DOES require auth, so the client will be challenged
+// there and send its credentials.
+func (s *Server) propfindRootUnauthenticated(w http.ResponseWriter, prefix string) {
+	w.Header().Set("Content-Type", "application/xml; charset=UTF-8")
+	w.WriteHeader(207)
+	fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
+<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:response>
+    <D:href>%s/</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:current-user-principal><D:href>%s/principals/</D:href></D:current-user-principal>
+        <D:principal-URL><D:href>%s/principals/</D:href></D:principal-URL>
+        <D:resourcetype><D:collection/></D:resourcetype>
+      </D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+</D:multistatus>`, prefix, prefix, prefix)
 }
 
 func (s *Server) propfindRoot(w http.ResponseWriter, username, prefix string) {
