@@ -8,16 +8,18 @@ package caldav
 	  - Username: arozos username
 	  - Password: auto-login token (obtain from My Account → Security)
 
-	Discovery chain (standard 2-step, same as Radicale / DAViCal):
+	Discovery chain (3-step, tested to work with Apple iOS):
 
-	  PROPFIND /caldav/               → current-user-principal = /caldav/{user}/
-	  PROPFIND /caldav/{user}/        → calendar-home-set      = /caldav/{user}/
-	  PROPFIND /caldav/{user}/ Depth:1→ Notes calendar listed
-	  REPORT   /caldav/{user}/notes/  → sync VTODO items
+	  PROPFIND /caldav/                        → current-user-principal = /caldav/principals/{user}/
+	  PROPFIND /caldav/principals/{user}/      → calendar-home-set = /caldav/{user}/
+	  PROPFIND /caldav/{user}/ Depth:1         → Notes calendar listed
+	  REPORT   /caldav/{user}/notes/           → sync VTODO items
 	  GET/PUT/DELETE /caldav/{user}/notes/{id}.ics → individual notes
 
-	/caldav/{user}/ acts as BOTH principal AND calendar home (same URL).
-	This matches what Apple's CalDAV client expects.
+	The principal URL (/caldav/principals/{user}/) MUST be different from the
+	calendar home (/caldav/{user}/). If they are the same URL, iOS fails account
+	confirmation because it treats calendar-home-set pointing to itself as
+	a circular reference.
 
 	Notes are stored at user:/Document/Notes/{id}.txt + meta.json.
 	Each note → VTODO: SUMMARY = first line, DESCRIPTION = full body.
@@ -145,7 +147,8 @@ func (m *Manager) HandleRequest(w http.ResponseWriter, r *http.Request) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (m *Manager) route(w http.ResponseWriter, r *http.Request, path, username string, userinfo *user.User) {
-	userHome := "/" + username + "/"
+	principalPath := "/principals/" + username + "/"
+	homePath := "/" + username + "/"
 	calPath := "/" + username + "/notes/"
 
 	// Normalise trailing slash for matching.
@@ -156,12 +159,16 @@ func (m *Manager) route(w http.ResponseWriter, r *http.Request, path, username s
 
 	switch {
 	case normPath == "/":
-		// Step 1 of discovery: return current-user-principal.
-		m.handleRootDiscovery(w, r, username)
+		// Step 1: root discovery returns current-user-principal.
+		m.handleDiscovery(w, r, username)
 
-	case normPath == userHome:
-		// Step 2: principal + calendar home (same resource).
-		m.handleUserHome(w, r, username, userinfo)
+	case normPath == principalPath:
+		// Step 2: principal resource returns calendar-home-set.
+		m.handlePrincipal(w, r, username)
+
+	case normPath == homePath:
+		// Step 3: calendar home lists calendars (Depth:1).
+		m.handleCalendarHome(w, r, username, userinfo)
 
 	case normPath == calPath:
 		// Notes calendar collection.
@@ -185,67 +192,83 @@ func (m *Manager) route(w http.ResponseWriter, r *http.Request, path, username s
 // CalDAV resource handlers
 // ─────────────────────────────────────────────────────────────────────────────
 
-// handleRootDiscovery responds to PROPFIND /caldav/ with current-user-principal.
-// This is only step 1; iOS will follow up with PROPFIND on the principal URL.
-func (m *Manager) handleRootDiscovery(w http.ResponseWriter, r *http.Request, username string) {
+// handleDiscovery responds to PROPFIND /caldav/ with current-user-principal.
+// iOS uses this as the first step to find the user's principal URL.
+func (m *Manager) handleDiscovery(w http.ResponseWriter, r *http.Request, username string) {
 	if r.Method != "PROPFIND" {
 		w.Header().Set("Allow", "OPTIONS, PROPFIND")
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	userHref := "/caldav/" + username + "/"
-
+	principalHref := "/caldav/principals/" + username + "/"
 	body := xmlMS(
 		xmlResp("/caldav/",
 			xmlPS(http.StatusOK,
-				`<D:current-user-principal><D:href>`+xmlEsc(userHref)+`</D:href></D:current-user-principal>`,
-				`<D:resourcetype><D:collection/></D:resourcetype>`,
-				`<D:displayname>ArozOS CalDAV</D:displayname>`,
+				`<current-user-principal><href>`+xmlEsc(principalHref)+`</href></current-user-principal>`,
+				`<resourcetype><collection/></resourcetype>`,
+				`<displayname>ArozOS CalDAV</displayname>`,
 			),
 		),
 	)
 	writeXML(w, http.StatusMultiStatus, body)
 }
 
-// handleUserHome serves /caldav/{username}/ as BOTH the principal resource AND
-// the calendar home set — exactly how Radicale, Baikal, and DAViCal do it.
-//
-//   - Depth: 0  → returns principal + home properties only
-//   - Depth: 1  → also returns the Notes calendar collection
-func (m *Manager) handleUserHome(w http.ResponseWriter, r *http.Request, username string, userinfo *user.User) {
+// handlePrincipal responds to PROPFIND /caldav/principals/{user}/ with
+// the calendar-home-set pointing to /caldav/{user}/.
+// The principal URL MUST differ from the calendar home; iOS rejects the account
+// if calendar-home-set points to the same URL as the principal.
+func (m *Manager) handlePrincipal(w http.ResponseWriter, r *http.Request, username string) {
 	if r.Method != "PROPFIND" {
 		w.Header().Set("Allow", "OPTIONS, PROPFIND")
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	principalHref := "/caldav/principals/" + username + "/"
+	homeHref := "/caldav/" + username + "/"
+	body := xmlMS(
+		xmlResp(principalHref,
+			xmlPS(http.StatusOK,
+				`<displayname>`+xmlEsc(username)+`</displayname>`,
+				`<principal-URL><href>`+xmlEsc(principalHref)+`</href></principal-URL>`,
+				`<resourcetype><collection/><principal/></resourcetype>`,
+				`<current-user-principal><href>`+xmlEsc(principalHref)+`</href></current-user-principal>`,
+				`<C:calendar-home-set><href>`+xmlEsc(homeHref)+`</href></C:calendar-home-set>`,
+				`<C:calendar-user-address-set><href>mailto:`+xmlEsc(username)+`@arozos.local</href></C:calendar-user-address-set>`,
+			),
+		),
+	)
+	writeXML(w, http.StatusMultiStatus, body)
+}
 
-	userHref := "/caldav/" + username + "/"
+// handleCalendarHome responds to PROPFIND /caldav/{user}/.
+// For Depth != "0" it also lists child calendars (the Notes calendar).
+func (m *Manager) handleCalendarHome(w http.ResponseWriter, r *http.Request, username string, userinfo *user.User) {
+	if r.Method != "PROPFIND" {
+		w.Header().Set("Allow", "OPTIONS, PROPFIND")
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	homeHref := "/caldav/" + username + "/"
 	calHref := "/caldav/" + username + "/notes/"
 
-	homeResp := xmlResp(userHref,
+	homeResp := xmlResp(homeHref,
 		xmlPS(http.StatusOK,
-			`<D:resourcetype><D:collection/><D:principal/></D:resourcetype>`,
-			`<D:displayname>`+xmlEsc(username)+`</D:displayname>`,
-			`<D:principal-URL><D:href>`+xmlEsc(userHref)+`</D:href></D:principal-URL>`,
-			`<D:current-user-principal><D:href>`+xmlEsc(userHref)+`</D:href></D:current-user-principal>`,
-			`<C:calendar-home-set><D:href>`+xmlEsc(userHref)+`</D:href></C:calendar-home-set>`,
-			`<C:calendar-user-address-set><D:href>mailto:`+xmlEsc(username)+`@arozos.local</D:href></C:calendar-user-address-set>`,
+			`<resourcetype><collection/></resourcetype>`,
+			`<displayname>`+xmlEsc(username)+`</displayname>`,
 		),
 	)
 
-	// For Depth ≥ 1 (or unspecified — RFC 4918 default is infinity), list the calendar.
-	depth := r.Header.Get("Depth")
 	calResp := ""
-	if depth != "0" {
+	depth := r.Header.Get("Depth")
+	if depth != "0" { // default (no header) = infinity per RFC 4918
 		notes, _ := m.loadNotes(userinfo)
 		token := syncToken(notes)
 		calResp = "\n" + xmlResp(calHref,
 			xmlPS(http.StatusOK,
-				`<D:resourcetype><D:collection/><C:calendar/></D:resourcetype>`,
-				`<D:displayname>Notes</D:displayname>`,
+				`<resourcetype><collection/><C:calendar/></resourcetype>`,
+				`<displayname>Notes</displayname>`,
 				`<CS:getctag>`+token+`</CS:getctag>`,
-				`<D:sync-token>`+xmlEsc("urn:arozos:caldav:"+token)+`</D:sync-token>`,
+				`<sync-token>`+xmlEsc("urn:arozos:caldav:"+token)+`</sync-token>`,
 				`<C:supported-calendar-component-set><C:comp name="VTODO"/></C:supported-calendar-component-set>`,
 				`<C:calendar-description>ArozOS Notes</C:calendar-description>`,
 				`<IC:calendar-color>#0082FC</IC:calendar-color>`,
@@ -264,7 +287,6 @@ func (m *Manager) handleCalendar(w http.ResponseWriter, r *http.Request, usernam
 	case "REPORT":
 		m.calendarReport(w, r, username, userinfo)
 	case "MKCALENDAR":
-		// Calendar already exists; signal the client to use PROPFIND to discover it.
 		http.Error(w, "Calendar already exists", http.StatusMethodNotAllowed)
 	default:
 		w.Header().Set("Allow", "OPTIONS, PROPFIND, REPORT, MKCALENDAR")
@@ -278,10 +300,10 @@ func (m *Manager) calendarPropfind(w http.ResponseWriter, r *http.Request, usern
 	token := syncToken(notes)
 
 	calProps := xmlPS(http.StatusOK,
-		`<D:resourcetype><D:collection/><C:calendar/></D:resourcetype>`,
-		`<D:displayname>Notes</D:displayname>`,
+		`<resourcetype><collection/><C:calendar/></resourcetype>`,
+		`<displayname>Notes</displayname>`,
 		`<CS:getctag>`+token+`</CS:getctag>`,
-		`<D:sync-token>`+xmlEsc("urn:arozos:caldav:"+token)+`</D:sync-token>`,
+		`<sync-token>`+xmlEsc("urn:arozos:caldav:"+token)+`</sync-token>`,
 		`<C:supported-calendar-component-set><C:comp name="VTODO"/></C:supported-calendar-component-set>`,
 		`<C:calendar-description>ArozOS Notes</C:calendar-description>`,
 		`<IC:calendar-color>#0082FC</IC:calendar-color>`,
@@ -297,10 +319,10 @@ func (m *Manager) calendarPropfind(w http.ResponseWriter, r *http.Request, usern
 			itemHref := calHref + n.ID + ".ics"
 			responses += "\n" + xmlResp(itemHref,
 				xmlPS(http.StatusOK,
-					`<D:resourcetype/>`,
-					`<D:getetag>"`+etag+`"</D:getetag>`,
-					`<D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype>`,
-					`<D:displayname>`+xmlEsc(n.Title)+`</D:displayname>`,
+					`<resourcetype/>`,
+					`<getetag>"`+etag+`"</getetag>`,
+					`<getcontenttype>text/calendar; charset=utf-8</getcontenttype>`,
+					`<displayname>`+xmlEsc(n.Title)+`</displayname>`,
 					`<C:calendar-data>`+xmlEsc(noteToIcal(n.ID, content, ts))+`</C:calendar-data>`,
 				),
 			)
@@ -336,7 +358,7 @@ func (m *Manager) reportCalendarQuery(w http.ResponseWriter, r *http.Request, us
 		itemHref := calHref + n.ID + ".ics"
 		responses += xmlResp(itemHref,
 			xmlPS(http.StatusOK,
-				`<D:getetag>"`+etag+`"</D:getetag>`,
+				`<getetag>"`+etag+`"</getetag>`,
 				`<C:calendar-data>`+xmlEsc(noteToIcal(n.ID, content, ts))+`</C:calendar-data>`,
 			),
 		)
@@ -420,10 +442,10 @@ func (m *Manager) handleItem(w http.ResponseWriter, r *http.Request, username, n
 		body := xmlMS(
 			xmlResp(itemHref,
 				xmlPS(http.StatusOK,
-					`<D:resourcetype/>`,
-					`<D:getetag>"`+etag+`"</D:getetag>`,
-					`<D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype>`,
-					`<D:displayname>`+xmlEsc(extractTitle(content))+`</D:displayname>`,
+					`<resourcetype/>`,
+					`<getetag>"`+etag+`"</getetag>`,
+					`<getcontenttype>text/calendar; charset=utf-8</getcontenttype>`,
+					`<displayname>`+xmlEsc(extractTitle(content))+`</displayname>`,
 				),
 			),
 		)
@@ -669,16 +691,15 @@ func parseVTODO(data string) (summary, description, uid string) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// XML helpers — all elements use explicit namespace prefixes so the
-// serialised XML is unambiguous regardless of parser strictness.
+// XML helpers
 //
-//   D  = DAV:
-//   C  = urn:ietf:params:xml:ns:caldav
-//   CS = http://calendarserver.org/ns/
-//   IC = http://apple.com/ns/ical/
+// Uses default DAV namespace so DAV elements are unprefixed (e.g. <response>),
+// with explicit C: prefix for CalDAV and CS: for CalendarServer extensions.
+// This matches the style used by the original implementation that Apple iOS
+// successfully confirmed as a CalDAV account.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const xmlNS = `xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CS="http://calendarserver.org/ns/" xmlns:IC="http://apple.com/ns/ical/"`
+const xmlNS = `xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CS="http://calendarserver.org/ns/" xmlns:IC="http://apple.com/ns/ical/"`
 
 func writeXML(w http.ResponseWriter, status int, body string) {
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
@@ -688,25 +709,25 @@ func writeXML(w http.ResponseWriter, status int, body string) {
 }
 
 func xmlMS(responses string) string {
-	return `<D:multistatus ` + xmlNS + `>` + responses + `</D:multistatus>`
+	return `<multistatus ` + xmlNS + `>` + responses + `</multistatus>`
 }
 
 func xmlMSSync(responses, token string) string {
-	return `<D:multistatus ` + xmlNS + `>` + responses +
-		`<D:sync-token>` + xmlEsc(token) + `</D:sync-token>` +
-		`</D:multistatus>`
+	return `<multistatus ` + xmlNS + `>` + responses +
+		`<sync-token>` + xmlEsc(token) + `</sync-token>` +
+		`</multistatus>`
 }
 
 func xmlResp(href string, propstats ...string) string {
-	return `<D:response><D:href>` + xmlEsc(href) + `</D:href>` +
-		strings.Join(propstats, "") + `</D:response>`
+	return `<response><href>` + xmlEsc(href) + `</href>` +
+		strings.Join(propstats, "") + `</response>`
 }
 
 func xmlPS(status int, props ...string) string {
 	statusLine := "HTTP/1.1 " + strconv.Itoa(status) + " " + http.StatusText(status)
-	return `<D:propstat><D:prop>` +
+	return `<propstat><prop>` +
 		strings.Join(props, "") +
-		`</D:prop><D:status>` + statusLine + `</D:status></D:propstat>`
+		`</prop><status>` + statusLine + `</status></propstat>`
 }
 
 func xmlEsc(s string) string {
