@@ -107,6 +107,21 @@ func (m *Manager) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[CalDAV]   header %s: %s", name, strings.Join(vals, "; "))
 	}
 
+	// Log request body for PROPFIND/REPORT so we can see what properties the client wants.
+	// Read it here and restore via strings.Reader so downstream handlers still see the body.
+	if r.Method == "PROPFIND" || r.Method == "REPORT" {
+		if bodyBytes, err := io.ReadAll(r.Body); err == nil {
+			if len(bodyBytes) > 0 {
+				preview := string(bodyBytes)
+				if len(preview) > 600 {
+					preview = preview[:600] + "…"
+				}
+				log.Printf("[CalDAV]   body (%d bytes): %s", len(bodyBytes), preview)
+			}
+			r.Body = io.NopCloser(strings.NewReader(string(bodyBytes)))
+		}
+	}
+
 	if !m.Enabled {
 		log.Printf("[CalDAV] service is disabled — rejecting %s %s", r.Method, r.URL.Path)
 		http.Error(w, "CalDAV service is disabled", http.StatusServiceUnavailable)
@@ -358,6 +373,11 @@ func (m *Manager) handleCalendarHome(w http.ResponseWriter, r *http.Request, use
 				`<C:supported-calendar-component-set><C:comp name="VTODO"/></C:supported-calendar-component-set>`,
 				`<C:calendar-description>ArozOS Notes</C:calendar-description>`,
 				`<IC:calendar-color>#0082FC</IC:calendar-color>`,
+				`<supported-report-set>`+
+					`<supported-report><report><sync-collection/></report></supported-report>`+
+					`<supported-report><report><C:calendar-query/></report></supported-report>`+
+					`<supported-report><report><C:calendar-multiget/></report></supported-report>`+
+					`</supported-report-set>`,
 			),
 		)
 	}
@@ -393,6 +413,12 @@ func (m *Manager) calendarPropfind(w http.ResponseWriter, r *http.Request, usern
 		`<C:supported-calendar-component-set><C:comp name="VTODO"/></C:supported-calendar-component-set>`,
 		`<C:calendar-description>ArozOS Notes</C:calendar-description>`,
 		`<IC:calendar-color>#0082FC</IC:calendar-color>`,
+		// RFC 6578: servers that support sync-collection MUST advertise it here.
+		`<supported-report-set>`+
+			`<supported-report><report><sync-collection/></report></supported-report>`+
+			`<supported-report><report><C:calendar-query/></report></supported-report>`+
+			`<supported-report><report><C:calendar-multiget/></report></supported-report>`+
+			`</supported-report-set>`,
 	)
 	responses := xmlResp(calHref, calProps)
 
@@ -421,12 +447,52 @@ func (m *Manager) calendarReport(w http.ResponseWriter, r *http.Request, usernam
 	body, _ := io.ReadAll(r.Body)
 	bodyStr := string(body)
 	if strings.Contains(bodyStr, "sync-collection") {
-		m.reportCalendarQuery(w, r, username, userinfo, "")
+		m.reportSyncCollection(w, r, username, userinfo)
 	} else {
 		m.reportCalendarQuery(w, r, username, userinfo, bodyStr)
 	}
 }
 
+// reportSyncCollection handles RFC 6578 sync-collection REPORT.
+// Apple clients (remindd) use this to do initial and incremental sync.
+// The response must:
+//  1. Include the collection itself as the first <response>.
+//  2. Include each item with getcontenttype + getetag ONLY (no calendar-data).
+//  3. End with a <sync-token> element inside <multistatus>.
+//
+// A follow-up calendar-multiget REPORT fetches the actual iCal data.
+func (m *Manager) reportSyncCollection(w http.ResponseWriter, r *http.Request, username string, userinfo caldavUser) {
+	calHref := "/caldav/" + username + "/notes/"
+	notes, _ := userinfo.LoadNotes()
+	token := syncToken(notes)
+
+	// First response: the collection itself.
+	responses := xmlResp(calHref,
+		xmlPS(http.StatusOK,
+			`<getcontenttype>httpd/unix-directory</getcontenttype>`,
+			`<getetag>"`+token+`"</getetag>`,
+		),
+	)
+
+	// One response per item — etag + content-type only.
+	for _, n := range notes {
+		content, _ := userinfo.ReadNoteContent(n.ID)
+		etag := noteETag(content)
+		itemHref := calHref + n.ID + ".ics"
+		responses += xmlResp(itemHref,
+			xmlPS(http.StatusOK,
+				`<getcontenttype>text/calendar; charset=utf-8</getcontenttype>`,
+				`<getetag>"`+etag+`"</getetag>`,
+			),
+		)
+	}
+
+	writeXML(w, http.StatusMultiStatus,
+		xmlMSSync(responses, "urn:arozos:caldav:"+token))
+}
+
+// reportCalendarQuery handles calendar-query and calendar-multiget REPORTs.
+// It returns full calendar-data for each matching item.
 func (m *Manager) reportCalendarQuery(w http.ResponseWriter, r *http.Request, username string, userinfo caldavUser, body string) {
 	calHref := "/caldav/" + username + "/notes/"
 	notes, _ := userinfo.LoadNotes()
@@ -549,6 +615,7 @@ func noteToIcal(id, content string, tsMs int64) string {
 	var sb strings.Builder
 	sb.WriteString("BEGIN:VCALENDAR\r\n")
 	sb.WriteString("VERSION:2.0\r\n")
+	sb.WriteString("CALSCALE:GREGORIAN\r\n") // required by Apple clients
 	sb.WriteString("PRODID:" + prodID + "\r\n")
 	sb.WriteString("BEGIN:VTODO\r\n")
 	icalWriteProp(&sb, "UID", id+"@arozos")

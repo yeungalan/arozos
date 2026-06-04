@@ -366,7 +366,37 @@ func TestCalendarSyncReport(t *testing.T) {
 	body := `<?xml version="1.0"?><D:sync-collection xmlns:D="DAV:"><D:sync-token/><D:prop><D:getetag/></D:prop></D:sync-collection>`
 	rr := do(mgr, "REPORT", "/caldav/"+testUser+"/notes/", body, nil)
 	assertStatus(t, rr, http.StatusMultiStatus)
+	// sync-collection response: first entry is the collection itself
+	assertContains(t, rr, "/caldav/"+testUser+"/notes/")
+	assertContains(t, rr, "httpd/unix-directory")
+	// item entries have etag and content-type but NOT inline calendar-data
 	assertContains(t, rr, "note1.ics")
+	assertContains(t, rr, "text/calendar")
+	assertNotContains(t, rr, "BEGIN:VTODO") // full data comes in a multiget, not sync
+	// sync-token at end of multistatus
+	assertContains(t, rr, "<sync-token>")
+}
+
+func TestCalendarSyncReportFollowedByMultiget(t *testing.T) {
+	// Simulate the two-step sync: sync-collection → list etags, then multiget → full data.
+	mgr := newTestManager()
+
+	syncBody := `<?xml version="1.0"?><D:sync-collection xmlns:D="DAV:"><D:sync-token/><D:prop><D:getetag/></D:prop></D:sync-collection>`
+	rr := do(mgr, "REPORT", "/caldav/"+testUser+"/notes/", syncBody, nil)
+	assertStatus(t, rr, http.StatusMultiStatus)
+	assertContains(t, rr, "note1.ics")
+	assertNotContains(t, rr, "BEGIN:VTODO")
+
+	// Now fetch the full data via multiget.
+	multigetBody := `<?xml version="1.0"?><C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">` +
+		`<D:prop><D:getetag/><C:calendar-data/></D:prop>` +
+		`<D:href>/caldav/` + testUser + `/notes/note1.ics</D:href>` +
+		`</C:calendar-multiget>`
+	rr2 := do(mgr, "REPORT", "/caldav/"+testUser+"/notes/", multigetBody, nil)
+	assertStatus(t, rr2, http.StatusMultiStatus)
+	assertContains(t, rr2, "BEGIN:VTODO")
+	assertContains(t, rr2, "CALSCALE:GREGORIAN")
+	assertContains(t, rr2, "UID:note1@arozos")
 }
 
 // ── Individual note items ─────────────────────────────────────────────────────
