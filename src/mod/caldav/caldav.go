@@ -19,11 +19,13 @@ package caldav
 */
 
 import (
+	"bytes"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -35,6 +37,27 @@ import (
 	auth "imuslab.com/arozos/mod/auth"
 	db "imuslab.com/arozos/mod/database"
 )
+
+// logRecorder captures the status code and response body for logging.
+type logRecorder struct {
+	http.ResponseWriter
+	status int
+	body   bytes.Buffer
+}
+
+func (l *logRecorder) WriteHeader(code int) {
+	l.status = code
+	l.ResponseWriter.WriteHeader(code)
+}
+
+func (l *logRecorder) Write(b []byte) (int, error) {
+	l.body.Write(b)
+	return l.ResponseWriter.Write(b)
+}
+
+func cdLog(format string, args ...interface{}) {
+	log.Printf("[CalDAV] "+format, args...)
+}
 
 // Server is the CalDAV server instance.
 type Server struct {
@@ -308,26 +331,67 @@ func sendUnauthorized(w http.ResponseWriter) {
 
 // HandleRequest is the top-level HTTP handler for all CalDAV paths.
 func (s *Server) HandleRequest(w http.ResponseWriter, r *http.Request) {
+	// Read body for logging (PUT/REPORT carry XML)
+	var bodyBytes []byte
+	if r.Body != nil {
+		bodyBytes, _ = io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	}
+
+	rec := &logRecorder{ResponseWriter: w, status: 200}
+
+	cdLog("← %s %s (from %s)", r.Method, r.URL.Path, r.RemoteAddr)
+	for k, vv := range r.Header {
+		for _, v := range vv {
+			cdLog("  header %s: %s", k, v)
+		}
+	}
+	if len(bodyBytes) > 0 {
+		cdLog("  body (%d bytes): %s", len(bodyBytes), string(bodyBytes))
+	}
+
+	defer func() {
+		cdLog("→ %d for %s %s", rec.status, r.Method, r.URL.Path)
+		if rec.status >= 400 {
+			cdLog("  response body: %s", rec.body.String())
+		}
+	}()
+
 	if !s.Enabled {
-		http.Error(w, "CalDAV service disabled", http.StatusServiceUnavailable)
+		cdLog("  service disabled, returning 503")
+		http.Error(rec, "CalDAV service disabled", http.StatusServiceUnavailable)
 		return
 	}
 
-	// Always set DAV header
-	w.Header().Set("DAV", "1, 2, 3, calendar-access")
+	rec.Header().Set("DAV", "1, 2, 3, calendar-access")
 
 	if r.Method == http.MethodOptions {
-		s.handleOptions(w, r)
+		s.handleOptions(rec, r)
 		return
 	}
+
+	// Log auth attempt
+	u, password, hasBasic := r.BasicAuth()
+	if !hasBasic {
+		cdLog("  auth: no Authorization header → 401")
+		sendUnauthorized(rec)
+		return
+	}
+	cdLog("  auth attempt: username=%q password_len=%d", u, len(password))
 
 	username, ok := s.authenticate(r)
 	if !ok {
-		sendUnauthorized(w)
+		// More detailed failure reason
+		tokenValid, tokenOwner := s.authAgent.ValidateAutoLoginToken(password)
+		pwValid := s.authAgent.ValidateUsernameAndPassword(u, password)
+		cdLog("  auth FAILED: token_valid=%v token_owner=%q pw_valid=%v → 401",
+			tokenValid, tokenOwner, pwValid)
+		sendUnauthorized(rec)
 		return
 	}
+	cdLog("  auth OK: username=%q", username)
 
-	// Derive the path relative to the prefix
+	// Derive path relative to prefix
 	path := r.URL.Path
 	if s.prefix != "" {
 		path = strings.TrimPrefix(path, s.prefix)
@@ -335,21 +399,22 @@ func (s *Server) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	if path == "" {
 		path = "/"
 	}
+	cdLog("  dispatching method=%s relative_path=%q", r.Method, path)
 
 	switch r.Method {
 	case "PROPFIND":
-		s.handlePropfind(w, r, path, username)
+		s.handlePropfind(rec, r, path, username)
 	case "REPORT":
-		s.handleReport(w, r, path, username)
+		s.handleReport(rec, r, path, username)
 	case http.MethodGet, http.MethodHead:
-		s.handleGet(w, r, path, username)
+		s.handleGet(rec, r, path, username)
 	case http.MethodPut:
-		s.handlePut(w, r, path, username)
+		s.handlePut(rec, r, path, username)
 	case http.MethodDelete:
-		s.handleDelete(w, r, path, username)
+		s.handleDelete(rec, r, path, username)
 	default:
-		w.Header().Set("Allow", "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT")
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		rec.Header().Set("Allow", "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT")
+		http.Error(rec, "Method Not Allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -368,30 +433,32 @@ func (s *Server) handlePropfind(w http.ResponseWriter, r *http.Request, path, us
 	}
 
 	prefix := s.prefix
+	cdLog("  PROPFIND path=%q depth=%s username=%q", path, depth, username)
 
 	switch {
-	// Root or well-known discovery
 	case path == "/" || path == "":
+		cdLog("  → propfindRoot")
 		s.propfindRoot(w, username, prefix)
 
-	// Principal
 	case path == "/principals/"+username+"/" || path == "/principals/"+username:
+		cdLog("  → propfindPrincipal")
 		s.propfindPrincipal(w, username, prefix)
 
-	// Calendar home
 	case path == "/calendars/"+username+"/" || path == "/calendars/"+username:
+		cdLog("  → propfindCalendarHome depth=%s", depth)
 		s.propfindCalendarHome(w, r, username, prefix, depth)
 
-	// Notes collection
 	case path == "/calendars/"+username+"/notes/" || path == "/calendars/"+username+"/notes":
+		cdLog("  → propfindNotesCollection depth=%s", depth)
 		s.propfindNotesCollection(w, r, username, prefix, depth)
 
-	// Individual note
 	case strings.HasPrefix(path, "/calendars/"+username+"/notes/") && strings.HasSuffix(path, ".ics"):
 		noteID := noteIDFromPath(path)
+		cdLog("  → propfindNoteItem noteID=%q", noteID)
 		s.propfindNoteItem(w, username, noteID, prefix)
 
 	default:
+		cdLog("  → 404 (unmatched path %q, expected paths for user %q)", path, username)
 		http.NotFound(w, r)
 	}
 }
