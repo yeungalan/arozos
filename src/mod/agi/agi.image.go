@@ -12,7 +12,6 @@ import (
 	"image/png"
 	_ "image/png"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +23,7 @@ import (
 
 	"imuslab.com/arozos/mod/agi/static"
 	"imuslab.com/arozos/mod/filesystem/arozfs"
+	"imuslab.com/arozos/mod/info/logger"
 	"imuslab.com/arozos/mod/utils"
 )
 
@@ -37,7 +37,8 @@ import (
 func (g *Gateway) ImageLibRegister() {
 	err := g.RegisterLib("imagelib", g.injectImageLibFunctions)
 	if err != nil {
-		log.Fatal(err)
+		logger.PrintAndLog("Agi", fmt.Sprint(err), nil)
+		os.Exit(1)
 	}
 }
 

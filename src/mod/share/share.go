@@ -18,7 +18,6 @@ import (
 	"image/jpeg"
 	"io"
 	"io/fs"
-	"log"
 	"math"
 	"mime"
 	"net/http"
@@ -38,6 +37,7 @@ import (
 	filesystem "imuslab.com/arozos/mod/filesystem"
 	"imuslab.com/arozos/mod/filesystem/arozfs"
 	"imuslab.com/arozos/mod/filesystem/metadata"
+	"imuslab.com/arozos/mod/info/logger"
 	"imuslab.com/arozos/mod/share/shareEntry"
 	"imuslab.com/arozos/mod/user"
 	"imuslab.com/arozos/mod/utils"
@@ -606,17 +606,17 @@ func (s *Manager) HandleShareAccess(w http.ResponseWriter, r *http.Request) {
 							} else {
 								f, err := targetFshAbs.ReadStream(path)
 								if err != nil {
-									log.Println("[Share] Buffer and zip download operation failed: ", err)
+									logger.PrintAndLog("Share", fmt.Sprint("[Share] Buffer and zip download operation failed: ", err), nil)
 								}
 								defer f.Close()
 								dest, err := os.OpenFile(localPath, os.O_CREATE|os.O_WRONLY, 0775)
 								if err != nil {
-									log.Println("[Share] Buffer and zip download operation failed: ", err)
+									logger.PrintAndLog("Share", fmt.Sprint("[Share] Buffer and zip download operation failed: ", err), nil)
 								}
 								defer dest.Close()
 								_, err = io.Copy(dest, f)
 								if err != nil {
-									log.Println("[Share] Buffer and zip download operation failed: ", err)
+									logger.PrintAndLog("Share", fmt.Sprint("[Share] Buffer and zip download operation failed: ", err), nil)
 								}
 
 							}
@@ -633,7 +633,7 @@ func (s *Manager) HandleShareAccess(w http.ResponseWriter, r *http.Request) {
 						//Failed to create zip file
 						w.WriteHeader(http.StatusInternalServerError)
 						w.Write([]byte("500 - Internal Server Error: Zip file creation failed"))
-						log.Println("Failed to create zip file for share download: " + err.Error())
+						logger.PrintAndLog("Share", "Failed to create zip file for share download: "+err.Error(), nil)
 						return
 					}
 
@@ -727,6 +727,7 @@ func (s *Manager) HandleShareAccess(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Write([]byte(content))
 				return
 
@@ -768,8 +769,18 @@ func (s *Manager) HandleShareAccess(w http.ResponseWriter, r *http.Request) {
 			} else if directServe {
 				w.Header().Set("Access-Control-Allow-Origin", "*")
 				w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-				w.Header().Set("Content-Type", contentType)
-				if targetFsh.RequireBuffer {
+				if metadata.IsRawImageFile(fileRuntimeAbsPath) {
+					// Convert RAW image to JPEG for browser display
+					jpegData, err := metadata.RenderRAWImage(targetFsh, fileRuntimeAbsPath)
+					if err != nil {
+						w.WriteHeader(http.StatusInternalServerError)
+						w.Write([]byte("500 - Failed to render RAW image: " + err.Error()))
+						return
+					}
+					w.Header().Set("Content-Type", "image/jpeg")
+					w.Write(jpegData)
+				} else if targetFsh.RequireBuffer {
+					w.Header().Set("Content-Type", contentType)
 					f, err := targetFshAbs.ReadStream(fileRuntimeAbsPath)
 					if err != nil {
 						w.WriteHeader(http.StatusInternalServerError)
@@ -779,6 +790,7 @@ func (s *Manager) HandleShareAccess(w http.ResponseWriter, r *http.Request) {
 					defer f.Close()
 					io.Copy(w, f)
 				} else {
+					w.Header().Set("Content-Type", contentType)
 					f, err := targetFshAbs.Open(fileRuntimeAbsPath)
 					if err != nil {
 						w.WriteHeader(http.StatusInternalServerError)
@@ -810,7 +822,7 @@ func (s *Manager) HandleShareAccess(w http.ResponseWriter, r *http.Request) {
 					previewTemplate = filepath.Join(templateRoot, "video.html")
 				} else if ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".ogg" {
 					previewTemplate = filepath.Join(templateRoot, "audio.html")
-				} else if ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".webp" {
+				} else if ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".webp" || metadata.IsRawImageFile(fileRuntimeAbsPath) {
 					previewTemplate = filepath.Join(templateRoot, "image.html")
 				} else if ext == ".pdf" {
 					previewTemplate = filepath.Join(templateRoot, "iframe.html")
@@ -861,6 +873,7 @@ func (s *Manager) HandleShareAccess(w http.ResponseWriter, r *http.Request) {
 					content = []byte(strings.ReplaceAll(string(content), key, value))
 				}
 
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Write([]byte(content))
 				return
 			}
@@ -1309,9 +1322,9 @@ func (s *Manager) ValidateAndClearShares() {
 			//This share source file don't exists anymore. Remove it
 			err = s.options.ShareEntryTable.RemoveShareByPathHash(pathHash)
 			if err != nil {
-				log.Println("[Share] Failed to remove share", err)
+				logger.PrintAndLog("Share", fmt.Sprint("[Share] Failed to remove share", err), nil)
 			}
-			log.Println("[Share] Removing share to file: " + thisShareOption.FileRealPath + " as it no longer exists")
+			logger.PrintAndLog("Share", "[Share] Removing share to file: "+thisShareOption.FileRealPath+" as it no longer exists", nil)
 		}
 		return true
 	})
@@ -1417,4 +1430,3 @@ func getPathHashFromUsernameAndVpath(userinfo *user.User, vpath string) (string,
 	}
 	return shareEntry.GetPathHash(fsh, vpath, userinfo.Username)
 }
-

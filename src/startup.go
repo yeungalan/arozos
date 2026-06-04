@@ -7,7 +7,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 
 	db "imuslab.com/arozos/mod/database"
@@ -18,11 +17,12 @@ import (
 
 func RunStartup() {
 	systemWideLogger, _ = logger.NewLogger("system", "system/logs/system/", true)
+	logger.SetDefaultLogger(systemWideLogger)
 	//1. Initiate the main system database
 
 	//Check if system or web both not exists and web.tar.gz exists. Unzip it for the user
 	if (!fs.FileExists("system/") || !fs.FileExists("web/")) && fs.FileExists("./web.tar.gz") {
-		log.Println("[Update] Unzipping system critical files from archive")
+		systemWideLogger.PrintAndLog("System", "[Update] Unzipping system critical files from archive", nil)
 		extErr := filesystem.ExtractTarGzipFile("./web.tar.gz", "./")
 		if extErr != nil {
 			//Extract failed
@@ -92,8 +92,8 @@ func RunStartup() {
 	DiskQuotaInit()           //Disk Quota Management
 	DiskServiceInit()         //Start Disk Services
 	DeviceServiceInit()       //Client Device Management
-	SystemInfoInit()          //System Information UI
 	SystemIDInit()            //System UUID Manager
+	SystemInfoInit()          //System Information UI
 	AuthSettingsInit()        //Authentication Settings Handler, must be start after user Handler
 	AdvanceSettingInit()      //System Advance Settings
 	StartupFlagsInit()        //System BootFlag settibg

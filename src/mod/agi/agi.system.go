@@ -3,21 +3,28 @@ package agi
 import (
 	"encoding/json"
 	"errors"
-	"log"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/robertkrimen/otto"
+	uuid "github.com/satori/go.uuid"
 	"imuslab.com/arozos/mod/agi/static"
+	"imuslab.com/arozos/mod/info/logger"
 	"imuslab.com/arozos/mod/utils"
 )
 
-// Inject aroz online custom functions into the virtual machine
-func (g *Gateway) injectStandardLibs(vm *otto.Otto, scriptFile string, scriptScope string) {
+// injectStandardLibs injects system constants and core functions into the Otto VM.
+// It generates a UUIDv4 execution ID, sets it as EXECUTION_ID on the VM, and
+// returns it so callers can include it in external log messages.
+func (g *Gateway) injectStandardLibs(vm *otto.Otto, scriptFile string, scriptScope string) string {
 	//Define system core modules and definations
 	sysdb := g.Option.UserHandler.GetDatabase()
+
+	// Generate a unique ID for this script invocation.
+	execID := uuid.NewV4().String()
 
 	//Define VM global variables
 	vm.Set("BUILD_VERSION", g.Option.BuildVersion)
@@ -27,6 +34,10 @@ func (g *Gateway) injectStandardLibs(vm *otto.Otto, scriptFile string, scriptSco
 	vm.Set("__FILE__", scriptFile)
 	vm.Set("HTTP_RESP", "")
 	vm.Set("HTTP_HEADER", "text/plain")
+
+	// EXECUTION_ID is a UUIDv4 that uniquely identifies this script invocation.
+	// Available in every AGI script — use it for log correlation, deduplication, etc.
+	vm.Set("EXECUTION_ID", execID)
 
 	//Response related
 	vm.Set("sendResp", func(call otto.FunctionCall) otto.Value {
@@ -327,7 +338,7 @@ func (g *Gateway) injectStandardLibs(vm *otto.Otto, scriptFile string, scriptSco
 			_, err = vm.Run(string(scriptContent))
 			if err != nil {
 				//Script execution failed
-				log.Println("Script Execution Failed: ", err.Error())
+				logger.PrintAndLog("Agi", fmt.Sprint("Script Execution Failed: ", err.Error()), nil)
 				g.RaiseError(err)
 				return otto.FalseValue()
 			}
@@ -355,4 +366,6 @@ func (g *Gateway) injectStandardLibs(vm *otto.Otto, scriptFile string, scriptSco
 		}
 		return otto.NullValue()
 	})
+
+	return execID
 }

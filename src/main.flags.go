@@ -33,7 +33,7 @@ var subserviceBasePort = 12810            //Next subservice port
 
 // =========== SYSTEM BUILD INFORMATION ==============
 var build_version = "development"                      //System build flag, this can be either {development / production / stable}
-var internal_version = "0.2.025"                       //Internal build version, [fork_id].[major_release_no].[minor_release_no]
+var internal_version = "0.2.026"                       //Internal build version, [fork_id].[major_release_no].[minor_release_no]
 var deviceUUID string                                  //The device uuid of this host
 var deviceVendor = "IMUSLAB.INC"                       //Vendor of the system
 var deviceVendorURL = "http://imuslab.com"             //Vendor contact information
@@ -98,6 +98,7 @@ var enable_buffering = flag.Bool("enable_buffpool", true, "Enable buffer pool fo
 var enable_beta_scanning_support = flag.Bool("beta_scan", false, "Allow compatibility to ArOZ Online Beta Clusters")
 var enable_console = flag.Bool("console", false, "Enable the debugging console.")
 var enable_logging = flag.Bool("logging", true, "Enable logging to file for debug purpose")
+var log_format = flag.String("log_format", "text", "Console log output format: text or json")
 
 // Flags related to running on Cloud Environment or public domain
 var allow_public_registry = flag.Bool("public_reg", false, "Enable public register interface for account creation")

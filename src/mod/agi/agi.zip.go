@@ -4,7 +4,7 @@ import (
 	"archive/zip"
 	"encoding/json"
 	"errors"
-	"log"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +14,7 @@ import (
 	"imuslab.com/arozos/mod/agi/static"
 	"imuslab.com/arozos/mod/filesystem"
 	"imuslab.com/arozos/mod/filesystem/arozfs"
+	"imuslab.com/arozos/mod/info/logger"
 )
 
 /*
@@ -27,7 +28,8 @@ import (
 func (g *Gateway) ZipLibRegister() {
 	err := g.RegisterLib("ziplib", g.injectZipFileLibFunctions)
 	if err != nil {
-		log.Fatal(err)
+		logger.PrintAndLog("Agi", fmt.Sprint(err), nil)
+		os.Exit(1)
 	}
 }
 
