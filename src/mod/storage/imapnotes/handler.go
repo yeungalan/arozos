@@ -2,6 +2,7 @@ package imapnotes
 
 import (
 	"bufio"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -95,6 +96,16 @@ func (h *connHandler) run() {
 	}()
 	h.conn.SetDeadline(time.Now().Add(30 * time.Minute))
 	h.syslogf("connection accepted")
+
+	// Explicitly complete the TLS handshake so errors are surfaced in the log.
+	if tlsConn, ok := h.conn.(*tls.Conn); ok {
+		if err := tlsConn.Handshake(); err != nil {
+			h.syslogf("TLS handshake failed: %s", err.Error())
+			return
+		}
+		cs := tlsConn.ConnectionState()
+		h.syslogf("TLS handshake OK (cipher=0x%04x)", cs.CipherSuite)
+	}
 
 	h.send("* OK [CAPABILITY IMAP4rev1 AUTH=PLAIN LOGIN] ArozOS Notes IMAP Server ready")
 
