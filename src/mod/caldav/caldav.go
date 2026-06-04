@@ -10,19 +10,15 @@ package caldav
 
 	Discovery chain (3-step, tested to work with Apple iOS):
 
-	  PROPFIND /caldav/                        → current-user-principal = /caldav/principals/{user}/
-	  PROPFIND /caldav/principals/{user}/      → calendar-home-set = /caldav/{user}/
-	  PROPFIND /caldav/{user}/ Depth:1         → Notes calendar listed
-	  REPORT   /caldav/{user}/notes/           → sync VTODO items
+	  PROPFIND /caldav/                       → current-user-principal = /caldav/principals/{user}/
+	  PROPFIND /caldav/principals/{user}/     → calendar-home-set = /caldav/{user}/
+	  PROPFIND /caldav/{user}/ Depth:1        → Notes calendar listed
+	  REPORT   /caldav/{user}/notes/          → sync VTODO items
 	  GET/PUT/DELETE /caldav/{user}/notes/{id}.ics → individual notes
 
-	The principal URL (/caldav/principals/{user}/) MUST be different from the
-	calendar home (/caldav/{user}/). If they are the same URL, iOS fails account
-	confirmation because it treats calendar-home-set pointing to itself as
-	a circular reference.
-
-	Notes are stored at user:/Document/Notes/{id}.txt + meta.json.
-	Each note → VTODO: SUMMARY = first line, DESCRIPTION = full body.
+	The principal URL (/caldav/principals/{user}/) MUST be different from
+	the calendar home (/caldav/{user}/). iOS rejects the account when
+	calendar-home-set points to the same URL as the principal (circular ref).
 
 	No non-stdlib / non-commercial dependencies are introduced.
 */
@@ -30,7 +26,6 @@ package caldav
 import (
 	"crypto/md5"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -51,6 +46,7 @@ type Manager struct {
 	UserHandler *user.UserHandler
 	Database    *db.Database
 	Enabled     bool
+	backend     caldavUserHandler // internal: testable via interface
 }
 
 // noteMeta mirrors the per-note entry in meta.json.
@@ -67,7 +63,7 @@ type notesMeta struct {
 	Notes      []noteMeta `json:"notes"`
 }
 
-// NewManager creates a Manager and reads the persisted enabled state.
+// NewManager creates a Manager backed by the real arozos user stack.
 func NewManager(userHandler *user.UserHandler, database *db.Database) *Manager {
 	database.NewTable("caldav") // create bucket if it doesn't exist yet
 	enabled := false
@@ -76,14 +72,22 @@ func NewManager(userHandler *user.UserHandler, database *db.Database) *Manager {
 		UserHandler: userHandler,
 		Database:    database,
 		Enabled:     enabled,
+		backend:     &arozosBackend{h: userHandler},
 	}
+}
+
+// newManagerWithBackend creates a Manager with a custom backend (for tests).
+func newManagerWithBackend(backend caldavUserHandler, enabled bool) *Manager {
+	return &Manager{Enabled: enabled, backend: backend}
 }
 
 // HandleToggle is an admin-only endpoint to enable/disable CalDAV.
 func (m *Manager) HandleToggle(w http.ResponseWriter, r *http.Request) {
 	state := r.FormValue("enable")
 	m.Enabled = state == "true"
-	m.Database.Write("caldav", "enabled", m.Enabled)
+	if m.Database != nil {
+		m.Database.Write("caldav", "enabled", m.Enabled)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(w, `{"ok":true,"enabled":%v}`, m.Enabled)
 }
@@ -119,7 +123,7 @@ func (m *Manager) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authAgent := m.UserHandler.GetAuthAgent()
+	authAgent := m.backend.GetAuthAgent()
 	valid, tokenOwner := authAgent.ValidateAutoLoginToken(token)
 	if !valid || tokenOwner != username {
 		w.Header().Set("WWW-Authenticate", `Basic realm="ArozOS CalDAV"`)
@@ -127,7 +131,7 @@ func (m *Manager) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userinfo, err := m.UserHandler.GetUserInfoFromUsername(username)
+	userinfo, err := m.backend.GetUser(username)
 	if err != nil {
 		http.Error(w, "User not found", http.StatusUnauthorized)
 		return
@@ -146,7 +150,7 @@ func (m *Manager) HandleRequest(w http.ResponseWriter, r *http.Request) {
 // Routing
 // ─────────────────────────────────────────────────────────────────────────────
 
-func (m *Manager) route(w http.ResponseWriter, r *http.Request, path, username string, userinfo *user.User) {
+func (m *Manager) route(w http.ResponseWriter, r *http.Request, path, username string, userinfo caldavUser) {
 	principalPath := "/principals/" + username + "/"
 	homePath := "/" + username + "/"
 	calPath := "/" + username + "/notes/"
@@ -159,30 +163,20 @@ func (m *Manager) route(w http.ResponseWriter, r *http.Request, path, username s
 
 	switch {
 	case normPath == "/":
-		// Step 1: root discovery returns current-user-principal.
 		m.handleDiscovery(w, r, username)
-
 	case normPath == principalPath:
-		// Step 2: principal resource returns calendar-home-set.
 		m.handlePrincipal(w, r, username)
-
 	case normPath == homePath:
-		// Step 3: calendar home lists calendars (Depth:1).
 		m.handleCalendarHome(w, r, username, userinfo)
-
 	case normPath == calPath:
-		// Notes calendar collection.
 		m.handleCalendar(w, r, username, userinfo)
-
 	case strings.HasPrefix(normPath, calPath) && strings.HasSuffix(path, ".ics"):
-		// Individual note.
 		noteID := strings.TrimSuffix(strings.TrimPrefix(path, calPath), ".ics")
 		if !validID(noteID) {
 			http.Error(w, "Invalid note ID", http.StatusBadRequest)
 			return
 		}
 		m.handleItem(w, r, username, noteID, userinfo)
-
 	default:
 		http.NotFound(w, r)
 	}
@@ -192,8 +186,7 @@ func (m *Manager) route(w http.ResponseWriter, r *http.Request, path, username s
 // CalDAV resource handlers
 // ─────────────────────────────────────────────────────────────────────────────
 
-// handleDiscovery responds to PROPFIND /caldav/ with current-user-principal.
-// iOS uses this as the first step to find the user's principal URL.
+// handleDiscovery: PROPFIND /caldav/ → current-user-principal (step 1).
 func (m *Manager) handleDiscovery(w http.ResponseWriter, r *http.Request, username string) {
 	if r.Method != "PROPFIND" {
 		w.Header().Set("Allow", "OPTIONS, PROPFIND")
@@ -213,10 +206,9 @@ func (m *Manager) handleDiscovery(w http.ResponseWriter, r *http.Request, userna
 	writeXML(w, http.StatusMultiStatus, body)
 }
 
-// handlePrincipal responds to PROPFIND /caldav/principals/{user}/ with
-// the calendar-home-set pointing to /caldav/{user}/.
-// The principal URL MUST differ from the calendar home; iOS rejects the account
-// if calendar-home-set points to the same URL as the principal.
+// handlePrincipal: PROPFIND /caldav/principals/{user}/ → calendar-home-set (step 2).
+// The principal URL MUST differ from the calendar home; iOS rejects accounts
+// where calendar-home-set === principal URL.
 func (m *Manager) handlePrincipal(w http.ResponseWriter, r *http.Request, username string) {
 	if r.Method != "PROPFIND" {
 		w.Header().Set("Allow", "OPTIONS, PROPFIND")
@@ -240,9 +232,8 @@ func (m *Manager) handlePrincipal(w http.ResponseWriter, r *http.Request, userna
 	writeXML(w, http.StatusMultiStatus, body)
 }
 
-// handleCalendarHome responds to PROPFIND /caldav/{user}/.
-// For Depth != "0" it also lists child calendars (the Notes calendar).
-func (m *Manager) handleCalendarHome(w http.ResponseWriter, r *http.Request, username string, userinfo *user.User) {
+// handleCalendarHome: PROPFIND /caldav/{user}/ → list calendars when Depth != "0".
+func (m *Manager) handleCalendarHome(w http.ResponseWriter, r *http.Request, username string, userinfo caldavUser) {
 	if r.Method != "PROPFIND" {
 		w.Header().Set("Allow", "OPTIONS, PROPFIND")
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -259,9 +250,8 @@ func (m *Manager) handleCalendarHome(w http.ResponseWriter, r *http.Request, use
 	)
 
 	calResp := ""
-	depth := r.Header.Get("Depth")
-	if depth != "0" { // default (no header) = infinity per RFC 4918
-		notes, _ := m.loadNotes(userinfo)
+	if r.Header.Get("Depth") != "0" { // default (no header) = infinity per RFC 4918
+		notes, _ := userinfo.LoadNotes()
 		token := syncToken(notes)
 		calResp = "\n" + xmlResp(calHref,
 			xmlPS(http.StatusOK,
@@ -279,8 +269,8 @@ func (m *Manager) handleCalendarHome(w http.ResponseWriter, r *http.Request, use
 	writeXML(w, http.StatusMultiStatus, xmlMS(homeResp+calResp))
 }
 
-// handleCalendar dispatches PROPFIND / REPORT / MKCALENDAR on the notes calendar.
-func (m *Manager) handleCalendar(w http.ResponseWriter, r *http.Request, username string, userinfo *user.User) {
+// handleCalendar dispatches on the notes calendar collection.
+func (m *Manager) handleCalendar(w http.ResponseWriter, r *http.Request, username string, userinfo caldavUser) {
 	switch r.Method {
 	case "PROPFIND":
 		m.calendarPropfind(w, r, username, userinfo)
@@ -294,9 +284,9 @@ func (m *Manager) handleCalendar(w http.ResponseWriter, r *http.Request, usernam
 	}
 }
 
-func (m *Manager) calendarPropfind(w http.ResponseWriter, r *http.Request, username string, userinfo *user.User) {
+func (m *Manager) calendarPropfind(w http.ResponseWriter, r *http.Request, username string, userinfo caldavUser) {
 	calHref := "/caldav/" + username + "/notes/"
-	notes, _ := m.loadNotes(userinfo)
+	notes, _ := userinfo.LoadNotes()
 	token := syncToken(notes)
 
 	calProps := xmlPS(http.StatusOK,
@@ -308,13 +298,12 @@ func (m *Manager) calendarPropfind(w http.ResponseWriter, r *http.Request, usern
 		`<C:calendar-description>ArozOS Notes</C:calendar-description>`,
 		`<IC:calendar-color>#0082FC</IC:calendar-color>`,
 	)
-
 	responses := xmlResp(calHref, calProps)
 
 	depth := r.Header.Get("Depth")
 	if depth == "1" || depth == "infinity" {
 		for _, n := range notes {
-			content, ts := m.readNoteContent(userinfo, n.ID)
+			content, ts := userinfo.ReadNoteContent(n.ID)
 			etag := noteETag(content)
 			itemHref := calHref + n.ID + ".ics"
 			responses += "\n" + xmlResp(itemHref,
@@ -332,20 +321,19 @@ func (m *Manager) calendarPropfind(w http.ResponseWriter, r *http.Request, usern
 	writeXML(w, http.StatusMultiStatus, xmlMS(responses))
 }
 
-func (m *Manager) calendarReport(w http.ResponseWriter, r *http.Request, username string, userinfo *user.User) {
+func (m *Manager) calendarReport(w http.ResponseWriter, r *http.Request, username string, userinfo caldavUser) {
 	body, _ := io.ReadAll(r.Body)
 	bodyStr := string(body)
-
 	if strings.Contains(bodyStr, "sync-collection") {
-		m.reportSyncCollection(w, r, username, userinfo)
+		m.reportCalendarQuery(w, r, username, userinfo, "")
 	} else {
 		m.reportCalendarQuery(w, r, username, userinfo, bodyStr)
 	}
 }
 
-func (m *Manager) reportCalendarQuery(w http.ResponseWriter, r *http.Request, username string, userinfo *user.User, body string) {
+func (m *Manager) reportCalendarQuery(w http.ResponseWriter, r *http.Request, username string, userinfo caldavUser, body string) {
 	calHref := "/caldav/" + username + "/notes/"
-	notes, _ := m.loadNotes(userinfo)
+	notes, _ := userinfo.LoadNotes()
 	wantedIDs := parseMultigetHrefs(body, calHref)
 
 	responses := ""
@@ -353,7 +341,7 @@ func (m *Manager) reportCalendarQuery(w http.ResponseWriter, r *http.Request, us
 		if len(wantedIDs) > 0 && !wantedIDs[n.ID] {
 			continue
 		}
-		content, ts := m.readNoteContent(userinfo, n.ID)
+		content, ts := userinfo.ReadNoteContent(n.ID)
 		etag := noteETag(content)
 		itemHref := calHref + n.ID + ".ics"
 		responses += xmlResp(itemHref,
@@ -369,18 +357,14 @@ func (m *Manager) reportCalendarQuery(w http.ResponseWriter, r *http.Request, us
 		xmlMSSync(responses, "urn:arozos:caldav:"+token))
 }
 
-func (m *Manager) reportSyncCollection(w http.ResponseWriter, r *http.Request, username string, userinfo *user.User) {
-	m.reportCalendarQuery(w, r, username, userinfo, "")
-}
-
-// handleItem handles GET, HEAD, PUT, DELETE, PROPFIND on a single .ics resource.
-func (m *Manager) handleItem(w http.ResponseWriter, r *http.Request, username, noteID string, userinfo *user.User) {
+// handleItem handles GET/HEAD/PUT/DELETE/PROPFIND on a single .ics resource.
+func (m *Manager) handleItem(w http.ResponseWriter, r *http.Request, username, noteID string, userinfo caldavUser) {
 	calHref := "/caldav/" + username + "/notes/"
 	itemHref := calHref + noteID + ".ics"
 
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
-		content, ts := m.readNoteContent(userinfo, noteID)
+		content, ts := userinfo.ReadNoteContent(noteID)
 		if content == "" && ts == 0 {
 			http.NotFound(w, r)
 			return
@@ -404,19 +388,15 @@ func (m *Manager) handleItem(w http.ResponseWriter, r *http.Request, username, n
 			return
 		}
 		_, description, uid := parseVTODO(string(body))
-
-		// If client supplied a UID different from the URL slug, prefer the URL slug.
 		if uid != "" && uid != noteID && validID(uid) {
 			noteID = uid
 		}
-
 		content := strings.TrimSpace(description)
 		if content == "" {
 			content = strings.TrimSpace(string(body))
 		}
-
 		ts := time.Now().UnixMilli()
-		if err := m.writeNote(userinfo, noteID, content, ts); err != nil {
+		if err := userinfo.WriteNote(noteID, content, ts); err != nil {
 			http.Error(w, "Failed to write note: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -426,14 +406,14 @@ func (m *Manager) handleItem(w http.ResponseWriter, r *http.Request, username, n
 		w.WriteHeader(http.StatusCreated)
 
 	case http.MethodDelete:
-		if err := m.deleteNote(userinfo, noteID); err != nil {
+		if err := userinfo.DeleteNote(noteID); err != nil {
 			http.Error(w, "Failed to delete note: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 
 	case "PROPFIND":
-		content, ts := m.readNoteContent(userinfo, noteID)
+		content, ts := userinfo.ReadNoteContent(noteID)
 		if content == "" && ts == 0 {
 			http.NotFound(w, r)
 			return
@@ -455,141 +435,6 @@ func (m *Manager) handleItem(w http.ResponseWriter, r *http.Request, username, n
 		w.Header().Set("Allow", "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND")
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	}
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Notes filesystem helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-func (m *Manager) loadNotes(userinfo *user.User) ([]noteMeta, error) {
-	handler, err := userinfo.GetFileSystemHandlerFromVirtualPath("user:/Document/Notes")
-	if err != nil {
-		return nil, err
-	}
-	metaReal, err := handler.FileSystemAbstraction.VirtualPathToRealPath("/Document/Notes/meta.json", userinfo.Username)
-	if err != nil {
-		return nil, err
-	}
-	raw, err := handler.FileSystemAbstraction.ReadFile(metaReal)
-	if err != nil {
-		return []noteMeta{}, nil
-	}
-	var meta notesMeta
-	if err := json.Unmarshal(raw, &meta); err != nil {
-		return []noteMeta{}, nil
-	}
-	return meta.Notes, nil
-}
-
-func (m *Manager) readNoteContent(userinfo *user.User, id string) (content string, ts int64) {
-	handler, err := userinfo.GetFileSystemHandlerFromVirtualPath("user:/Document/Notes")
-	if err != nil {
-		return "", 0
-	}
-	realPath, err := handler.FileSystemAbstraction.VirtualPathToRealPath("/Document/Notes/"+id+".txt", userinfo.Username)
-	if err != nil {
-		return "", 0
-	}
-	raw, err := handler.FileSystemAbstraction.ReadFile(realPath)
-	if err != nil {
-		return "", 0
-	}
-	fi, err := handler.FileSystemAbstraction.Stat(realPath)
-	if err == nil {
-		ts = fi.ModTime().UnixMilli()
-	} else {
-		ts = time.Now().UnixMilli()
-	}
-	return string(raw), ts
-}
-
-func (m *Manager) writeNote(userinfo *user.User, id, content string, ts int64) error {
-	handler, err := userinfo.GetFileSystemHandlerFromVirtualPath("user:/Document/Notes")
-	if err != nil {
-		return err
-	}
-
-	dirReal, err := handler.FileSystemAbstraction.VirtualPathToRealPath("/Document/Notes", userinfo.Username)
-	if err != nil {
-		return err
-	}
-	handler.FileSystemAbstraction.MkdirAll(dirReal, 0755)
-
-	noteReal, err := handler.FileSystemAbstraction.VirtualPathToRealPath("/Document/Notes/"+id+".txt", userinfo.Username)
-	if err != nil {
-		return err
-	}
-	if err := handler.FileSystemAbstraction.WriteFile(noteReal, []byte(content), 0644); err != nil {
-		return err
-	}
-
-	metaReal, err := handler.FileSystemAbstraction.VirtualPathToRealPath("/Document/Notes/meta.json", userinfo.Username)
-	if err != nil {
-		return err
-	}
-	var meta notesMeta
-	if raw, err := handler.FileSystemAbstraction.ReadFile(metaReal); err == nil {
-		json.Unmarshal(raw, &meta)
-	}
-	if meta.Notes == nil {
-		meta.Notes = []noteMeta{}
-	}
-
-	title := extractTitle(content)
-	found := false
-	for i, n := range meta.Notes {
-		if n.ID == id {
-			meta.Notes[i].Title = title
-			meta.Notes[i].UpdatedAt = ts
-			found = true
-			break
-		}
-	}
-	if !found {
-		meta.Notes = append(meta.Notes, noteMeta{ID: id, Title: title, UpdatedAt: ts})
-	}
-	meta.LastOpened = id
-
-	raw, _ := json.Marshal(meta)
-	return handler.FileSystemAbstraction.WriteFile(metaReal, raw, 0644)
-}
-
-func (m *Manager) deleteNote(userinfo *user.User, id string) error {
-	handler, err := userinfo.GetFileSystemHandlerFromVirtualPath("user:/Document/Notes")
-	if err != nil {
-		return err
-	}
-	noteReal, err := handler.FileSystemAbstraction.VirtualPathToRealPath("/Document/Notes/"+id+".txt", userinfo.Username)
-	if err != nil {
-		return err
-	}
-	_ = handler.FileSystemAbstraction.Remove(noteReal)
-
-	metaReal, err := handler.FileSystemAbstraction.VirtualPathToRealPath("/Document/Notes/meta.json", userinfo.Username)
-	if err != nil {
-		return err
-	}
-	var meta notesMeta
-	if raw, err := handler.FileSystemAbstraction.ReadFile(metaReal); err == nil {
-		json.Unmarshal(raw, &meta)
-	}
-	newNotes := []noteMeta{}
-	for _, n := range meta.Notes {
-		if n.ID != id {
-			newNotes = append(newNotes, n)
-		}
-	}
-	meta.Notes = newNotes
-	if meta.LastOpened == id {
-		if len(meta.Notes) > 0 {
-			meta.LastOpened = meta.Notes[0].ID
-		} else {
-			meta.LastOpened = ""
-		}
-	}
-
-	raw, _ := json.Marshal(meta)
-	return handler.FileSystemAbstraction.WriteFile(metaReal, raw, 0644)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -624,9 +469,15 @@ func noteToIcal(id, content string, tsMs int64) string {
 
 func icalWriteProp(sb *strings.Builder, name, value string) {
 	line := name + ":" + value
-	for len(line) > 75 {
+	// RFC 5545: first segment ≤75 octets; continuation lines start with one
+	// space, so their content portion is ≤74 octets (75 total incl. space).
+	if len(line) > 75 {
 		sb.WriteString(line[:75] + "\r\n ")
 		line = line[75:]
+		for len(line) > 74 {
+			sb.WriteString(line[:74] + "\r\n ")
+			line = line[74:]
+		}
 	}
 	sb.WriteString(line + "\r\n")
 }
@@ -691,12 +542,7 @@ func parseVTODO(data string) (summary, description, uid string) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// XML helpers
-//
-// Uses default DAV namespace so DAV elements are unprefixed (e.g. <response>),
-// with explicit C: prefix for CalDAV and CS: for CalendarServer extensions.
-// This matches the style used by the original implementation that Apple iOS
-// successfully confirmed as a CalDAV account.
+// XML helpers — default DAV namespace; CalDAV/CalendarServer via C:/CS: prefix.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const xmlNS = `xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CS="http://calendarserver.org/ns/" xmlns:IC="http://apple.com/ns/ical/"`
