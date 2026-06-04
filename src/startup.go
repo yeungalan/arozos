@@ -102,6 +102,7 @@ func RunStartup() {
 	//10. Startup network services and schedule services
 	NetworkServiceInit() //Initalize network serves (ssdp / mdns etc)
 	WiFiInit()           //Inialize WiFi management module
+	IMAPNotesInit()      //Apple Notes bidirectional sync via IMAP
 
 	//ARSM Moved to scheduler, remote support is rewrite pending
 	//ArsmInit() //Inialize ArOZ Remote Support & Management Framework
