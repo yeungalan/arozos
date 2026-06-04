@@ -12,6 +12,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"imuslab.com/arozos/mod/auth"
 	"imuslab.com/arozos/mod/database"
+	"imuslab.com/arozos/mod/info/logger"
 	"imuslab.com/arozos/mod/user"
 )
 
@@ -29,6 +30,7 @@ type connHandler struct {
 	authAgent   *auth.AuthAgent
 	userHandler *user.UserHandler
 	database    *database.Database
+	sysLog      *logger.Logger // system-wide logger: file + stdout
 	state       int
 	username    string
 	remoteAddr  string
@@ -36,7 +38,7 @@ type connHandler struct {
 	deleted map[uint32]bool
 }
 
-func newConnHandler(conn net.Conn, ag *auth.AuthAgent, uh *user.UserHandler, db *database.Database) *connHandler {
+func newConnHandler(conn net.Conn, ag *auth.AuthAgent, uh *user.UserHandler, db *database.Database, sysLog *logger.Logger) *connHandler {
 	return &connHandler{
 		conn:        conn,
 		r:           bufio.NewReader(conn),
@@ -44,19 +46,30 @@ func newConnHandler(conn net.Conn, ag *auth.AuthAgent, uh *user.UserHandler, db 
 		authAgent:   ag,
 		userHandler: uh,
 		database:    db,
+		sysLog:      sysLog,
 		state:       stateNotAuth,
 		remoteAddr:  conn.RemoteAddr().String(),
 		deleted:     make(map[uint32]bool),
 	}
 }
 
-// logf emits a log line prefixed with the remote address (and username when authenticated).
+// logf writes a verbose per-command log line to stdout only (via imapLogger).
 func (h *connHandler) logf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	if h.username != "" {
 		imapLogger.PrintAndLog("IMAPNotes", fmt.Sprintf("[%s][%s] %s", h.remoteAddr, h.username, msg), nil)
 	} else {
 		imapLogger.PrintAndLog("IMAPNotes", fmt.Sprintf("[%s] %s", h.remoteAddr, msg), nil)
+	}
+}
+
+// syslogf writes an important event to the system-wide log file AND stdout.
+func (h *connHandler) syslogf(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	if h.username != "" {
+		h.sysLog.PrintAndLog("IMAPNotes", fmt.Sprintf("[%s][%s] %s", h.remoteAddr, h.username, msg), nil)
+	} else {
+		h.sysLog.PrintAndLog("IMAPNotes", fmt.Sprintf("[%s] %s", h.remoteAddr, msg), nil)
 	}
 }
 
@@ -78,10 +91,10 @@ func (h *connHandler) sendLiteral(tag, prefix string, data []byte) {
 func (h *connHandler) run() {
 	defer func() {
 		h.conn.Close()
-		h.logf("connection closed")
+		h.syslogf("connection closed")
 	}()
 	h.conn.SetDeadline(time.Now().Add(30 * time.Minute))
-	h.logf("connection accepted")
+	h.syslogf("connection accepted")
 
 	h.send("* OK [CAPABILITY IMAP4rev1 AUTH=PLAIN LOGIN] ArozOS Notes IMAP Server ready")
 
@@ -267,14 +280,14 @@ func (h *connHandler) handleLogin(tag, args string) {
 	// Validate: password must be a valid auto-login token for this username.
 	valid, tokenOwner := h.authAgent.ValidateAutoLoginToken(password)
 	if !valid || tokenOwner != username {
-		h.logf("LOGIN: authentication failed for user %q", username)
+		h.syslogf("LOGIN: authentication failed for user %q", username)
 		h.send(tag + " NO LOGIN failed")
 		return
 	}
 
 	h.username = username
 	h.state = stateAuth
-	h.logf("LOGIN: authenticated successfully")
+	h.syslogf("LOGIN: authenticated successfully")
 	h.send(tag + " OK LOGIN completed")
 }
 
@@ -424,7 +437,7 @@ func (h *connHandler) handleAppend(tag, args, fullLine string) {
 	if subject == "" {
 		subject = "(no subject)"
 	}
-	h.logf("APPEND: created note UID=%d id=%s title=%q (%d bytes)", uid, noteID, subject, literalSize)
+	h.syslogf("APPEND: created note UID=%d id=%s title=%q (%d bytes)", uid, noteID, subject, literalSize)
 
 	uidValidity := GetUIDValidity(h.database, h.username)
 	h.send(tag + fmt.Sprintf(" OK [APPENDUID %d %d] APPEND completed", uidValidity, uid))
@@ -670,7 +683,7 @@ func (h *connHandler) applyExpunge(notify bool) {
 		deleted = append(deleted, uid)
 	}
 
-	h.logf("EXPUNGE: purging %d flagged message(s)", len(deleted))
+	h.syslogf("EXPUNGE: purging %d flagged message(s)", len(deleted))
 
 	expunged := 0
 	// Process deletions in reverse sequence order so sequence numbers stay valid
@@ -687,10 +700,10 @@ func (h *connHandler) applyExpunge(notify bool) {
 		if !isDeleted {
 			continue
 		}
-		h.logf("EXPUNGE: deleting note UID=%d id=%s title=%q", n.UID, n.ID, n.Title)
+		h.syslogf("EXPUNGE: deleting note UID=%d id=%s title=%q", n.UID, n.ID, n.Title)
 		err := DeleteNote(h.database, h.userHandler, h.username, n.UID)
 		if err != nil {
-			h.logf("EXPUNGE: error deleting UID=%d: %v", n.UID, err)
+			h.syslogf("EXPUNGE: error deleting UID=%d: %v", n.UID, err)
 		} else {
 			expunged++
 		}
@@ -698,7 +711,7 @@ func (h *connHandler) applyExpunge(notify bool) {
 			h.send(fmt.Sprintf("* %d EXPUNGE", i+1))
 		}
 	}
-	h.logf("EXPUNGE: done, %d note(s) removed", expunged)
+	h.syslogf("EXPUNGE: done, %d note(s) removed", expunged)
 	h.deleted = make(map[uint32]bool)
 }
 

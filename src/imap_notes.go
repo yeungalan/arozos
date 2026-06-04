@@ -10,6 +10,8 @@ import (
 	"imuslab.com/arozos/mod/utils"
 )
 
+const imapNotesLogTag = "IMAPNotes"
+
 var imapNotesServer *imapnotes.Server
 
 // IMAPNotesInit starts the Apple Notes IMAP sync service if enabled in the database.
@@ -55,7 +57,10 @@ func IMAPNotesInit() {
 	var enabled bool
 	sysdb.Read("imapnotes", "enabled", &enabled)
 	if enabled {
+		systemWideLogger.PrintAndLog(imapNotesLogTag, "Feature was enabled at last shutdown — starting IMAP Notes server", nil)
 		startIMAPNotesServer()
+	} else {
+		systemWideLogger.PrintAndLog(imapNotesLogTag, "IMAP Notes sync is disabled (enable it in System Settings → Network)", nil)
 	}
 }
 
@@ -66,17 +71,22 @@ func startIMAPNotesServer() {
 		port = 1143
 	}
 
+	systemWideLogger.PrintAndLog(imapNotesLogTag, fmt.Sprintf("Starting IMAP Notes server on port %d", port), nil)
+
 	imapNotesServer = imapnotes.NewServer(imapnotes.Config{
 		Port:        port,
 		UserHandler: userHandler,
 		AuthAgent:   authAgent,
 		Database:    sysdb,
+		Logger:      systemWideLogger,
 	})
 
 	if err := imapNotesServer.Start(); err != nil {
-		systemWideLogger.PrintAndLog("IMAPNotes", "Failed to start IMAP Notes server: "+err.Error(), err)
+		systemWideLogger.PrintAndLog(imapNotesLogTag, "Failed to start IMAP Notes server: "+err.Error(), err)
 		imapNotesServer = nil
+		return
 	}
+	systemWideLogger.PrintAndLog(imapNotesLogTag, fmt.Sprintf("IMAP Notes server is now listening on port %d", port), nil)
 }
 
 // POST /system/imap_notes/enable?enabled=true&port=1143
@@ -98,6 +108,7 @@ func imapNotesHandleSetEnabled(w http.ResponseWriter, r *http.Request) {
 
 	if enabled {
 		if imapNotesServer != nil && imapNotesServer.Running {
+			systemWideLogger.PrintAndLog(imapNotesLogTag, "Restarting IMAP Notes server due to settings change", nil)
 			imapNotesServer.Stop()
 		}
 		startIMAPNotesServer()
@@ -107,12 +118,14 @@ func imapNotesHandleSetEnabled(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		if imapNotesServer != nil {
+			systemWideLogger.PrintAndLog(imapNotesLogTag, "Stopping IMAP Notes server (disabled by admin)", nil)
 			imapNotesServer.Stop()
 			imapNotesServer = nil
+			systemWideLogger.PrintAndLog(imapNotesLogTag, "IMAP Notes server stopped", nil)
 		}
 	}
 
-	utils.SendOK(w)
+	utils.SendTextResponse(w, "ok")
 }
 
 // GET /system/imap_notes/status
@@ -169,7 +182,7 @@ func imapNotesHandleToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		authAgent.RemoveAutologinToken(token)
-		utils.SendOK(w)
+		utils.SendTextResponse(w, "ok")
 
 	default:
 		// List existing tokens for this user

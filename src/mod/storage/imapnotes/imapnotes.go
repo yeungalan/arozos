@@ -19,6 +19,7 @@ import (
 
 	"imuslab.com/arozos/mod/auth"
 	"imuslab.com/arozos/mod/database"
+	"imuslab.com/arozos/mod/info/logger"
 	"imuslab.com/arozos/mod/user"
 )
 
@@ -29,6 +30,7 @@ type Server struct {
 	userHandler *user.UserHandler
 	authAgent   *auth.AuthAgent
 	database    *database.Database
+	sysLog      *logger.Logger // system-wide logger (writes to log file + stdout)
 	listener    net.Listener
 	done        chan struct{}
 	mu          sync.Mutex
@@ -40,17 +42,30 @@ type Config struct {
 	UserHandler *user.UserHandler
 	AuthAgent   *auth.AuthAgent
 	Database    *database.Database
+	// Logger is optional; when provided (e.g. systemWideLogger from main) all
+	// important events are written to the arozos log file in addition to stdout.
+	Logger *logger.Logger
 }
 
 // NewServer creates a new IMAP Notes server (not yet started).
 func NewServer(cfg Config) *Server {
+	lg := cfg.Logger
+	if lg == nil {
+		lg = imapLogger // fall back to stdout-only tmp logger
+	}
 	return &Server{
 		Port:        cfg.Port,
 		userHandler: cfg.UserHandler,
 		authAgent:   cfg.AuthAgent,
 		database:    cfg.Database,
+		sysLog:      lg,
 		done:        make(chan struct{}),
 	}
+}
+
+// log writes to the system-wide logger (file + stdout) via sysLog.
+func (s *Server) log(msg string, err error) {
+	s.sysLog.PrintAndLog("IMAPNotes", msg, err)
 }
 
 // Start begins listening for IMAP connections.
@@ -72,7 +87,7 @@ func (s *Server) Start() error {
 	s.Running = true
 
 	go s.acceptLoop()
-	imapLogger.PrintAndLog("IMAPNotes", fmt.Sprintf("IMAP Notes server listening on port %d", s.Port), nil)
+	s.log(fmt.Sprintf("IMAP Notes server listening on port %d", s.Port), nil)
 	return nil
 }
 
@@ -89,7 +104,7 @@ func (s *Server) Stop() {
 	if s.listener != nil {
 		s.listener.Close()
 	}
-	imapLogger.PrintAndLog("IMAPNotes", "IMAP Notes server stopped", nil)
+	s.log("IMAP Notes server stopped", nil)
 }
 
 func (s *Server) acceptLoop() {
@@ -100,11 +115,11 @@ func (s *Server) acceptLoop() {
 			case <-s.done:
 				return
 			default:
-				imapLogger.PrintAndLog("IMAPNotes", "Accept error: "+err.Error(), err)
+				s.log("Accept error: "+err.Error(), err)
 				continue
 			}
 		}
-		imapLogger.PrintAndLog("IMAPNotes", fmt.Sprintf("New connection from %s", conn.RemoteAddr()), nil)
-		go newConnHandler(conn, s.authAgent, s.userHandler, s.database).run()
+		s.log(fmt.Sprintf("New connection from %s", conn.RemoteAddr()), nil)
+		go newConnHandler(conn, s.authAgent, s.userHandler, s.database, s.sysLog).run()
 	}
 }
