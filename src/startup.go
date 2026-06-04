@@ -117,6 +117,7 @@ func RunStartup() {
 	notificationInit() //Notification system init
 
 	//Start High Level Services that requires full arozos architectures
+	CalDAVInit() //Start CalDAV endpoint for Notes sync
 	FileServerInit()
 	//FTPServerInit() //Start FTP Server Endpoints
 	//WebDAVInit()    //Start WebDAV Endpoint

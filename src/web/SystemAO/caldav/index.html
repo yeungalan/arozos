@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="../../script/semantic/semantic.min.css">
+    <script type="text/javascript" src="../../script/jquery.min.js"></script>
+    <script type="text/javascript" src="../../script/semantic/semantic.min.js"></script>
+    <title>CalDAV Server</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <style>
+        body { padding: 1em; }
+        .token-row { font-family: monospace; word-break: break-all; }
+        #setupSteps { margin-top: 1em; }
+    </style>
+</head>
+<body>
+    <div class="ui container">
+        <h2 class="ui header">
+            <i class="calendar alternate outline icon"></i>
+            <div class="content">
+                CalDAV Server
+                <div class="sub header">Sync Notes with iOS Reminders via CalDAV protocol</div>
+            </div>
+        </h2>
+
+        <!-- Enable / Disable toggle -->
+        <div class="ui segment">
+            <h4 class="ui header">Server Status</h4>
+            <div id="statusMsg" class="ui message" style="display:none;"></div>
+            <div class="ui toggle checkbox" id="caldavToggle">
+                <input type="checkbox" id="caldavEnabled" onchange="toggleCalDAV()">
+                <label>Enable CalDAV Server</label>
+            </div>
+            <p style="margin-top:0.8em; color: #888;" id="statusText">Loading...</p>
+        </div>
+
+        <!-- Connection Info -->
+        <div class="ui segment" id="connectionInfo" style="display:none;">
+            <h4 class="ui header">How to Connect (iOS / macOS)</h4>
+            <ol>
+                <li>Go to <b>Settings → Calendar → Accounts → Add Account → Other → Add CalDAV Account</b></li>
+                <li>Set <b>Server</b> to: <code id="serverURL">loading...</code></li>
+                <li>Set <b>Username</b> to your ArozOS username</li>
+                <li>Set <b>Password</b> to your ArozOS <b>Auto-Login Token</b> (see below)</li>
+                <li>Tap Next — iOS will discover the Notes calendar automatically</li>
+            </ol>
+            <div class="ui info message">
+                <i class="info circle icon"></i>
+                Your notes will appear in the <b>Reminders</b> app on iOS/macOS after account setup.
+                Changes on either side sync bidirectionally.
+            </div>
+        </div>
+
+        <!-- Token management -->
+        <div class="ui segment" id="tokenSection" style="display:none;">
+            <h4 class="ui header">Auto-Login Token (CalDAV Password)</h4>
+            <p>Use the token below as your CalDAV password. You can generate a new one at any time;
+               the old token will be invalidated.</p>
+
+            <div class="ui form">
+                <div class="field">
+                    <label>Your current tokens</label>
+                    <div id="tokenList" class="ui list">
+                        <div class="item"><i class="spinner loading icon"></i> Loading tokens...</div>
+                    </div>
+                </div>
+                <button class="ui primary button" onclick="generateToken()">
+                    <i class="key icon"></i> Generate New Token
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var currentUser = "";
+
+        function getBaseURL() {
+            return window.location.protocol + "//" + window.location.host;
+        }
+
+        function showStatus(msg, type) {
+            var el = $("#statusMsg");
+            el.attr("class", "ui " + type + " message").text(msg).show();
+            setTimeout(function(){ el.fadeOut(); }, 3000);
+        }
+
+        // Load current CalDAV enabled state
+        function loadStatus() {
+            $.get("/system/caldav/status", function(data) {
+                var resp = (typeof data === "string") ? JSON.parse(data) : data;
+                var enabled = resp.enabled === true;
+                $("#caldavEnabled").prop("checked", enabled);
+                updateUI(enabled);
+            }).fail(function() {
+                $("#statusText").text("Unable to load status.");
+            });
+        }
+
+        function updateUI(enabled) {
+            if (enabled) {
+                $("#statusText").text("CalDAV server is running and accepting connections.");
+                $("#connectionInfo").show();
+                $("#tokenSection").show();
+                $("#serverURL").text(getBaseURL() + "/caldav");
+                loadTokens();
+            } else {
+                $("#statusText").text("CalDAV server is disabled.");
+                $("#connectionInfo").hide();
+                $("#tokenSection").hide();
+            }
+        }
+
+        function toggleCalDAV() {
+            var enabled = $("#caldavEnabled").is(":checked");
+            $.post("/system/caldav/toggle", { enable: enabled ? "true" : "false" }, function(data) {
+                updateUI(enabled);
+                showStatus(enabled ? "CalDAV server enabled." : "CalDAV server disabled.", enabled ? "positive" : "warning");
+            }).fail(function() {
+                showStatus("Failed to update CalDAV status.", "negative");
+                // revert checkbox
+                $("#caldavEnabled").prop("checked", !enabled);
+            });
+        }
+
+        // Load autologin tokens for the current user
+        function loadTokens() {
+            if (!currentUser) {
+                loadCurrentUser(loadTokens);
+                return;
+            }
+            $.get("/system/autologin/list?username=" + encodeURIComponent(currentUser), function(data) {
+                var tokens = (typeof data === "string") ? JSON.parse(data) : data;
+                var list = $("#tokenList").empty();
+                if (!tokens || tokens.length === 0) {
+                    list.html('<div class="item">No tokens yet. Generate one below.</div>');
+                } else {
+                    $.each(tokens, function(i, t) {
+                        list.append(
+                            '<div class="item token-row" style="margin-bottom:0.5em;">' +
+                            '<code style="background:#f3f3f3;padding:4px 8px;border-radius:4px;">' + t + '</code>' +
+                            ' <button class="ui mini red button" onclick="removeToken(\'' + t + '\')"><i class="trash icon"></i> Remove</button>' +
+                            '</div>'
+                        );
+                    });
+                }
+            }).fail(function() {
+                $("#tokenList").html('<div class="item ui negative message">Could not load tokens.</div>');
+            });
+        }
+
+        function generateToken() {
+            if (!currentUser) {
+                loadCurrentUser(generateToken);
+                return;
+            }
+            $.get("/system/autologin/create?username=" + encodeURIComponent(currentUser), function(data) {
+                showStatus("New token generated.", "positive");
+                loadTokens();
+            }).fail(function() {
+                showStatus("Failed to generate token.", "negative");
+            });
+        }
+
+        function removeToken(token) {
+            $.get("/system/autologin/delete?token=" + encodeURIComponent(token), function() {
+                showStatus("Token removed.", "warning");
+                loadTokens();
+            }).fail(function() {
+                showStatus("Failed to remove token.", "negative");
+            });
+        }
+
+        function loadCurrentUser(callback) {
+            $.get("/system/users/userinfo", function(data) {
+                var resp = (typeof data === "string") ? JSON.parse(data) : data;
+                currentUser = resp.Username || "";
+                if (callback) callback();
+            });
+        }
+
+        // Init
+        loadCurrentUser(null);
+        loadStatus();
+    </script>
+</body>
+</html>
