@@ -124,6 +124,23 @@ func (m *Manager) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Strip prefix early so we can give the root PROPFIND a free pass.
+	reqPath := strings.TrimPrefix(r.URL.Path, "/caldav")
+	if reqPath == "" {
+		reqPath = "/"
+	}
+
+	// Root PROPFIND is deliberately unauthenticated.
+	// Apple accountsd (iOS/macOS) probes the server root without credentials first.
+	// It expects a 207 that points to current-user-principal, then authenticates
+	// only when it follows that URL. Returning 401 here causes accountsd to give
+	// up without ever retrying with the user's credentials.
+	if reqPath == "/" && r.Method == "PROPFIND" {
+		log.Printf("[CalDAV] → unauthenticated root discovery (auth not required for probe)")
+		m.handleRootDiscovery(w, r)
+		return
+	}
+
 	// Basic Auth: username + auto-login token.
 	username, token, ok := r.BasicAuth()
 	if !ok {
@@ -196,8 +213,11 @@ func (m *Manager) route(w http.ResponseWriter, r *http.Request, path, username s
 
 	switch {
 	case normPath == "/":
-		log.Printf("[CalDAV] → discovery handler")
+		log.Printf("[CalDAV] → discovery fallback handler (non-PROPFIND on root)")
 		m.handleDiscovery(w, r, username)
+	case normPath == "/current-user-principal/":
+		log.Printf("[CalDAV] → current-user-principal handler")
+		m.handleCurrentUserPrincipal(w, r, username)
 	case normPath == principalPath:
 		log.Printf("[CalDAV] → principal handler")
 		m.handlePrincipal(w, r, username)
@@ -227,24 +247,59 @@ func (m *Manager) route(w http.ResponseWriter, r *http.Request, path, username s
 // CalDAV resource handlers
 // ─────────────────────────────────────────────────────────────────────────────
 
-// handleDiscovery: PROPFIND /caldav/ → current-user-principal (step 1).
-func (m *Manager) handleDiscovery(w http.ResponseWriter, r *http.Request, username string) {
+// handleRootDiscovery: unauthenticated PROPFIND /caldav/ → fixed current-user-principal.
+// Apple accountsd probes the server root WITHOUT credentials. Returning 401 here causes
+// accountsd to give up entirely — it will never retry with credentials. Instead we return
+// a generic /caldav/current-user-principal/ URL. accountsd follows it, gets 401 there
+// (auth IS required), then retries with credentials — at which point we know the username.
+func (m *Manager) handleRootDiscovery(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "PROPFIND" {
 		w.Header().Set("Allow", "OPTIONS, PROPFIND")
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	principalHref := "/caldav/principals/" + username + "/"
 	body := xmlMS(
 		xmlResp("/caldav/",
 			xmlPS(http.StatusOK,
-				`<current-user-principal><href>`+xmlEsc(principalHref)+`</href></current-user-principal>`,
+				`<current-user-principal><href>/caldav/current-user-principal/</href></current-user-principal>`,
 				`<resourcetype><collection/></resourcetype>`,
 				`<displayname>ArozOS CalDAV</displayname>`,
 			),
 		),
 	)
 	writeXML(w, http.StatusMultiStatus, body)
+}
+
+// handleCurrentUserPrincipal: PROPFIND /caldav/current-user-principal/ → calendar-home-set.
+// accountsd follows the URL from handleRootDiscovery, gets 401, then retries with credentials.
+// At that point we know the username and can return the user-specific calendar home URL.
+func (m *Manager) handleCurrentUserPrincipal(w http.ResponseWriter, r *http.Request, username string) {
+	if r.Method != "PROPFIND" {
+		w.Header().Set("Allow", "OPTIONS, PROPFIND")
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	principalHref := "/caldav/current-user-principal/"
+	homeHref := "/caldav/" + username + "/"
+	body := xmlMS(
+		xmlResp(principalHref,
+			xmlPS(http.StatusOK,
+				`<displayname>`+xmlEsc(username)+`</displayname>`,
+				`<resourcetype><collection/><principal/></resourcetype>`,
+				`<current-user-principal><href>`+xmlEsc(principalHref)+`</href></current-user-principal>`,
+				`<C:calendar-home-set><href>`+xmlEsc(homeHref)+`</href></C:calendar-home-set>`,
+				`<C:calendar-user-address-set><href>mailto:`+xmlEsc(username)+`@arozos.local</href></C:calendar-user-address-set>`,
+			),
+		),
+	)
+	writeXML(w, http.StatusMultiStatus, body)
+}
+
+// handleDiscovery: fallback for authenticated requests to /caldav/ (non-PROPFIND methods).
+// PROPFIND is intercepted earlier in HandleRequest and served without auth.
+func (m *Manager) handleDiscovery(w http.ResponseWriter, r *http.Request, username string) {
+	w.Header().Set("Allow", "OPTIONS, PROPFIND")
+	http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 }
 
 // handlePrincipal: PROPFIND /caldav/principals/{user}/ → calendar-home-set (step 2).

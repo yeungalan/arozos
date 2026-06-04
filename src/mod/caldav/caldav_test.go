@@ -172,9 +172,21 @@ func TestDisabledService(t *testing.T) {
 	assertStatus(t, rr, http.StatusServiceUnavailable)
 }
 
-func TestAuthRequired(t *testing.T) {
+func TestRootDiscoveryNoAuth(t *testing.T) {
+	// Root PROPFIND must succeed WITHOUT credentials — Apple accountsd probes first with no auth.
 	mgr := newTestManager()
-	req := httptest.NewRequest("PROPFIND", "/caldav/", nil)
+	req := httptest.NewRequest("PROPFIND", "/caldav/", nil) // deliberately no auth
+	rr := httptest.NewRecorder()
+	mgr.HandleRequest(rr, req)
+	assertStatus(t, rr, http.StatusMultiStatus)
+	assertContains(t, rr, "current-user-principal")
+	assertContains(t, rr, "/caldav/current-user-principal/")
+}
+
+func TestAuthRequired(t *testing.T) {
+	// Auth is required on the current-user-principal URL (not the root).
+	mgr := newTestManager()
+	req := httptest.NewRequest("PROPFIND", "/caldav/current-user-principal/", nil) // no auth
 	rr := httptest.NewRecorder()
 	mgr.HandleRequest(rr, req)
 	assertStatus(t, rr, http.StatusUnauthorized)
@@ -185,29 +197,33 @@ func TestAuthRequired(t *testing.T) {
 
 func TestAuthWrongToken(t *testing.T) {
 	mgr := newTestManager()
-	req := httptest.NewRequest("PROPFIND", "/caldav/", nil)
+	req := httptest.NewRequest("PROPFIND", "/caldav/current-user-principal/", nil)
 	req.SetBasicAuth(testUser, "wrong-token")
 	rr := httptest.NewRecorder()
 	mgr.HandleRequest(rr, req)
 	assertStatus(t, rr, http.StatusUnauthorized)
 }
 
-// ── iOS discovery step 1 ────────────────────────────────────────────────────
+// ── iOS discovery step 1: unauthenticated root probe ────────────────────────
 
 func TestDiscoveryReturnsPrincipal(t *testing.T) {
+	// Root PROPFIND is unauthenticated. It returns a FIXED current-user-principal URL.
 	mgr := newTestManager()
-	rr := do(mgr, "PROPFIND", "/caldav/", "", nil)
+	req := httptest.NewRequest("PROPFIND", "/caldav/", nil) // no auth — intentional
+	rr := httptest.NewRecorder()
+	mgr.HandleRequest(rr, req)
 	assertStatus(t, rr, http.StatusMultiStatus)
 	assertContains(t, rr, "current-user-principal")
-	assertContains(t, rr, "/caldav/principals/"+testUser+"/")
-	// Root discovery must NOT already contain calendar-home-set;
-	// that must come from the principal resource (step 2).
-	// (Some CalDAV clients get confused if home-set is in step 1.)
+	assertContains(t, rr, "/caldav/current-user-principal/")
+	// Root must NOT already contain calendar-home-set (that comes from step 2).
+	assertNotContains(t, rr, "calendar-home-set")
 }
 
 func TestDiscoveryXMLStructure(t *testing.T) {
 	mgr := newTestManager()
-	rr := do(mgr, "PROPFIND", "/caldav/", "", nil)
+	req := httptest.NewRequest("PROPFIND", "/caldav/", nil) // no auth — root is public
+	rr := httptest.NewRecorder()
+	mgr.HandleRequest(rr, req)
 	body := rr.Body.String()
 	if !strings.HasPrefix(body, `<?xml`) {
 		t.Errorf("response should start with XML declaration, got: %s", body[:min(50, len(body))])
@@ -216,11 +232,42 @@ func TestDiscoveryXMLStructure(t *testing.T) {
 	assertContains(t, rr, `<multistatus`)
 	assertContains(t, rr, `<response>`)
 	assertContains(t, rr, `<href>/caldav/</href>`)
-	// propstat status for found properties is 200; the HTTP response is 207
 	assertContains(t, rr, `<status>HTTP/1.1 200 OK</status>`)
 }
 
-// ── iOS discovery step 2 ────────────────────────────────────────────────────
+// ── iOS discovery step 2: authenticated current-user-principal ───────────────
+
+func TestCurrentUserPrincipalReturnsCalendarHome(t *testing.T) {
+	mgr := newTestManager()
+	rr := do(mgr, "PROPFIND", "/caldav/current-user-principal/", "", nil)
+	assertStatus(t, rr, http.StatusMultiStatus)
+	assertContains(t, rr, "C:calendar-home-set")
+	assertContains(t, rr, "/caldav/"+testUser+"/")
+}
+
+func TestCurrentUserPrincipalHomeSetDiffersFromPrincipal(t *testing.T) {
+	mgr := newTestManager()
+	rr := do(mgr, "PROPFIND", "/caldav/current-user-principal/", "", nil)
+	body := rr.Body.String()
+	principalURL := "/caldav/current-user-principal/"
+	homeURL := "/caldav/" + testUser + "/"
+	if !strings.Contains(body, homeURL) {
+		t.Errorf("calendar-home-set not pointing to %s\nbody: %s", homeURL, body)
+	}
+	if principalURL == homeURL {
+		t.Error("principal URL and calendar home URL must differ for iOS to accept the account")
+	}
+}
+
+func TestCurrentUserPrincipalXMLProperties(t *testing.T) {
+	mgr := newTestManager()
+	rr := do(mgr, "PROPFIND", "/caldav/current-user-principal/", "", nil)
+	assertContains(t, rr, "C:calendar-home-set")
+	assertContains(t, rr, "C:calendar-user-address-set")
+	assertContains(t, rr, "<principal/>")
+}
+
+// ── Legacy /caldav/principals/{user}/ URL (kept for backwards compat) ─────────
 
 func TestPrincipalReturnsCalendarHomeSet(t *testing.T) {
 	mgr := newTestManager()
@@ -239,7 +286,6 @@ func TestPrincipalHomeSetDiffersFromPrincipal(t *testing.T) {
 	if !strings.Contains(body, homeURL) {
 		t.Errorf("calendar-home-set not pointing to %s\nbody: %s", homeURL, body)
 	}
-	// Confirm they are different paths (critical: iOS rejects if they're the same)
 	if principalURL == homeURL {
 		t.Error("principal URL and calendar home URL must differ for iOS to accept the account")
 	}
@@ -436,11 +482,17 @@ func TestCtagChangesAfterWrite(t *testing.T) {
 }
 
 // ── Full iOS account-setup simulation ────────────────────────────────────────
+//
+// Apple accountsd discovery sequence:
+//  1. OPTIONS  /caldav/                       (no auth) → 200
+//  2. PROPFIND /caldav/                       (no auth) → 207  current-user-principal = /caldav/current-user-principal/
+//  3. PROPFIND /caldav/current-user-principal/ (no auth) → 401  WWW-Authenticate
+//  4. PROPFIND /caldav/current-user-principal/ (with auth) → 207  calendar-home-set = /caldav/{user}/
+//  5. PROPFIND /caldav/{user}/                Depth:1  → 207  Notes calendar listed
 
 func TestIOSDiscoveryFlow(t *testing.T) {
 	mgr := newTestManager()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Wrap all /caldav/* requests through the manager
 		if strings.HasPrefix(r.URL.Path, "/caldav") {
 			mgr.HandleRequest(w, r)
 			return
@@ -449,79 +501,101 @@ func TestIOSDiscoveryFlow(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := &http.Client{}
-	authHeader := func(r *http.Request) {
-		r.SetBasicAuth(testUser, testToken)
+	// accountsd does NOT follow redirects between these probes — use a client
+	// that stops at the first 401 so we can inspect the challenge header.
+	noRedirectClient := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 	}
 
-	t.Run("Step0_OPTIONS", func(t *testing.T) {
+	t.Run("Step0_OPTIONS_no_auth", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodOptions, srv.URL+"/caldav/", nil)
-		resp, err := client.Do(req)
+		resp, err := noRedirectClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			t.Errorf("OPTIONS status %d", resp.StatusCode)
+			t.Errorf("OPTIONS status %d, want 200", resp.StatusCode)
 		}
 		if !strings.Contains(resp.Header.Get("DAV"), "calendar-access") {
 			t.Errorf("DAV header missing calendar-access: %q", resp.Header.Get("DAV"))
 		}
 	})
 
-	t.Run("Step1_Discover_Principal", func(t *testing.T) {
-		req, _ := http.NewRequest("PROPFIND", srv.URL+"/caldav/", nil)
-		authHeader(req)
+	var principalURL string
+	t.Run("Step1_Root_probe_no_auth", func(t *testing.T) {
+		// accountsd sends this with NO credentials. We MUST return 207, not 401.
+		req, _ := http.NewRequest("PROPFIND", srv.URL+"/caldav/", nil) // no auth
 		req.Header.Set("Depth", "0")
-		resp, err := client.Do(req)
+		resp, err := noRedirectClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusMultiStatus {
-			t.Errorf("step 1 status %d, want 207", resp.StatusCode)
+			t.Fatalf("step 1: status %d, want 207 — returning 401 here causes accountsd to give up", resp.StatusCode)
 		}
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := string(body)
 		if !strings.Contains(bodyStr, "current-user-principal") {
-			t.Error("step 1: current-user-principal missing")
+			t.Fatal("step 1: current-user-principal missing from root response")
 		}
-		wantPrincipal := "/caldav/principals/" + testUser + "/"
-		if !strings.Contains(bodyStr, wantPrincipal) {
-			t.Errorf("step 1: principal URL %q missing from response", wantPrincipal)
+		principalURL = "/caldav/current-user-principal/"
+		if !strings.Contains(bodyStr, principalURL) {
+			t.Errorf("step 1: expected principal URL %q not found\nbody: %s", principalURL, bodyStr)
 		}
 		t.Logf("Step 1 body:\n%s", bodyStr)
 	})
 
-	t.Run("Step2_Get_CalendarHome", func(t *testing.T) {
-		req, _ := http.NewRequest("PROPFIND", srv.URL+"/caldav/principals/"+testUser+"/", nil)
-		authHeader(req)
+	t.Run("Step2a_Principal_no_auth_gets_401", func(t *testing.T) {
+		// accountsd follows principalURL without auth first — must get 401 challenge.
+		req, _ := http.NewRequest("PROPFIND", srv.URL+principalURL, nil) // no auth
 		req.Header.Set("Depth", "0")
-		resp, err := client.Do(req)
+		resp, err := noRedirectClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("step 2a: status %d, want 401 (challenge must be here, not at root)", resp.StatusCode)
+		}
+		if !strings.Contains(resp.Header.Get("WWW-Authenticate"), "Basic") {
+			t.Errorf("step 2a: WWW-Authenticate missing Basic: %q", resp.Header.Get("WWW-Authenticate"))
+		}
+	})
+
+	t.Run("Step2b_Principal_with_auth_returns_home", func(t *testing.T) {
+		// accountsd retries with credentials after the 401 challenge.
+		req, _ := http.NewRequest("PROPFIND", srv.URL+principalURL, nil)
+		req.SetBasicAuth(testUser, testToken)
+		req.Header.Set("Depth", "0")
+		resp, err := noRedirectClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusMultiStatus {
-			t.Errorf("step 2 status %d, want 207", resp.StatusCode)
+			t.Errorf("step 2b: status %d, want 207", resp.StatusCode)
 		}
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := string(body)
 		if !strings.Contains(bodyStr, "C:calendar-home-set") {
-			t.Error("step 2: calendar-home-set missing")
+			t.Error("step 2b: calendar-home-set missing from principal response")
 		}
 		wantHome := "/caldav/" + testUser + "/"
 		if !strings.Contains(bodyStr, wantHome) {
-			t.Errorf("step 2: calendar home URL %q missing", wantHome)
+			t.Errorf("step 2b: calendar home URL %q missing\nbody: %s", wantHome, bodyStr)
 		}
-		t.Logf("Step 2 body:\n%s", bodyStr)
+		t.Logf("Step 2b body:\n%s", bodyStr)
 	})
 
 	t.Run("Step3_List_Calendars", func(t *testing.T) {
 		req, _ := http.NewRequest("PROPFIND", srv.URL+"/caldav/"+testUser+"/", nil)
-		authHeader(req)
+		req.SetBasicAuth(testUser, testToken)
 		req.Header.Set("Depth", "1")
-		resp, err := client.Do(req)
+		resp, err := noRedirectClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
