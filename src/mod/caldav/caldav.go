@@ -28,6 +28,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -101,6 +102,7 @@ func (m *Manager) HandleStatus(w http.ResponseWriter, r *http.Request) {
 // HandleRequest is the main CalDAV HTTP handler (mounted at /caldav/).
 func (m *Manager) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	if !m.Enabled {
+		log.Printf("[CalDAV] service is disabled — rejecting %s %s", r.Method, r.URL.Path)
 		http.Error(w, "CalDAV service is disabled", http.StatusServiceUnavailable)
 		return
 	}
@@ -109,6 +111,7 @@ func (m *Manager) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("DAV", "1, 2, calendar-access")
 
 	if r.Method == http.MethodOptions {
+		log.Printf("[CalDAV] OPTIONS %s — returning capabilities (no auth required)", r.URL.Path)
 		w.Header().Set("Allow", "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR")
 		w.Header().Set("Content-Length", "0")
 		w.WriteHeader(http.StatusOK)
@@ -118,21 +121,34 @@ func (m *Manager) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	// Basic Auth: username + auto-login token.
 	username, token, ok := r.BasicAuth()
 	if !ok {
+		log.Printf("[CalDAV] %s %s — no Basic Auth header, returning 401", r.Method, r.URL.Path)
 		w.Header().Set("WWW-Authenticate", `Basic realm="ArozOS CalDAV"`)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
+	log.Printf("[CalDAV] %s %s — auth attempt for user %q", r.Method, r.URL.Path, username)
+
 	authAgent := m.backend.GetAuthAgent()
 	valid, tokenOwner := authAgent.ValidateAutoLoginToken(token)
-	if !valid || tokenOwner != username {
+	if !valid {
+		log.Printf("[CalDAV] auth FAILED for user %q — token not recognised (token len=%d)", username, len(token))
+		w.Header().Set("WWW-Authenticate", `Basic realm="ArozOS CalDAV"`)
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+	if tokenOwner != username {
+		log.Printf("[CalDAV] auth FAILED — token belongs to %q but request claimed user %q", tokenOwner, username)
 		w.Header().Set("WWW-Authenticate", `Basic realm="ArozOS CalDAV"`)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
+	log.Printf("[CalDAV] auth OK for user %q", username)
+
 	userinfo, err := m.backend.GetUser(username)
 	if err != nil {
+		log.Printf("[CalDAV] user lookup failed for %q: %v", username, err)
 		http.Error(w, "User not found", http.StatusUnauthorized)
 		return
 	}
@@ -143,6 +159,7 @@ func (m *Manager) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		path = "/"
 	}
 
+	log.Printf("[CalDAV] routing %s %s (path=%s, user=%s)", r.Method, r.URL.Path, path, username)
 	m.route(w, r, path, username, userinfo)
 }
 
@@ -163,21 +180,29 @@ func (m *Manager) route(w http.ResponseWriter, r *http.Request, path, username s
 
 	switch {
 	case normPath == "/":
+		log.Printf("[CalDAV] → discovery handler")
 		m.handleDiscovery(w, r, username)
 	case normPath == principalPath:
+		log.Printf("[CalDAV] → principal handler")
 		m.handlePrincipal(w, r, username)
 	case normPath == homePath:
+		log.Printf("[CalDAV] → calendar home handler (Depth: %q)", r.Header.Get("Depth"))
 		m.handleCalendarHome(w, r, username, userinfo)
 	case normPath == calPath:
+		log.Printf("[CalDAV] → notes calendar handler")
 		m.handleCalendar(w, r, username, userinfo)
 	case strings.HasPrefix(normPath, calPath) && strings.HasSuffix(path, ".ics"):
 		noteID := strings.TrimSuffix(strings.TrimPrefix(path, calPath), ".ics")
 		if !validID(noteID) {
+			log.Printf("[CalDAV] invalid note ID %q in path %s", noteID, path)
 			http.Error(w, "Invalid note ID", http.StatusBadRequest)
 			return
 		}
+		log.Printf("[CalDAV] → item handler (noteID=%s)", noteID)
 		m.handleItem(w, r, username, noteID, userinfo)
 	default:
+		log.Printf("[CalDAV] no route matched for path=%q (normPath=%q, principalPath=%q, homePath=%q, calPath=%q)",
+			path, normPath, principalPath, homePath, calPath)
 		http.NotFound(w, r)
 	}
 }
