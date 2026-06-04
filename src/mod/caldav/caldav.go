@@ -73,6 +73,7 @@ type NoteMeta struct {
 	ID        string `json:"id"`
 	Title     string `json:"title"`
 	UpdatedAt int64  `json:"updatedAt"`
+	Completed bool   `json:"completed,omitempty"`
 }
 
 // NotesMeta is the full metadata file structure (meta.json).
@@ -147,16 +148,17 @@ func (s *Server) writeMeta(username string, meta *NotesMeta) error {
 	return os.WriteFile(s.metaFilePath(username), raw, 0644)
 }
 
-func (s *Server) upsertNoteMeta(meta *NotesMeta, noteID string, title string, updatedAt int64) {
+func (s *Server) upsertNoteMeta(meta *NotesMeta, noteID string, title string, updatedAt int64, completed bool) {
 	for i, n := range meta.Notes {
 		if n.ID == noteID {
 			meta.Notes[i].Title = title
 			meta.Notes[i].UpdatedAt = updatedAt
+			meta.Notes[i].Completed = completed
 			meta.LastOpened = noteID
 			return
 		}
 	}
-	meta.Notes = append(meta.Notes, NoteMeta{ID: noteID, Title: title, UpdatedAt: updatedAt})
+	meta.Notes = append(meta.Notes, NoteMeta{ID: noteID, Title: title, UpdatedAt: updatedAt, Completed: completed})
 	meta.LastOpened = noteID
 }
 
@@ -203,7 +205,8 @@ func foldICS(s string) string {
 }
 
 // noteToVTODO converts note content to a VCALENDAR/VTODO string.
-func noteToVTODO(noteID, content string, updatedAt int64) string {
+// completed mirrors the checked state in iOS Reminders.
+func noteToVTODO(noteID, content string, updatedAt int64, completed bool) string {
 	title := "Note"
 	desc := ""
 	lines := strings.Split(content, "\n")
@@ -228,6 +231,13 @@ func noteToVTODO(noteID, content string, updatedAt int64) string {
 	stamp := t.Format("20060102T150405Z")
 	uid := noteID + "@arozos-notes"
 
+	statusLine := "STATUS:NEEDS-ACTION\r\n"
+	completedLines := ""
+	if completed {
+		statusLine = "STATUS:COMPLETED\r\n"
+		completedLines = "COMPLETED:" + stamp + "\r\nPERCENT-COMPLETE:100\r\n"
+	}
+
 	raw := fmt.Sprintf("BEGIN:VCALENDAR\r\n"+
 		"VERSION:2.0\r\n"+
 		"PRODID:-//ArozOS//Notes CalDAV//EN\r\n"+
@@ -238,17 +248,18 @@ func noteToVTODO(noteID, content string, updatedAt int64) string {
 		"DTSTAMP:%s\r\n"+
 		"LAST-MODIFIED:%s\r\n"+
 		"CREATED:%s\r\n"+
-		"STATUS:NEEDS-ACTION\r\n"+
-		"END:VTODO\r\n"+
+		"%s%sEND:VTODO\r\n"+
 		"END:VCALENDAR\r\n",
-		uid, escapeICS(title), escapeICS(desc), stamp, stamp, stamp)
+		uid, escapeICS(title), escapeICS(desc), stamp, stamp, stamp,
+		statusLine, completedLines)
 
 	return foldICS(raw)
 }
 
-// parseVTODO extracts summary, description, and UID from a VTODO.
+// parseVTODO extracts summary, description, uid and status from a VTODO.
+// status is "COMPLETED" when the item is checked off, otherwise "NEEDS-ACTION".
 // It handles both folded and unfolded iCalendar content.
-func parseVTODO(ics string) (summary, description, uid string) {
+func parseVTODO(ics string) (summary, description, uid, status string) {
 	// Unfold RFC-5545 folded lines (CRLF + space/tab)
 	ics = strings.ReplaceAll(ics, "\r\n ", "")
 	ics = strings.ReplaceAll(ics, "\r\n\t", "")
@@ -267,6 +278,8 @@ func parseVTODO(ics string) (summary, description, uid string) {
 			description = unescapeICS(strings.TrimPrefix(line, "DESCRIPTION:"))
 		case inTodo && strings.HasPrefix(line, "UID:"):
 			uid = strings.TrimPrefix(line, "UID:")
+		case inTodo && strings.HasPrefix(line, "STATUS:"):
+			status = strings.TrimSpace(strings.TrimPrefix(line, "STATUS:"))
 		}
 	}
 	return
@@ -403,6 +416,8 @@ func (s *Server) HandleRequest(w http.ResponseWriter, r *http.Request) {
 			switch r.Method {
 			case "PROPFIND":
 				s.handlePropfind(rec, r, path, username)
+			case "PROPPATCH":
+				s.handleProppatch(rec, r)
 			case "REPORT":
 				s.handleReport(rec, r, path, username)
 			case http.MethodGet, http.MethodHead:
@@ -412,7 +427,7 @@ func (s *Server) HandleRequest(w http.ResponseWriter, r *http.Request) {
 			case http.MethodDelete:
 				s.handleDelete(rec, r, path, username)
 			default:
-				rec.Header().Set("Allow", "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT")
+				rec.Header().Set("Allow", "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH, REPORT")
 				http.Error(rec, "Method Not Allowed", http.StatusMethodNotAllowed)
 			}
 			return
@@ -427,9 +442,27 @@ func (s *Server) HandleRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOptions(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Allow", "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT")
+	w.Header().Set("Allow", "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH, REPORT")
 	w.Header().Set("Content-Length", "0")
 	w.WriteHeader(http.StatusOK)
+}
+
+// handleProppatch accepts property-update requests from Apple clients (e.g. setting
+// calendar-color or calendar-order).  We don't persist those presentation hints but
+// we must respond with 207 so the client doesn't retry in a tight loop.
+func (s *Server) handleProppatch(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/xml; charset=UTF-8")
+	w.WriteHeader(207)
+	fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>%s</D:href>
+    <D:propstat>
+      <D:prop/>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+</D:multistatus>`, r.URL.Path)
 }
 
 // ---- PROPFIND ------------------------------------------------------------
@@ -705,7 +738,7 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request, path, user
 			continue
 		}
 		tag := etag(string(content))
-		vtodo := noteToVTODO(n.ID, string(content), n.UpdatedAt)
+		vtodo := noteToVTODO(n.ID, string(content), n.UpdatedAt, n.Completed)
 
 		var propEntries strings.Builder
 		if wantEtag {
@@ -780,13 +813,21 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request, path, usernam
 		}
 	}
 
+	completed := false
+	for _, n := range meta.Notes {
+		if n.ID == noteID {
+			completed = n.Completed
+			break
+		}
+	}
+
 	content, err := os.ReadFile(s.noteFilePath(username, noteID))
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 
-	vtodo := noteToVTODO(noteID, string(content), updatedAt)
+	vtodo := noteToVTODO(noteID, string(content), updatedAt, completed)
 	tag := etag(string(content))
 
 	w.Header().Set("Content-Type", "text/calendar; charset=UTF-8")
@@ -816,7 +857,8 @@ func (s *Server) handlePut(w http.ResponseWriter, r *http.Request, path, usernam
 		return
 	}
 
-	summary, description, _ := parseVTODO(string(body))
+	summary, description, _, status := parseVTODO(string(body))
+	completed := status == "COMPLETED"
 	noteContent := noteContentFromVTODO(summary, description)
 
 	if err := os.MkdirAll(s.notesDir(username), 0755); err != nil {
@@ -835,7 +877,7 @@ func (s *Server) handlePut(w http.ResponseWriter, r *http.Request, path, usernam
 	}
 
 	meta, _ := s.readMeta(username)
-	s.upsertNoteMeta(meta, noteID, title, now)
+	s.upsertNoteMeta(meta, noteID, title, now, completed)
 	s.writeMeta(username, meta)
 
 	tag := etag(noteContent)
