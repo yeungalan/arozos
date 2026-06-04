@@ -494,10 +494,11 @@ func (s *Server) handlePropfind(w http.ResponseWriter, r *http.Request, path, us
 }
 
 // propfindRootUnauthenticated handles unauthenticated PROPFIND on the CalDAV
-// root.  macOS/iOS accountsd sends this probe before it commits credentials;
-// responding 207 (not 401) lets setup proceed.  We point current-user-principal
-// at /principals/ which DOES require auth, so the client will be challenged
-// there and send its credentials.
+// root.  Per RFC 5397 §3, responding with <D:unauthenticated/> (inside a 207)
+// is the correct signal telling the client "you need to authenticate and
+// re-issue this request".  Returning a real href here tells the client it IS
+// already authenticated and causes macOS accountsd to follow the link, hit a
+// 401 on the principal URL, and loop instead of sending credentials.
 func (s *Server) propfindRootUnauthenticated(w http.ResponseWriter, prefix string) {
 	w.Header().Set("Content-Type", "application/xml; charset=UTF-8")
 	w.WriteHeader(207)
@@ -507,14 +508,14 @@ func (s *Server) propfindRootUnauthenticated(w http.ResponseWriter, prefix strin
     <D:href>%s/</D:href>
     <D:propstat>
       <D:prop>
-        <D:current-user-principal><D:href>%s/principals/</D:href></D:current-user-principal>
-        <D:principal-URL><D:href>%s/principals/</D:href></D:principal-URL>
+        <D:current-user-principal><D:unauthenticated/></D:current-user-principal>
+        <D:principal-URL><D:unauthenticated/></D:principal-URL>
         <D:resourcetype><D:collection/></D:resourcetype>
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
     </D:propstat>
   </D:response>
-</D:multistatus>`, prefix, prefix, prefix)
+</D:multistatus>`, prefix)
 }
 
 func (s *Server) propfindRoot(w http.ResponseWriter, username, prefix string) {
