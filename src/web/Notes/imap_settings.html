@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apple Notes / IMAP Sync</title>
+    <script src="../script/jquery.min.js"></script>
+    <script src="../script/ao_module.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 14px;
+            background: #1c1c1e;
+            color: #fff;
+            padding: 24px;
+            min-height: 100vh;
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .subtitle {
+            font-size: 13px;
+            opacity: 0.5;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .card {
+            background: #2c2c2e;
+            border-radius: 14px;
+            padding: 18px 20px;
+            margin-bottom: 14px;
+        }
+
+        .card-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            opacity: 0.45;
+            margin-bottom: 12px;
+        }
+
+        .field { margin-bottom: 12px; }
+        .field:last-child { margin-bottom: 0; }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+
+        input[type="number"], input[type="text"] {
+            width: 100%;
+            padding: 9px 12px;
+            border-radius: 9px;
+            border: 1px solid #3a3a3c;
+            background: #1c1c1e;
+            color: #fff;
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        input:focus { border-color: #0a84ff; }
+
+        .hint {
+            font-size: 11px;
+            opacity: 0.45;
+            margin-top: 4px;
+            line-height: 1.5;
+        }
+
+        .row2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        /* Toggle */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .toggle-label { font-size: 14px; font-weight: 500; }
+
+        .toggle { position: relative; width: 50px; height: 28px; flex-shrink: 0; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            inset: 0;
+            background: #3a3a3c;
+            border-radius: 28px;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+        .slider::before {
+            content: "";
+            position: absolute;
+            height: 22px; width: 22px;
+            left: 3px; bottom: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.2s;
+        }
+        .toggle input:checked + .slider { background: #30d158; }
+        .toggle input:checked + .slider::before { transform: translateX(22px); }
+
+        /* Buttons */
+        .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+        button {
+            padding: 10px 20px;
+            border-radius: 10px;
+            border: none;
+            font-size: 14px;
+            font-family: inherit;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.15s, transform 0.1s;
+        }
+        button:active { transform: scale(0.97); }
+        button:disabled { opacity: 0.4; cursor: default; }
+        .btn-primary   { background: #0a84ff; color: #fff; }
+        .btn-success   { background: #30d158; color: #fff; }
+        .btn-danger    { background: #ff453a; color: #fff; }
+        .btn-secondary { background: #3a3a3c; color: #fff; }
+
+        /* Status */
+        #statusBox {
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            line-height: 1.6;
+            display: none;
+        }
+        #statusBox.success { background: #1c3a22; border: 1px solid #30d158; }
+        #statusBox.error   { background: #3a1c1c; border: 1px solid #ff453a; }
+        #statusBox.info    { background: #1c2a3a; border: 1px solid #0a84ff; }
+
+        /* Instructions */
+        .steps { list-style: none; }
+        .steps li {
+            display: flex;
+            gap: 10px;
+            padding: 7px 0;
+            font-size: 13px;
+            border-bottom: 1px solid #38383a;
+            line-height: 1.5;
+        }
+        .steps li:last-child { border-bottom: none; }
+        .step-num {
+            background: #0a84ff;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #3a3a3c;
+            border-radius: 6px;
+            padding: 2px 7px;
+            font-size: 12px;
+            font-family: monospace;
+            color: #e0e0e0;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .status-indicator.on  { background: #30d158; box-shadow: 0 0 4px #30d15880; }
+        .status-indicator.off { background: #636366; }
+    </style>
+</head>
+<body>
+    <h1>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="4" width="20" height="16" rx="2"/>
+            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+        </svg>
+        IMAP Server for Apple Notes
+    </h1>
+    <p class="subtitle">
+        arozos acts as an IMAP server. Add it as a Mail account on your iPhone or Mac,
+        then enable Notes for that account — your arozos Notes will appear in Apple Notes.
+    </p>
+
+    <!-- Server status -->
+    <div class="card">
+        <div class="card-title">Server Status</div>
+        <div class="toggle-row">
+            <div>
+                <span class="status-indicator" id="statusDot"></span>
+                <span id="statusText">Checking…</span>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button class="btn-success" id="startBtn" onclick="startServer()" style="padding:8px 14px;font-size:13px;">Start</button>
+                <button class="btn-danger"  id="stopBtn"  onclick="stopServer()"  style="padding:8px 14px;font-size:13px;">Stop</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Port config -->
+    <div class="card">
+        <div class="card-title">Ports</div>
+        <div class="row2">
+            <div class="field">
+                <label for="port">Plain / STARTTLS Port</label>
+                <input type="number" id="port" value="1143" min="1" max="65535">
+                <div class="hint">Default 1143 (unprivileged). Standard is 143.</div>
+            </div>
+            <div class="field">
+                <label for="tlsPort">SSL/TLS Port</label>
+                <input type="number" id="tlsPort" value="1993" min="1" max="65535">
+                <div class="hint">Default 1993. Standard is 993.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TLS -->
+    <div class="card">
+        <div class="card-title">TLS / SSL</div>
+        <div class="toggle-row" style="margin-bottom:14px;">
+            <span class="toggle-label">Enable SSL on TLS port</span>
+            <label class="toggle">
+                <input type="checkbox" id="useTLS">
+                <span class="slider"></span>
+            </label>
+        </div>
+        <div class="row2">
+            <div class="field">
+                <label for="certFile">Certificate (.pem) — optional</label>
+                <input type="text" id="certFile" placeholder="auto-generated if empty">
+            </div>
+            <div class="field">
+                <label for="keyFile">Private Key (.pem) — optional</label>
+                <input type="text" id="keyFile" placeholder="auto-generated if empty">
+            </div>
+        </div>
+        <div class="hint" style="margin-top:4px;">
+            Leave blank to use the auto-generated self-signed certificate stored in
+            <span class="badge">system/imap_cert.pem</span>. You will need to install
+            this certificate as a trusted root on your Apple device.
+        </div>
+    </div>
+
+    <!-- Save + feedback -->
+    <div class="btn-row">
+        <button class="btn-primary" id="saveBtn" onclick="saveConfig()">Save &amp; Restart</button>
+        <button class="btn-secondary" onclick="ao_module_close()">Close</button>
+    </div>
+    <div id="statusBox"></div>
+
+    <!-- Setup instructions -->
+    <div class="card" style="margin-top:14px;">
+        <div class="card-title">How to connect Apple Notes</div>
+        <ol class="steps">
+            <li>
+                <span class="step-num">1</span>
+                <span>
+                    On iPhone/iPad: <strong>Settings → Mail → Accounts → Add Account → Other → Add Mail Account</strong>.<br>
+                    On Mac: <strong>System Settings → Internet Accounts → Add Account → Other Mail Account</strong>.
+                </span>
+            </li>
+            <li>
+                <span class="step-num">2</span>
+                <span>
+                    Enter any name, your arozos username as the email
+                    (e.g. <span class="badge">admin@arozos.local</span>), and your arozos password.
+                </span>
+            </li>
+            <li>
+                <span class="step-num">3</span>
+                <span>
+                    Set <strong>IMAP</strong>. Incoming mail server:
+                    <span class="badge" id="serverIP">your-arozos-ip</span>
+                    port <span class="badge" id="portBadge">1143</span>.
+                    Username = arozos username, Password = arozos password.
+                </span>
+            </li>
+            <li>
+                <span class="step-num">4</span>
+                <span>
+                    Outgoing (SMTP) is not used — enter any placeholder host and
+                    disable SMTP or skip it if possible.
+                </span>
+            </li>
+            <li>
+                <span class="step-num">5</span>
+                <span>
+                    After the account is added, go to <strong>Settings → Notes → Accounts</strong>
+                    and enable <strong>Notes</strong> for the new account.
+                </span>
+            </li>
+            <li>
+                <span class="step-num">6</span>
+                <span>
+                    Open the <strong>Notes</strong> app. Tap the back arrow to see
+                    account folders. Your arozos Notes appear under the new account's
+                    <em>Notes</em> folder.
+                </span>
+            </li>
+        </ol>
+    </div>
+
+    <script>
+    var currentConfig = {};
+
+    function showStatus(msg, type) {
+        var box = $('#statusBox');
+        box.removeClass('success error info').addClass(type).html(msg).show();
+    }
+
+    function updateServerUI(enabled) {
+        var dot  = $('#statusDot');
+        var text = $('#statusText');
+        if (enabled) {
+            dot.removeClass('off').addClass('on');
+            text.text('Running');
+            $('#startBtn').prop('disabled', true);
+            $('#stopBtn').prop('disabled', false);
+        } else {
+            dot.removeClass('on').addClass('off');
+            text.text('Stopped');
+            $('#startBtn').prop('disabled', false);
+            $('#stopBtn').prop('disabled', true);
+        }
+    }
+
+    function loadConfig() {
+        $.ajax({
+            url: '/system/notes/imap/config',
+            method: 'GET',
+            success: function(data) {
+                if (typeof data === 'string') { try { data = JSON.parse(data); } catch(e) {} }
+                currentConfig = data;
+                if (data.port)    $('#port').val(data.port);
+                if (data.tlsPort) $('#tlsPort').val(data.tlsPort);
+                $('#useTLS').prop('checked', !!data.useTLS);
+                if (data.certFile) $('#certFile').val(data.certFile);
+                if (data.keyFile)  $('#keyFile').val(data.keyFile);
+                updateServerUI(!!data.enabled);
+                $('#portBadge').text(data.port || 1143);
+            }
+        });
+    }
+
+    function saveConfig() {
+        $('#saveBtn').prop('disabled', true).text('Saving…');
+        $.ajax({
+            url: '/system/notes/imap/config',
+            method: 'POST',
+            data: {
+                port:     $('#port').val(),
+                tlsPort:  $('#tlsPort').val(),
+                useTLS:   $('#useTLS').is(':checked') ? 'true' : 'false',
+                certFile: $('#certFile').val(),
+                keyFile:  $('#keyFile').val(),
+                enabled:  currentConfig.enabled ? 'true' : 'false'
+            },
+            success: function() {
+                showStatus('Settings saved. Server restarted.', 'success');
+                loadConfig();
+                $('#portBadge').text($('#port').val());
+            },
+            error: function(xhr) {
+                showStatus('Error: ' + xhr.responseText, 'error');
+            },
+            complete: function() {
+                $('#saveBtn').prop('disabled', false).text('Save & Restart');
+            }
+        });
+    }
+
+    function startServer() {
+        $('#startBtn').prop('disabled', true).text('Starting…');
+        $.ajax({
+            url: '/system/notes/imap/start',
+            method: 'POST',
+            success: function() {
+                showStatus('IMAP server started on port ' + $('#port').val() + '.', 'success');
+                currentConfig.enabled = true;
+                updateServerUI(true);
+            },
+            error: function(xhr) {
+                showStatus('Failed to start: ' + xhr.responseText, 'error');
+            },
+            complete: function() {
+                $('#startBtn').prop('disabled', false).text('Start');
+            }
+        });
+    }
+
+    function stopServer() {
+        $('#stopBtn').prop('disabled', true).text('Stopping…');
+        $.ajax({
+            url: '/system/notes/imap/stop',
+            method: 'POST',
+            success: function() {
+                showStatus('IMAP server stopped.', 'info');
+                currentConfig.enabled = false;
+                updateServerUI(false);
+            },
+            error: function(xhr) {
+                showStatus('Failed to stop: ' + xhr.responseText, 'error');
+            },
+            complete: function() {
+                $('#stopBtn').prop('disabled', false).text('Stop');
+            }
+        });
+    }
+
+    // Try to show the server's IP address in the instructions.
+    (function() {
+        var host = window.location.hostname;
+        if (host && host !== 'localhost' && host !== '127.0.0.1') {
+            $('#serverIP').text(host);
+        }
+    })();
+
+    loadConfig();
+    </script>
+</body>
+</html>
