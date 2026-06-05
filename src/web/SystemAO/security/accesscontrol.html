@@ -3,313 +3,613 @@
 <head>
     <title>Access Control</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0 user-scalable=no">
-    <link rel="stylesheet" href="../../script/semantic/semantic.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script type="text/javascript" src="../../script/jquery.min.js"></script>
-    <script type="text/javascript" src="../../script/semantic/semantic.min.js"></script>
     <style>
-        #sys-setting-page { padding: 20px; }
-        a.pageFocus {
-            background: #222222;
-            color: white !important;
-            border-radius: 50%;
-            -moz-border-radius: 50%;
-            -webkit-border-radius: 50%;
-            display: inline-block;
-            font-weight: bold;
-            line-height: 30px;
-            margin-right: 2px;
-            text-align: center;
-            width: 30px;
+        *, *::before, *::after { box-sizing: border-box; }
+
+        :root {
+            --bg:                   #f3f3f3;
+            --text:                 #202020;
+            --text-dim:             #555;
+            --text-muted:           #888;
+            --title-color:          #1a1a1a;
+            --card-bg:              #ffffff;
+            --card-border:          #e5e5e5;
+            --input-bg:             #ffffff;
+            --input-border:         #d5d5d5;
+            --input-focus-border:   #888;
+            --divider:              #e8e8e8;
+            --table-header-bg:      #f5f5f5;
+            --table-row-hover:      #f9f9f9;
+            --scrollbar-thumb:      #c8c8c8;
+            --msgbox-bg:            #ffffff;
+            --msgbox-border:        #e0e0e0;
+            --toggle-off:           #d0d0d0;
+            --toggle-on:            #2196f3;
+            --btn-ghost-bg:         #f0f0f0;
+            --btn-ghost-border:     #d5d5d5;
+            --btn-ghost-hover:      #e5e5e5;
         }
 
-        .noselect {
-            -webkit-touch-callout: none; /* iOS Safari */
-            -webkit-user-select: none; /* Safari */
-            -khtml-user-select: none; /* Konqueror HTML */
-            -moz-user-select: none; /* Old versions of Firefox */
-            -ms-user-select: none; /* Internet Explorer/Edge */
-            user-select: none; /* Non-prefixed version, currently
-                                        supported by Chrome, Edge, Opera and Firefox */
+        body.dark {
+            --bg:                   #1f1f1f;
+            --text:                 #e3e3e3;
+            --text-dim:             #999;
+            --text-muted:           #666;
+            --title-color:          #f0f0f0;
+            --card-bg:              #2d2d2d;
+            --card-border:          #3a3a3a;
+            --input-bg:             #333333;
+            --input-border:         #4a4a4a;
+            --input-focus-border:   #888;
+            --divider:              #3a3a3a;
+            --table-header-bg:      #383838;
+            --table-row-hover:      #333333;
+            --scrollbar-thumb:      #555555;
+            --msgbox-bg:            #2d2d2d;
+            --msgbox-border:        #444444;
+            --toggle-off:           #505050;
+            --toggle-on:            #4c9dcb;
+            --btn-ghost-bg:         #3a3a3a;
+            --btn-ghost-border:     #4a4a4a;
+            --btn-ghost-hover:      #454545;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 14px;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .page-content {
+            padding: 24px 28px;
+            max-width: 820px;
+        }
+
+        .page-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--title-color);
+            margin: 0 0 4px 0;
+        }
+
+        .page-subtitle {
+            font-size: 12.5px;
+            color: var(--text-muted);
+            margin: 0 0 20px 0;
+        }
+
+        /* Section cards */
+        .section-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 18px 20px;
+            margin-bottom: 10px;
+            transition: border-color 0.08s;
+        }
+
+        .section-title {
+            font-size: 13.5px;
+            font-weight: 600;
+            color: var(--title-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .dot-green { background: #22c55e; }
+        .dot-red   { background: #ef4444; }
+
+        /* Toggle switch */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 38px;
+            height: 22px;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+
+        .toggle-track {
+            position: absolute;
+            inset: 0;
+            background: var(--toggle-off);
+            border-radius: 11px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .toggle-track::before {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            left: 3px;
+            top: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.2s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .toggle-switch input:checked + .toggle-track { background: var(--toggle-on); }
+        .toggle-switch input:checked + .toggle-track::before { transform: translateX(16px); }
+
+        .toggle-label {
+            font-size: 13px;
+            color: var(--text-dim);
+            user-select: none;
+            cursor: pointer;
+        }
+
+        /* Feedback bar */
+        .feedback-bar {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            background: rgba(34, 197, 94, 0.09);
+            border: 1px solid rgba(34, 197, 94, 0.25);
+            color: #15803d;
+            font-size: 12.5px;
+            margin-bottom: 14px;
+        }
+
+        body.dark .feedback-bar {
+            color: #4ade80;
+            background: rgba(74, 222, 128, 0.07);
+            border-color: rgba(74, 222, 128, 0.18);
+        }
+
+        /* Input row */
+        .input-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .input-row input[type="text"] {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 13px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.1s;
+            min-width: 0;
+        }
+
+        .input-row input[type="text"]:focus { border-color: var(--input-focus-border); }
+        .input-row input[type="text"]::placeholder { color: var(--text-muted); }
+
+        /* Buttons */
+        .btn {
+            padding: 8px 14px;
+            border-radius: 6px;
+            border: 1px solid transparent;
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: background 0.08s, border-color 0.08s, opacity 0.08s;
+            white-space: nowrap;
+        }
+
+        .btn-green {
+            background: #22c55e;
+            border-color: #16a34a;
+            color: #fff;
+        }
+        .btn-green:hover { background: #16a34a; }
+
+        .btn-red {
+            background: #ef4444;
+            border-color: #dc2626;
+            color: #fff;
+        }
+        .btn-red:hover { background: #dc2626; }
+
+        .btn-icon {
+            padding: 5px 8px;
+            background: transparent;
+            border-color: var(--divider);
+        }
+        .btn-icon-remove { color: #ef4444; }
+        .btn-icon-remove:hover { background: rgba(239,68,68,0.07); border-color: rgba(239,68,68,0.3); }
+
+        .btn-icon-unban { color: #22c55e; }
+        .btn-icon-unban:hover { background: rgba(34,197,94,0.07); border-color: rgba(34,197,94,0.3); }
+
+        .btn:disabled { opacity: 0.38; cursor: default; pointer-events: none; }
+
+        /* Table */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .data-table th {
+            text-align: left;
+            padding: 8px 12px;
+            background: var(--table-header-bg);
+            border-bottom: 1px solid var(--card-border);
+            font-weight: 500;
+            font-size: 11.5px;
+            color: var(--text-dim);
+            letter-spacing: 0.3px;
+        }
+
+        .data-table td {
+            padding: 9px 12px;
+            border-bottom: 1px solid var(--card-border);
+            color: var(--text);
+        }
+
+        .data-table tbody tr:last-child td { border-bottom: none; }
+        .data-table tbody tr:hover td { background: var(--table-row-hover); }
+
+        .empty-row td {
+            text-align: center;
+            padding: 22px 12px !important;
+            color: var(--text-muted) !important;
+            font-size: 12.5px;
+        }
+
+        /* Info banner */
+        .info-banner {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 14px 18px;
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            margin-top: 4px;
+        }
+
+        .info-icon { color: var(--text-muted); flex-shrink: 0; margin-top: 1px; }
+
+        .info-text {
+            font-size: 12.5px;
+            color: var(--text-dim);
+            line-height: 1.55;
+        }
+
+        .info-list {
+            margin: 6px 0 0 0;
+            padding-left: 16px;
+            list-style: disc;
+        }
+
+        .info-list li {
+            font-family: 'Courier New', Consolas, monospace;
+            font-size: 12px;
+            margin-bottom: 2px;
+            color: var(--text-dim);
+        }
+
+        /* Toast */
+        #msgbox {
+            position: fixed;
+            bottom: 14px;
+            right: 18px;
+            background: var(--msgbox-bg);
+            border: 1px solid var(--msgbox-border);
+            border-radius: 8px;
+            padding: 10px 16px;
+            font-size: 13px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.14);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            max-width: 300px;
+            color: var(--text);
+            transition: background 0.15s, border-color 0.15s;
         }
     </style>
 </head>
 <body>
-    <br>
-    <div class="ui container" id="sys-setting-page" style="height: 100% !important;">
-        <div>
-            <h3 class="ui header">
-                Access Control
-                <div class="sub header">Manage IPs from logging into this host</div>
-            </h3>
-            <div class="ui divider"></div>
-            <h3><i class="ui green checkmark icon"></i> Whitelist</h3>
-            <div class="ui toggle checkbox">
-                <input type="checkbox" id="enableWhiteList" onchange="">
-                <label>Enable Whitelist Filtering</label>
+    <div class="page-content">
+        <div class="page-title">Access Control</div>
+        <div class="page-subtitle">Manage IPs allowed to connect to this host</div>
+
+        <!-- Whitelist -->
+        <div class="section-card">
+            <div class="section-title">
+                <span class="dot dot-green"></span>
+                Whitelist
             </div>
-            <div class="ui inverted green segment" id="whitelistUpdateFeedback" style="display:none;">
-                <i class="ui checkmark icon"></i> Whitelist Status Updated
+            <div class="toggle-row">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="enableWhiteList">
+                    <span class="toggle-track"></span>
+                </label>
+                <span class="toggle-label" onclick="document.getElementById('enableWhiteList').click()">Enable Whitelist Filtering</span>
             </div>
-
-            <div class="ui basic segment">
-                <p>Add or Remove new whitelisted IP range</p>
-                <div class="ui action fluid input">
-                    <input type="text" id="whitelistIpRange" placeholder="192.168.1.100 - 192.168.1.250">
-                    <button class="ui green button" onclick="whitelistIpRange();"><i class="ui checkmark icon"></i> Add</button>
-                </div>
-
-                <table class="ui celled table">
-                    <thead>
-                        <tr><th>IP Range</th>
-                        <th>Remove</th>
-                    </tr></thead>
-                    <tbody id="whitelistTable">
-
-                    </tbody>
-                </table>
+            <div class="feedback-bar" id="whitelistUpdateFeedback">
+                <svg viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px;flex-shrink:0">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                </svg>
+                Whitelist status updated
             </div>
-
-
-            <div class="ui divider"></div>
-            <h3><i class="ui red remove icon"></i> Blacklist</h3>
-            <div class="ui toggle checkbox">
-                <input type="checkbox" id="enableBlacklist" onchange="updateBlacklistEnableState(this.checked);">
-                <label>Enable Blacklist Filtering</label>
+            <div class="input-row">
+                <input type="text" id="whitelistIpRange" placeholder="e.g. 192.168.1.100 or 192.168.0.100 - 192.168.0.250">
+                <button class="btn btn-green" onclick="addWhitelistIpRange();">
+                    <svg viewBox="0 0 20 20" fill="currentColor" style="width:12px;height:12px">
+                        <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd"/>
+                    </svg>
+                    Add
+                </button>
             </div>
-            <div class="ui inverted green segment" id="blacklistUpdateFeedback" style="display:none;">
-                <i class="ui checkmark icon"></i> Blacklist Status Updated
-            </div>
-            <div class="ui basic segment">
-                <p>Add or Remove new banned IP range</p>
-                <div class="ui action fluid input">
-                    <input type="text" id="blacklistIpRange" placeholder="192.168.1.100 - 192.168.1.250">
-                    <button class="ui red button" onclick="blacklistIpRange();"><i class="ui lock icon"></i> Ban</button>
-                </div>
-
-                <table class="ui celled table">
-                    <thead>
-                        <tr><th>IP Range</th>
-                        <th>Unban</th>
-                    </tr></thead>
-                    <tbody id="blacklisttable">
-
-                    </tbody>
-                </table>
-            </div>
-          
-           
-            <!-- 
-            <div class="ui divider"></div>
-            <h3>Regional Block</h3>
-            -->
-
-            <div class="ui divider"></div>
-            <div class="ui grey message">
-                <p><i class="ui info circle icon"></i> For Whitelist and Blacklist, you can enter either a single IP or an IP range. IP range syntax examples as follows.</p>
-                <div class="ui bulleted list">
-                    <div class="item">192.168.1.100</div>
-                    <div class="item">123.36.53.100</div>
-                    <div class="item">192.168.0.100 - 192.168.0.250</div>
-                </div>
-            </div>
-            <br><br>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>IP Range</th>
+                        <th style="width:72px">Remove</th>
+                    </tr>
+                </thead>
+                <tbody id="whitelistTable"></tbody>
+            </table>
         </div>
-    
+
+        <!-- Blacklist -->
+        <div class="section-card">
+            <div class="section-title">
+                <span class="dot dot-red"></span>
+                Blacklist
+            </div>
+            <div class="toggle-row">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="enableBlacklist" onchange="updateBlacklistEnableState(this.checked);">
+                    <span class="toggle-track"></span>
+                </label>
+                <span class="toggle-label" onclick="document.getElementById('enableBlacklist').click()">Enable Blacklist Filtering</span>
+            </div>
+            <div class="feedback-bar" id="blacklistUpdateFeedback">
+                <svg viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px;flex-shrink:0">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                </svg>
+                Blacklist status updated
+            </div>
+            <div class="input-row">
+                <input type="text" id="blacklistIpRange" placeholder="e.g. 192.168.1.100 or 192.168.0.100 - 192.168.0.250">
+                <button class="btn btn-red" onclick="addBlacklistIpRange();">
+                    <svg viewBox="0 0 20 20" fill="currentColor" style="width:12px;height:12px">
+                        <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+                    </svg>
+                    Ban
+                </button>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>IP Range</th>
+                        <th style="width:72px">Unban</th>
+                    </tr>
+                </thead>
+                <tbody id="blacklisttable"></tbody>
+            </table>
+        </div>
+
+        <!-- Info -->
+        <div class="info-banner">
+            <svg viewBox="0 0 20 20" fill="currentColor" class="info-icon" style="width:15px;height:15px">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+            </svg>
+            <div class="info-text">
+                You can enter a single IP address or a CIDR range. Examples:
+                <ul class="info-list">
+                    <li>192.168.1.100</li>
+                    <li>123.36.53.100</li>
+                    <li>192.168.0.100 - 192.168.0.250</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="msgbox">
+        <svg id="msgbox-icon" viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px;flex-shrink:0">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+        </svg>
+        <span id="msgbox-text"></span>
+    </div>
+
     <script>
-        //Init
+        // Dark mode sync with parent frame
+        try {
+            if (window.parent && window.parent.document.body.classList.contains('dark')) {
+                document.body.classList.add('dark');
+            }
+        } catch(e) {}
+
+        function showToast(message, isError) {
+            var icon = document.getElementById('msgbox-icon');
+            document.getElementById('msgbox-text').textContent = message;
+            icon.style.color = isError ? '#ef4444' : '#22c55e';
+            var box = document.getElementById('msgbox');
+            box.style.display = 'flex';
+            clearTimeout(box._timer);
+            box._timer = setTimeout(function(){ box.style.display = 'none'; }, 3500);
+        }
+
+        function showFeedback(id) {
+            var el = document.getElementById(id);
+            el.style.display = 'flex';
+            clearTimeout(el._timer);
+            el._timer = setTimeout(function(){ el.style.display = 'none'; }, 3000);
+        }
+
         var preloading = true;
-        $(".checkbox").checkbox();
-        initBlacklist();
         initWhiteList();
+        initBlacklist();
 
-        /*
-            Whitelist Related
-        */
+        /* ── Whitelist ── */
 
-        function initWhiteList(){
-            //Get the whitelist enable state
-            $.get("../../system/auth/whitelist/enable", function(data){
-                if (data == true){
-                    //Whitelist is enabled
-                    $("#enableWhiteList").parent().checkbox("set checked");
-                }else{
-                    $("#enableWhiteList").parent().checkbox("set unchecked");
-                }
-
-                $("#enableWhiteList").on("change", function(){
-                    //Toggle enable
+        function initWhiteList() {
+            $.get("../../system/auth/whitelist/enable", function(data) {
+                document.getElementById("enableWhiteList").checked = (data == true);
+                $("#enableWhiteList").off("change").on("change", function() {
                     $.ajax({
                         url: "../../system/auth/whitelist/enable",
                         method: "POST",
-                        data: {enable: this.checked},
-                        success: function(data){
-                            $("#whitelistUpdateFeedback").stop().finish().slideDown("fast").delay(3000).slideUp("fast");
-                        }
-                    })
-                })
-               
+                        data: { enable: this.checked },
+                        success: function() { showFeedback("whitelistUpdateFeedback"); }
+                    });
+                });
             });
 
-            //Get the whitelist table
-            $("#whitelistTable").html(`<tr>
-                <td colspan="3"><i class="loading spinner icon"></i> Loading</td>
-            </tr>`);
-            $.get("../../system/auth/whitelist/list", function(data){
-                $("#whitelistTable").html('');
-                data.forEach(entry => {
-                    //Strip out all space from record
-                    displayEntry = entry.split(" ").join("");
-
-                    //Check if this is reserved ip range
-                    var enableRemove = true;
-                    if (entry == "127.0.0.1"){
-                        enableRemove = false;
-                    }
-
-                    var removeButtonClass = ""
-                    if (!enableRemove){
-                        removeButtonClass = "disabled";
-                    }
-
-                    $("#whitelistTable").append(`<tr>
-                    <td>${displayEntry}</td>
-                    <td><button class="ui basic red ${removeButtonClass} icon button" onclick="removeWhitelistforIpRange(this);" range="${entry}"><i class="ui white remove icon"></i></button></td>
-                  </tr>`);
-                })
-
-                if (data.length == 0){
-                    $("#whitelistTable").html(`<tr>
-                        <td colspan="3"><i class="remove icon"></i> No Whitelisted IPs</td>
-                    </tr>`);
+            var tbody = document.getElementById("whitelistTable");
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="2">Loading…</td></tr>';
+            $.get("../../system/auth/whitelist/list", function(data) {
+                tbody.innerHTML = '';
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr class="empty-row"><td colspan="2">No whitelisted IPs</td></tr>';
+                    return;
                 }
+                data.forEach(function(entry) {
+                    var display = entry.split(" ").join("");
+                    var isReserved = (entry === "127.0.0.1");
+                    var row = document.createElement("tr");
+                    row.innerHTML = '<td>' + display + '</td><td>' +
+                        '<button class="btn btn-icon btn-icon-remove" onclick="removeWhitelistforIpRange(this);" range="' + entry + '"' + (isReserved ? ' disabled' : '') + '>' +
+                        '<svg viewBox="0 0 20 20" fill="currentColor" style="width:12px;height:12px"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>' +
+                        '</button></td>';
+                    tbody.appendChild(row);
+                });
             });
         }
 
-        function whitelistIpRange(){
-            var targetIP = $("#whitelistIpRange").val();
+        function addWhitelistIpRange() {
+            var targetIP = $("#whitelistIpRange").val().trim();
+            if (!targetIP) return;
             $.ajax({
                 url: "../../system/auth/whitelist/set",
                 method: "POST",
-                data: {iprange: targetIP},
-                success: function(data){
-                    if (data.error != undefined){
-                        alert(data.error);
-                    }else{
-                        $("#whitelistIpRange").val('')
+                data: { iprange: targetIP },
+                success: function(data) {
+                    if (data.error != undefined) {
+                        showToast(data.error, true);
+                    } else {
+                        $("#whitelistIpRange").val('');
                         initWhiteList();
                     }
-                    
                 }
             });
         }
 
-        function removeWhitelistforIpRange(object){
-            var unbanIpRange = $(object).attr("range");
+        function removeWhitelistforIpRange(object) {
+            var ipRange = $(object).attr("range");
             $.ajax({
                 url: "../../system/auth/whitelist/unset",
                 method: "POST",
-                data: {iprange: unbanIpRange},
-                success: function(data){
-                    if (data.error != undefined){
-                        alert(data.error);
-                    }else{
-                        $("#whitelistIpRange").val('')
+                data: { iprange: ipRange },
+                success: function(data) {
+                    if (data.error != undefined) {
+                        showToast(data.error, true);
+                    } else {
                         initWhiteList();
                     }
-                    
                 }
             });
         }
 
-        /*
+        /* ── Blacklist ── */
 
-            Blacklist Related
-
-        */
-        function initBlacklist(){
-            //Get the Blacklist enable state
-            $.get("../../system/auth/blacklist/enable", function(data){
-                if (data == true){
-                    //Blacklist is enabled
-                    $("#enableBlacklist").parent().checkbox("set checked");
-                }else{
-                    $("#enableBlacklist").parent().checkbox("set unchecked");
-                }
-
+        function initBlacklist() {
+            $.get("../../system/auth/blacklist/enable", function(data) {
+                document.getElementById("enableBlacklist").checked = (data == true);
                 preloading = false;
             });
 
-            //Get the Blacklist table
-            $("#blacklisttable").html(`<tr>
-                    <td colspan="3"><i class="loading spinner icon"></i> Loading</td>
-                </tr>`);
-            $.get("../../system/auth/blacklist/list", function(data){
-                $("#blacklisttable").html('');
-                data.forEach(entry => {
-                    //Strip out all space from record
-                    displayEntry = entry.split(" ").join("");
-                    $("#blacklisttable").append(`<tr>
-                    <td>${displayEntry}</td>
-                    <td><button class="ui green icon button" onclick="removeBlacklistforIpRange(this);" range="${entry}"><i class="ui white lock open icon"></i></button></td>
-                  </tr>`);
-                })
-
-                if (data.length == 0){
-                    $("#blacklisttable").html(`<tr>
-                        <td colspan="3"><i class="remove icon"></i> No Banned IPs</td>
-                    </tr>`);
+            var tbody = document.getElementById("blacklisttable");
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="2">Loading…</td></tr>';
+            $.get("../../system/auth/blacklist/list", function(data) {
+                tbody.innerHTML = '';
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr class="empty-row"><td colspan="2">No banned IPs</td></tr>';
+                    return;
                 }
-            })
+                data.forEach(function(entry) {
+                    var display = entry.split(" ").join("");
+                    var row = document.createElement("tr");
+                    row.innerHTML = '<td>' + display + '</td><td>' +
+                        '<button class="btn btn-icon btn-icon-unban" onclick="removeBlacklistforIpRange(this);" range="' + entry + '">' +
+                        '<svg viewBox="0 0 20 20" fill="currentColor" style="width:12px;height:12px"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z"/></svg>' +
+                        '</button></td>';
+                    tbody.appendChild(row);
+                });
+            });
         }
 
-        function updateBlacklistEnableState(enabled){
-            if (preloading){
-                //Do not update status during preload stage
-                return;
-            }
+        function updateBlacklistEnableState(enabled) {
+            if (preloading) return;
             $.ajax({
                 url: "../../system/auth/blacklist/enable",
                 method: "POST",
-                data: {enable: enabled},
-                success: function(data){
-                    $("#blacklistUpdateFeedback").stop().finish().slideDown("fast").delay(3000).slideUp("fast");
-                }
-            })
+                data: { enable: enabled },
+                success: function() { showFeedback("blacklistUpdateFeedback"); }
+            });
         }
 
-        function blacklistIpRange(){
-            var targetIP = $("#blacklistIpRange").val();
+        function addBlacklistIpRange() {
+            var targetIP = $("#blacklistIpRange").val().trim();
+            if (!targetIP) return;
             $.ajax({
                 url: "../../system/auth/blacklist/ban",
                 method: "POST",
-                data: {iprange: targetIP},
-                success: function(data){
-                    if (data.error != undefined){
-                        alert(data.error);
-                    }else{
-                        $("#blacklistIpRange").val('')
+                data: { iprange: targetIP },
+                success: function(data) {
+                    if (data.error != undefined) {
+                        showToast(data.error, true);
+                    } else {
+                        $("#blacklistIpRange").val('');
                         initBlacklist();
                     }
-                    
                 }
             });
         }
 
-        function removeBlacklistforIpRange(object){
-            var unbanIpRange = $(object).attr("range");
+        function removeBlacklistforIpRange(object) {
+            var ipRange = $(object).attr("range");
             $.ajax({
                 url: "../../system/auth/blacklist/unban",
                 method: "POST",
-                data: {iprange: unbanIpRange},
-                success: function(data){
-                    if (data.error != undefined){
-                        alert(data.error);
-                    }else{
-                        $("#blacklistIpRange").val('')
+                data: { iprange: ipRange },
+                success: function(data) {
+                    if (data.error != undefined) {
+                        showToast(data.error, true);
+                    } else {
                         initBlacklist();
                     }
-                    
                 }
             });
         }

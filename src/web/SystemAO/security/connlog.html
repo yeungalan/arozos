@@ -3,273 +3,501 @@
 <head>
     <title>Connection Log</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0 user-scalable=no">
-    <link rel="stylesheet" href="../../script/semantic/semantic.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script type="text/javascript" src="../../script/jquery.min.js"></script>
-    <script type="text/javascript" src="../../script/semantic/semantic.min.js"></script>
     <style>
-        #sys-setting-page { padding: 20px; }
-        a.pageFocus {
-            background: #222222;
-            color: white !important;
-            border-radius: 50%;
-            -moz-border-radius: 50%;
-            -webkit-border-radius: 50%;
-            display: inline-block;
-            font-weight: bold;
-            line-height: 30px;
-            margin-right: 2px;
-            text-align: center;
-            width: 30px;
+        *, *::before, *::after { box-sizing: border-box; }
+
+        :root {
+            --bg:                   #f3f3f3;
+            --text:                 #202020;
+            --text-dim:             #555;
+            --text-muted:           #888;
+            --title-color:          #1a1a1a;
+            --card-bg:              #ffffff;
+            --card-border:          #e5e5e5;
+            --input-bg:             #ffffff;
+            --input-border:         #d5d5d5;
+            --input-focus-border:   #888;
+            --table-header-bg:      #f5f5f5;
+            --table-row-hover:      #f9f9f9;
+            --scrollbar-thumb:      #c8c8c8;
+
+            --status-ok-bg:         rgba(34, 197, 94, 0.08);
+            --status-ok-border:     rgba(34, 197, 94, 0.22);
+            --status-ok-color:      #15803d;
+            --status-warn-bg:       rgba(234, 179, 8, 0.08);
+            --status-warn-border:   rgba(234, 179, 8, 0.22);
+            --status-warn-color:    #a16207;
+            --status-err-bg:        rgba(239, 68, 68, 0.08);
+            --status-err-border:    rgba(239, 68, 68, 0.22);
+            --status-err-color:     #dc2626;
+            --status-none-bg:       var(--card-bg);
+            --status-none-border:   var(--card-border);
+            --status-none-color:    var(--text-muted);
+
+            --page-btn-bg:          #f0f0f0;
+            --page-btn-border:      #d5d5d5;
+            --page-btn-active-bg:   #202020;
+            --page-btn-active-text: #ffffff;
         }
 
-        .noselect {
-            -webkit-touch-callout: none; /* iOS Safari */
-            -webkit-user-select: none; /* Safari */
-            -khtml-user-select: none; /* Konqueror HTML */
-            -moz-user-select: none; /* Old versions of Firefox */
-            -ms-user-select: none; /* Internet Explorer/Edge */
-            user-select: none; /* Non-prefixed version, currently
-                                        supported by Chrome, Edge, Opera and Firefox */
+        body.dark {
+            --bg:                   #1f1f1f;
+            --text:                 #e3e3e3;
+            --text-dim:             #999;
+            --text-muted:           #666;
+            --title-color:          #f0f0f0;
+            --card-bg:              #2d2d2d;
+            --card-border:          #3a3a3a;
+            --input-bg:             #333333;
+            --input-border:         #4a4a4a;
+            --input-focus-border:   #888;
+            --table-header-bg:      #383838;
+            --table-row-hover:      #333333;
+            --scrollbar-thumb:      #555555;
+
+            --status-ok-bg:         rgba(74, 222, 128, 0.07);
+            --status-ok-border:     rgba(74, 222, 128, 0.18);
+            --status-ok-color:      #4ade80;
+            --status-warn-bg:       rgba(250, 204, 21, 0.07);
+            --status-warn-border:   rgba(250, 204, 21, 0.18);
+            --status-warn-color:    #facc15;
+            --status-err-bg:        rgba(248, 113, 113, 0.07);
+            --status-err-border:    rgba(248, 113, 113, 0.18);
+            --status-err-color:     #f87171;
+            --status-none-bg:       var(--card-bg);
+            --status-none-border:   var(--card-border);
+            --status-none-color:    var(--text-muted);
+
+            --page-btn-bg:          #3a3a3a;
+            --page-btn-border:      #4a4a4a;
+            --page-btn-active-bg:   #e3e3e3;
+            --page-btn-active-text: #1f1f1f;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 14px;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .page-content {
+            padding: 24px 28px;
+        }
+
+        /* Status banner */
+        .status-banner {
+            border-radius: 10px;
+            border: 1px solid;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .status-banner.s-none   { background: var(--status-none-bg); border-color: var(--status-none-border); color: var(--status-none-color); }
+        .status-banner.s-ok     { background: var(--status-ok-bg);   border-color: var(--status-ok-border);   color: var(--status-ok-color); }
+        .status-banner.s-warn   { background: var(--status-warn-bg); border-color: var(--status-warn-border); color: var(--status-warn-color); }
+        .status-banner.s-err    { background: var(--status-err-bg);  border-color: var(--status-err-border);  color: var(--status-err-color); }
+
+        .status-eyebrow {
+            font-size: 10.5px;
+            font-weight: 600;
+            letter-spacing: 0.7px;
+            text-transform: uppercase;
+            opacity: 0.7;
+            margin-bottom: 4px;
+        }
+
+        .status-heading {
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+            line-height: 1.2;
+        }
+
+        .status-sub {
+            font-size: 12.5px;
+            margin-top: 5px;
+            opacity: 0.8;
+        }
+
+        /* Filter row */
+        .filter-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .filter-label {
+            font-size: 13px;
+            color: var(--text-dim);
+            white-space: nowrap;
+        }
+
+        select.period-select {
+            padding: 7px 30px 7px 11px;
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            background-color: var(--input-bg);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23888'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            background-size: 14px;
+            color: var(--text);
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+            outline: none;
+            appearance: none;
+            -webkit-appearance: none;
+            min-width: 150px;
+            transition: border-color 0.1s;
+        }
+
+        select.period-select:focus { border-color: var(--input-focus-border); }
+
+        /* Table card */
+        .table-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .data-table th {
+            text-align: left;
+            padding: 9px 14px;
+            background: var(--table-header-bg);
+            border-bottom: 1px solid var(--card-border);
+            font-weight: 500;
+            font-size: 11.5px;
+            color: var(--text-dim);
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+        }
+
+        .data-table td {
+            padding: 9px 14px;
+            border-bottom: 1px solid var(--card-border);
+            color: var(--text);
+            vertical-align: middle;
+        }
+
+        .data-table tbody tr:last-child td { border-bottom: none; }
+        .data-table tbody tr:hover td { background: var(--table-row-hover); }
+
+        .empty-row td {
+            text-align: center;
+            padding: 32px 14px !important;
+            color: var(--text-muted) !important;
+            font-size: 13px;
+        }
+
+        /* Status cell icons */
+        .icon-ok   { color: #22c55e; display: inline-flex; align-items: center; }
+        .icon-fail { color: #ef4444; display: inline-flex; align-items: center; }
+
+        /* Auth type badges */
+        .auth-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11.5px;
+            font-weight: 500;
+            background: var(--table-header-bg);
+            border: 1px solid var(--card-border);
+            color: var(--text-dim);
+            white-space: nowrap;
+        }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 12px 14px;
+            border-top: 1px solid var(--card-border);
+        }
+
+        .page-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+            border: 1px solid var(--page-btn-border);
+            background: var(--page-btn-bg);
+            color: var(--text);
+            font-size: 12.5px;
+            font-family: inherit;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.08s, border-color 0.08s;
+            user-select: none;
+        }
+
+        .page-btn:hover  { border-color: var(--text-muted); }
+        .page-btn.active {
+            background: var(--page-btn-active-bg);
+            border-color: var(--page-btn-active-bg);
+            color: var(--page-btn-active-text);
         }
     </style>
 </head>
 <body>
-    <div class="ui container" id="sys-setting-page" style="height: 100% !important;">
-        <div>
-            <p>Connection Attempts</p>
-            <h1 class="ui header">
-                <span id="normalStatus">Analysing</span>
-                <div class="sub header">
-                    <span id="loginAptCount"></span> login request logged this month with <span id="incorrectRatio"></span> incorrect password attempts.
-                </div>
-            </h1>
-            <div class="ui divider"></div>
-            <div class="ui fluid selection dropdown">
-                <input type="hidden" name="tablekey" onchange="loadRecords(this);">
-                <i class="dropdown icon"></i>
-                <div class="default text">Date</div>
-                <div id="recordTables" class="menu">
-
-                </div>
+    <div class="page-content">
+        <!-- Status Banner -->
+        <div class="status-banner s-none" id="statusBanner">
+            <div class="status-eyebrow">Connection Attempts</div>
+            <div class="status-heading" id="normalStatus">Analysing</div>
+            <div class="status-sub">
+                <span id="loginAptCount">—</span> login requests logged this month
+                &nbsp;·&nbsp;
+                <span id="incorrectRatio">—</span> incorrect password rate
             </div>
         </div>
-        <div class="ui divider"></div>
-        <div>
-            <table class="ui celled table">
+
+        <!-- Period filter -->
+        <div class="filter-row">
+            <span class="filter-label">Period:</span>
+            <select class="period-select" id="periodSelect" onchange="loadRecords(this);">
+                <option value="">Select month…</option>
+            </select>
+        </div>
+
+        <!-- Records table -->
+        <div class="table-card">
+            <table class="data-table">
                 <thead>
                     <tr>
-                        <th>Accepted</th>
+                        <th style="width:58px">Status</th>
                         <th>Timestamp</th>
-                        <th>Requested Account</th>
+                        <th>Account</th>
                         <th>IP Address</th>
-                        <th>Connection Type</th>
-                        <th>Access Port</th>
+                        <th>Type</th>
+                        <th style="width:76px">Port</th>
                     </tr>
                 </thead>
                 <tbody id="records">
-                
+                    <tr class="empty-row"><td colspan="6">Select a period to view records</td></tr>
                 </tbody>
             </table>
-            <div style="width: 100%" align="center">
-                <div class="ui breadcrumb" id="pageIndexs">
-                </div>
-            </div>
+            <div class="pagination" id="pagination" style="display:none"></div>
         </div>
-        <br><br>
     </div>
-    
+
     <script>
-        var monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun","Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        var monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
         var maxPage = 0;
         var recordPerPage = 20;
-        $(".ui.dropdown").dropdown();
+
+        // Dark mode sync with parent frame
+        try {
+            if (window.parent && window.parent.document.body.classList.contains('dark')) {
+                document.body.classList.add('dark');
+            }
+        } catch(e) {}
+
         initMonthList();
-       
-        //Get the table that belongs to today. Put in offset if the current month not found in list
-        function getCurrentMonthTable(monOffset = 0){
-            const d = new Date();
-            return monthNames[d.getMonth() - monOffset] + "-" + d.getFullYear()
+
+        function getCurrentMonthTable(monOffset) {
+            monOffset = monOffset || 0;
+            var d = new Date();
+            return monthNames[d.getMonth() - monOffset] + "-" + d.getFullYear();
         }
 
-        //Get the month list
-        function initMonthList(){
+        function initMonthList() {
             $.ajax({
                 url: "../../system/auth/logger/index",
-                success: function(data){
-                    var currentMonthTable = getCurrentMonthTable();
-                    var currentMontHTableExists = false;
-                    if (data.error){
-                        alert(data.error);
-                    }else{
-                        $("#recordTables").html("");
-                        data.forEach(tableName => {
-                            if (tableName == currentMonthTable){
-                                currentMontHTableExists = true;
-                            }
-                            $("#recordTables").append(`<div class="item" data-value="${tableName}">${tableName}</div>`);
-                        });
-
-                        if (data.length == 0){
-                            //No record
-                            $("#normalStatus").parent().attr("class","ui header");
-                            $("#normalStatus").text("No Record");
-                            $("#incorrectRatio").text("0%");
-                            $("#loginAptCount").text("0");
-                        }
+                success: function(data) {
+                    if (data.error) {
+                        setStatus("Error", "s-err");
+                        return;
                     }
 
-                    //Select the current month if it exists
-                    if (currentMontHTableExists){
-                        setTimeout(function(){
-                            $("#recordTables").parent().dropdown("set selected", getCurrentMonthTable());
-                        }, 500);
-                        loadRecordsByTableName(getCurrentMonthTable());
-                    }else{
-                        $("#normalStatus").text("No Record");
+                    var select = document.getElementById("periodSelect");
+                    while (select.options.length > 1) select.remove(1);
+
+                    var currentMonth = getCurrentMonthTable();
+                    var currentExists = false;
+
+                    data.forEach(function(tableName) {
+                        var opt = document.createElement("option");
+                        opt.value = tableName;
+                        opt.textContent = tableName;
+                        select.appendChild(opt);
+                        if (tableName === currentMonth) currentExists = true;
+                    });
+
+                    if (data.length === 0) {
+                        setStatus("No Record", "s-none");
+                        document.getElementById("loginAptCount").textContent = "0";
+                        document.getElementById("incorrectRatio").textContent = "0%";
+                        return;
                     }
-              
-                    
+
+                    if (currentExists) {
+                        select.value = currentMonth;
+                        loadRecordsByTableName(currentMonth);
+                    } else {
+                        setStatus("No Record", "s-none");
+                    }
                 }
             });
         }
 
-        function loadRecordsByTableName(tableName){
+        function setStatus(text, cls) {
+            var banner = document.getElementById("statusBanner");
+            banner.className = "status-banner " + cls;
+            document.getElementById("normalStatus").textContent = text;
+        }
+
+        function loadRecords(selectEl) {
+            var tableName = selectEl.value;
+            if (tableName) loadRecordsByTableName(tableName);
+        }
+
+        function loadRecordsByTableName(tableName) {
+            var tbody = document.getElementById("records");
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Loading…</td></tr>';
+            document.getElementById("pagination").style.display = "none";
+
             $.ajax({
                 url: "../../system/auth/logger/list",
-                data: {record: tableName},
-                success: function(data){
-                    $("#records").html("");
-                    $("#pageIndexs").html("");
-                    if (data.error !== undefined){
-                        $("#records").html(`<tr>
-                            <td data-label="status" colspan="5"><i class="remove icon"></i> ${data.error}</td>
-                        </tr>`);
-                    }else{
-                        if (data.length == 0){
-                            $("#records").html(`<tr>
-                                <td data-label="status" colspan="5"><i class="checkmark icon"></i> No login record in this time period.</td>
-                            </tr>`);
-                        }else{
-                            //console.log(data);
-                            //Reverse the array so the latest login on top
-                            var pageCounter = 1;
-                            var recordCounter = 0;
-                            var pageIndexs = [`<a class="active section pageLabel page1 noselect" onclick="showPage(1);">1</a>`];
-                            data.reverse();
-                            data.forEach(entry => {
-                                var timestamp = getDatetimeFromTimestamp(entry.Timestamp);
-                                var statusIcon = `<i class="green checkmark icon"></i>`;
-                                if (entry.LoginSucceed == false){
-                                    statusIcon = `<i class="red remove icon"></i>`;
-                                }
+                data: { record: tableName },
+                success: function(data) {
+                    tbody.innerHTML = '';
 
-                                var authType = entry.AuthType;
-                                if (authType == ""){
-                                    authType = "N/A"
-                                }else if (authType == "web"){
-                                    authType = `<i class="blue globe icon"></i> Web Interface`
-                                }else if (authType == "ftp"){
-                                    authType = `<i class="yellow folder icon"></i> FTP`
-                                }else if (authType == "webdav"){
-                                    authType = `<i class="blue folder icon"></i> WebDAV`
-                                }
-
-                                $("#records").append(`<tr class="recordItem page${pageCounter}">
-                                    <td data-label="status">${statusIcon}</td>
-                                    <td data-label="timestamp">${timestamp}</td>
-                                    <td data-label="acc">${entry.TargetUsername}</td>
-                                    <td data-label="ip">${entry.IpAddr}</td>
-                                    <td data-label="authtype">${authType}</td>
-                                    <td data-label="port">${entry.Port}</td>
-                                </tr>`);
-
-                                recordCounter++;
-                                if (recordCounter % recordPerPage == 0){
-                                    //Next page
-                                    pageCounter++;
-                                    pageIndexs.push(`<a class="section pageLabel page${pageCounter} noselect" onclick="showPage(${pageCounter});">${pageCounter}</a>`);
-                                }
-                            });
-
-                            $("#pageIndexs").html(pageIndexs.join(`<span class="divider">/</span>`));
-
-                            maxPage = pageCounter;
-                            updateSummaryText(data);
-                            showPage(1);
-                        }
+                    if (data.error !== undefined) {
+                        tbody.innerHTML = '<tr class="empty-row"><td colspan="6">' + data.error + '</td></tr>';
+                        return;
                     }
+
+                    if (data.length === 0) {
+                        tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No login records in this period</td></tr>';
+                        return;
+                    }
+
+                    data.reverse();
+                    var pageCounter = 1;
+                    var recordCounter = 0;
+                    var pageList = [1];
+
+                    data.forEach(function(entry) {
+                        var ts = getDatetimeFromTimestamp(entry.Timestamp);
+
+                        var statusHtml = entry.LoginSucceed
+                            ? '<span class="icon-ok"><svg viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg></span>'
+                            : '<span class="icon-fail"><svg viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg></span>';
+
+                        var authType = entry.AuthType;
+                        var authHtml;
+                        if (!authType || authType === "") {
+                            authHtml = '<span class="auth-badge">N/A</span>';
+                        } else if (authType === "web") {
+                            authHtml = '<span class="auth-badge"><svg viewBox="0 0 20 20" fill="currentColor" style="width:10px;height:10px;color:#3b82f6"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM4.332 8.027a6.012 6.012 0 011.912-2.706C6.512 5.73 6.974 6 7.5 6A1.5 1.5 0 019 7.5V8a2 2 0 004 0 2 2 0 011.523-1.943A5.977 5.977 0 0116 10c0 .34-.028.675-.083 1H15a2 2 0 00-2 2v2.197A5.973 5.973 0 0110 16v-2a2 2 0 00-2-2 2 2 0 01-2-2 2 2 0 00-1.668-1.973z" clip-rule="evenodd"/></svg>Web</span>';
+                        } else if (authType === "ftp") {
+                            authHtml = '<span class="auth-badge"><svg viewBox="0 0 20 20" fill="currentColor" style="width:10px;height:10px;color:#f59e0b"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>FTP</span>';
+                        } else if (authType === "webdav") {
+                            authHtml = '<span class="auth-badge"><svg viewBox="0 0 20 20" fill="currentColor" style="width:10px;height:10px;color:#3b82f6"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>WebDAV</span>';
+                        } else {
+                            authHtml = '<span class="auth-badge">' + authType + '</span>';
+                        }
+
+                        var row = document.createElement("tr");
+                        row.className = "recordItem page" + pageCounter;
+                        row.innerHTML =
+                            '<td>' + statusHtml + '</td>' +
+                            '<td style="white-space:nowrap;font-size:12.5px">' + ts + '</td>' +
+                            '<td>' + entry.TargetUsername + '</td>' +
+                            '<td style="font-family:\'Courier New\',monospace;font-size:12px">' + entry.IpAddr + '</td>' +
+                            '<td>' + authHtml + '</td>' +
+                            '<td style="font-size:12.5px">' + entry.Port + '</td>';
+                        tbody.appendChild(row);
+
+                        recordCounter++;
+                        if (recordCounter % recordPerPage === 0) {
+                            pageCounter++;
+                            pageList.push(pageCounter);
+                        }
+                    });
+
+                    maxPage = pageCounter;
+                    updateSummaryText(data);
+                    buildPagination(pageList);
+                    showPage(1);
                 }
             });
         }
 
-        function showPage(pageNumber){
-            if (pageNumber < 1){
-                pageNumber = 1;
-            }
-
-            if (pageNumber > maxPage){
-                pageNumber = maxPage;
-            }
-
-            $(".recordItem").hide();
-            $(`.recordItem.page${pageNumber}`).show();
-            $(".pageLabel.active").removeClass("active").removeClass("pageFocus");
-            $(`.pageLabel.page${pageNumber}`).addClass("active").addClass("pageFocus");
-        }
-
-        function loadRecords(object){
-            var tableName = object.value;
-            loadRecordsByTableName(tableName);
-        }
-
-        function updateSummaryText(records){
-            if (records.length == 0){
-                $("#normalStatus").parent().attr("class","ui header");
-                $("#normalStatus").text("No Record");
-                $("#loginAptCount").text("No ");
+        function buildPagination(pageList) {
+            var pag = document.getElementById("pagination");
+            if (pageList.length <= 1) {
+                pag.style.display = "none";
                 return;
             }
-            var succ = 0;
-            var failed = 0;
-
-            //Calculate the risk ratio
-            records.forEach(entry => {
-                if (entry.LoginSucceed){
-                    succ++;
-                }else{
-                    failed++;
-                }
+            pag.innerHTML = "";
+            pag.style.display = "flex";
+            pageList.forEach(function(n) {
+                var btn = document.createElement("button");
+                btn.className = "page-btn pageLabel page" + n;
+                btn.textContent = n;
+                btn.onclick = (function(num){ return function(){ showPage(num); }; })(n);
+                pag.appendChild(btn);
             });
-
-            //Do a quick summary
-            var failRatio = (failed) / (succ + failed) * 100;
-            if (failRatio > 70){
-                $("#normalStatus").parent().attr("class","ui red header");
-                $("#normalStatus").text("HIGH RISK");
-            }else if (failRatio > 50){
-                $("#normalStatus").parent().attr("class","ui yellow header");
-                $("#normalStatus").text("LOW RISK");
-            }else{
-                // No problem
-                $("#normalStatus").parent().attr("class","ui green header");
-                $("#normalStatus").text("Normal");
-                
-            }
-            $("#incorrectRatio").text(failRatio.toFixed(1) + "%");
-            $("#loginAptCount").text(succ + failed);
         }
 
-       function getDatetimeFromTimestamp(timestamp){
-            var s = new Date(timestamp * 1000);
-            var localOption =Intl.DateTimeFormat().resolvedOptions()
-            var options = { timeZone: 'UTC' };
-            if (localOption != undefined && localOption.timeZone != undefined){
-                options.timeZone = localOption.timeZone;
+        function showPage(pageNumber) {
+            if (pageNumber < 1) pageNumber = 1;
+            if (pageNumber > maxPage) pageNumber = maxPage;
+            document.querySelectorAll(".recordItem").forEach(function(el){ el.style.display = "none"; });
+            document.querySelectorAll(".recordItem.page" + pageNumber).forEach(function(el){ el.style.display = ""; });
+            document.querySelectorAll(".pageLabel").forEach(function(el){ el.classList.remove("active"); });
+            document.querySelectorAll(".pageLabel.page" + pageNumber).forEach(function(el){ el.classList.add("active"); });
+        }
+
+        function updateSummaryText(records) {
+            if (records.length === 0) {
+                setStatus("No Record", "s-none");
+                document.getElementById("loginAptCount").textContent = "0";
+                document.getElementById("incorrectRatio").textContent = "—";
+                return;
             }
-            
-            return s.toLocaleDateString(undefined,options) + " " +  s.toLocaleTimeString(undefined,options);
-       }
+            var succ = 0, failed = 0;
+            records.forEach(function(e){ if (e.LoginSucceed) succ++; else failed++; });
+            var failRatio = failed / (succ + failed) * 100;
+            var cls, label;
+            if (failRatio > 70)      { cls = "s-err";  label = "HIGH RISK"; }
+            else if (failRatio > 50) { cls = "s-warn"; label = "LOW RISK"; }
+            else                     { cls = "s-ok";   label = "Normal"; }
+            setStatus(label, cls);
+            document.getElementById("incorrectRatio").textContent = failRatio.toFixed(1) + "%";
+            document.getElementById("loginAptCount").textContent = succ + failed;
+        }
+
+        function getDatetimeFromTimestamp(timestamp) {
+            var s = new Date(timestamp * 1000);
+            var localOption = Intl.DateTimeFormat().resolvedOptions();
+            var options = { timeZone: 'UTC' };
+            if (localOption && localOption.timeZone) options.timeZone = localOption.timeZone;
+            return s.toLocaleDateString(undefined, options) + " " + s.toLocaleTimeString(undefined, options);
+        }
     </script>
 </body>
 </html>
