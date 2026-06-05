@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang/freetype"
@@ -52,14 +53,16 @@ type Options struct {
 }
 
 type Manager struct {
-	options Options
+	options   Options
+	zipJobs   map[string]*zipJob
+	zipJobMu  sync.RWMutex
 }
 
 // Create a new Share Manager
 func NewShareManager(options Options) *Manager {
-	//Return a new manager object
 	return &Manager{
 		options: options,
+		zipJobs: make(map[string]*zipJob),
 	}
 }
 
@@ -295,6 +298,24 @@ func (s *Manager) HandleShareAccess(w http.ResponseWriter, r *http.Request) {
 			}
 
 		} else if len(subpathElements) >= 3 {
+			// Handle async zip endpoints before the standard path parsing
+			if subpathElements[1] == "zip" {
+				if len(subpathElements) == 3 {
+					// /share/zip/{shareUUID} — start async zip job
+					s.handleStartZipJob(w, r, subpathElements[2])
+				} else if len(subpathElements) == 4 && subpathElements[2] == "progress" {
+					// /share/zip/progress/{jobID}
+					s.handleZipProgress(w, r, subpathElements[3])
+				} else if len(subpathElements) == 4 && subpathElements[2] == "download" {
+					// /share/zip/download/{jobID}
+					s.handleZipDownload(w, r, subpathElements[3])
+				} else {
+					w.WriteHeader(http.StatusBadRequest)
+					w.Write([]byte("400 - Invalid zip operation"))
+				}
+				return
+			}
+
 			//E.g. /share/download/{uuid} or /share/preview/{uuid}
 			id = subpathElements[2]
 			if subpathElements[1] == "download" {

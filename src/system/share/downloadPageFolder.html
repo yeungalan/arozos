@@ -285,6 +285,60 @@
       line-height: 1.5;
     }
 
+    .dl-progress-wrap {
+      display: none;
+      padding: 0 26px 18px;
+    }
+
+    .dl-progress-wrap.visible { display: block; }
+
+    .dl-progress-bar-bg {
+      background: var(--surface2);
+      border-radius: 99px;
+      height: 8px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+
+    .dl-progress-bar-fill {
+      background: var(--accent);
+      height: 100%;
+      width: 0%;
+      border-radius: 99px;
+      transition: width 0.25s ease;
+    }
+
+    .dl-progress-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .dl-progress-file {
+      font-size: 0.72rem;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .btn:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .dl-error {
+      font-size: 0.78rem;
+      color: #e05252;
+      padding: 0 26px 10px;
+      display: none;
+    }
+
+    .dl-error.visible { display: block; }
+
     .info-footer {
       padding: 12px 26px;
       background: var(--surface2);
@@ -672,15 +726,28 @@
         <div class="divider"></div>
 
         <div class="action-stack">
-          <a class="btn btn-primary" href="{{downloadurl}}" id="downloadLink">
+          <button class="btn btn-primary" id="downloadBtn" onclick="startAsyncDownload()">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-            <span>Download All</span>
-          </a>
+            <span id="downloadBtnLabel">Download All</span>
+          </button>
           <button class="btn btn-secondary" id="sharebtn" onclick="doShare()">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
             <span>Share Link</span>
           </button>
         </div>
+
+        <div class="dl-progress-wrap" id="dlProgressWrap">
+          <div class="dl-progress-bar-bg">
+            <div class="dl-progress-bar-fill" id="dlProgressBar"></div>
+          </div>
+          <div class="dl-progress-row">
+            <span id="dlProgressStatus">Preparing…</span>
+            <span id="dlProgressPct">0%</span>
+          </div>
+          <div class="dl-progress-file" id="dlProgressFile"></div>
+        </div>
+
+        <div class="dl-error" id="dlError"></div>
 
         <div class="compress-row">
           <input type="checkbox" id="uncompressedCheck" name="uncompressed">
@@ -799,10 +866,103 @@
       }).catch(function(){});
     }
 
-    document.getElementById('uncompressedCheck').addEventListener('change', function() {
-      var link = document.getElementById('downloadLink');
-      link.href = this.checked ? '{{downloadurl}}?compression_level=0' : '{{downloadurl}}';
-    });
+    var activeSSE = null;
+
+    function startAsyncDownload() {
+      var btn = document.getElementById('downloadBtn');
+      var label = document.getElementById('downloadBtnLabel');
+      var progressWrap = document.getElementById('dlProgressWrap');
+      var progressBar = document.getElementById('dlProgressBar');
+      var progressStatus = document.getElementById('dlProgressStatus');
+      var progressPct = document.getElementById('dlProgressPct');
+      var progressFile = document.getElementById('dlProgressFile');
+      var errorBox = document.getElementById('dlError');
+
+      if (activeSSE) { activeSSE.close(); activeSSE = null; }
+
+      btn.disabled = true;
+      label.textContent = 'Preparing…';
+      progressBar.style.width = '0%';
+      progressPct.textContent = '0%';
+      progressStatus.textContent = 'Starting…';
+      progressFile.textContent = '';
+      errorBox.textContent = '';
+      errorBox.classList.remove('visible');
+      progressWrap.classList.add('visible');
+
+      var qs = document.getElementById('uncompressedCheck').checked ? '?compression_level=0' : '';
+      var startUrl = '../../share/zip/' + downloadUUID + qs;
+
+      fetch(startUrl)
+        .then(function(r) {
+          if (!r.ok) throw new Error('Server error ' + r.status);
+          return r.json();
+        })
+        .then(function(data) {
+          var jobId = data.jobId;
+          progressStatus.textContent = 'Zipping files…';
+
+          var sse = new EventSource('../../share/zip/progress/' + jobId);
+          activeSSE = sse;
+
+          sse.onmessage = function(e) {
+            var ev;
+            try { ev = JSON.parse(e.data); } catch(_) { return; }
+
+            if (ev.status === 'pending' || ev.status === 'running') {
+              var pct = ev.progress ? ev.progress.toFixed(1) : '0';
+              progressBar.style.width = pct + '%';
+              progressPct.textContent = Math.round(ev.progress || 0) + '%';
+              if (ev.filesTotal > 0) {
+                progressStatus.textContent = 'Zipping ' + ev.filesDone + ' / ' + ev.filesTotal + ' files';
+              }
+              if (ev.currentFile) {
+                progressFile.textContent = ev.currentFile;
+              }
+            } else if (ev.status === 'done') {
+              sse.close(); activeSSE = null;
+              progressBar.style.width = '100%';
+              progressPct.textContent = '100%';
+              progressStatus.textContent = 'Download starting…';
+              progressFile.textContent = '';
+              label.textContent = 'Download All';
+              btn.disabled = false;
+              window.location.href = '../../share/zip/download/' + jobId;
+              setTimeout(function() {
+                progressWrap.classList.remove('visible');
+                progressStatus.textContent = 'Preparing…';
+                progressBar.style.width = '0%';
+                progressPct.textContent = '0%';
+              }, 4000);
+            } else if (ev.status === 'failed') {
+              sse.close(); activeSSE = null;
+              progressWrap.classList.remove('visible');
+              errorBox.textContent = 'Zip failed: ' + (ev.error || 'unknown error');
+              errorBox.classList.add('visible');
+              label.textContent = 'Download All';
+              btn.disabled = false;
+            }
+          };
+
+          sse.onerror = function() {
+            sse.close(); activeSSE = null;
+            if (btn.disabled) {
+              progressWrap.classList.remove('visible');
+              errorBox.textContent = 'Connection lost. Please try again.';
+              errorBox.classList.add('visible');
+              label.textContent = 'Download All';
+              btn.disabled = false;
+            }
+          };
+        })
+        .catch(function(err) {
+          progressWrap.classList.remove('visible');
+          errorBox.textContent = 'Failed to start: ' + err.message;
+          errorBox.classList.add('visible');
+          label.textContent = 'Download All';
+          btn.disabled = false;
+        });
+    }
 
     var treeFileList = {{treelist}};
     var downloadUUID = '{{downloaduuid}}';
@@ -1076,7 +1236,6 @@
 
       if (totalSize > 0 && compressedSize / totalSize >= 0.5) {
         document.getElementById('uncompressedCheck').checked = true;
-        document.getElementById('downloadLink').href = '{{downloadurl}}?compression_level=0';
       }
     })();
 
