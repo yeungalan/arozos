@@ -13,10 +13,12 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 
-	"imuslab.com/arozos/mod/filesystem"
 	imapsrv "imuslab.com/arozos/mod/imapserver"
 	prout "imuslab.com/arozos/mod/prouter"
 	"imuslab.com/arozos/mod/utils"
@@ -155,20 +157,26 @@ func imapAuthenticate(username, password string) bool {
 	return authAgent.ValidateUsernameAndPassword(username, password)
 }
 
-// imapResolveNotesDir maps "user:/Document/Notes" to a real filesystem path.
+// imapResolveNotesDir resolves "user:/Document/Notes" to a real OS path using
+// the same mechanism as the web Notes module (init.agi → filelib.mkdir).
+// It also creates the directory if it doesn't exist yet.
 func imapResolveNotesDir(username string) (string, error) {
-	const vpath = "user:/Document/Notes"
-	vrootID, _, err := filesystem.GetIDFromVirtualPath(vpath)
+	userinfo, err := userHandler.GetUserInfoFromUsername(username)
+	if err != nil {
+		return "", fmt.Errorf("user not found: %w", err)
+	}
+	fsh, err := userinfo.GetFileSystemHandlerFromVirtualPath("user:/")
+	if err != nil {
+		return "", fmt.Errorf("user filesystem unavailable: %w", err)
+	}
+	realPath, err := fsh.FileSystemAbstraction.VirtualPathToRealPath("user:/Document/Notes", username)
 	if err != nil {
 		return "", err
 	}
-	fsh, err := GetFsHandlerByUUID(vrootID)
-	if err != nil {
-		return "", err
+	dir := filepath.Clean(realPath)
+	// Mirror what Notes init.agi does: ensure the directory exists.
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("cannot create notes dir: %w", err)
 	}
-	realPath, err := fsh.FileSystemAbstraction.VirtualPathToRealPath(vpath, username)
-	if err != nil {
-		return "", err
-	}
-	return realPath, nil
+	return dir, nil
 }
