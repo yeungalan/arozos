@@ -1,0 +1,74 @@
+/*
+    Contacts - Group operations
+    POST: action (list|create|rename|delete)
+          groupId   - required for rename/delete
+          groupName - required for create/rename
+*/
+requirelib("filelib");
+
+var groupsPath = "user:/Document/Contacts/groups.json";
+
+var groupsData = { groups: [] };
+if (filelib.fileExists(groupsPath)) {
+    try {
+        var raw = filelib.readFile(groupsPath);
+        var parsed = JSON.parse(raw);
+        if (parsed && parsed.groups) groupsData = parsed;
+    } catch(e) {}
+}
+
+if (action === "list") {
+    sendJSONResp(groupsData.groups);
+
+} else if (action === "create") {
+    var safeName = (groupName || "").replace(/[<>&"]/g, "").trim();
+    if (!safeName) {
+        sendJSONResp({ error: "Group name required" });
+    } else {
+        var newId = "grp_" + new Date().getTime().toString(36) + Math.random().toString(36).slice(2,6);
+        groupsData.groups.push({ id: newId, name: safeName, createdAt: new Date().getTime() });
+        filelib.writeFile(groupsPath, JSON.stringify(groupsData));
+        sendJSONResp({ ok: true, id: newId });
+    }
+
+} else if (action === "rename") {
+    var safeGid = (groupId || "").replace(/[^a-zA-Z0-9_-]/g, "");
+    var safeName2 = (groupName || "").replace(/[<>&"]/g, "").trim();
+    if (!safeGid || !safeName2) {
+        sendJSONResp({ error: "Missing parameters" });
+    } else {
+        var found = false;
+        for (var i = 0; i < groupsData.groups.length; i++) {
+            if (groupsData.groups[i].id === safeGid) {
+                groupsData.groups[i].name = safeName2;
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            filelib.writeFile(groupsPath, JSON.stringify(groupsData));
+            sendJSONResp({ ok: true });
+        } else {
+            sendJSONResp({ error: "Group not found" });
+        }
+    }
+
+} else if (action === "delete") {
+    var safeGid2 = (groupId || "").replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!safeGid2) {
+        sendJSONResp({ error: "Invalid group ID" });
+    } else {
+        var newGroups = [];
+        for (var j = 0; j < groupsData.groups.length; j++) {
+            if (groupsData.groups[j].id !== safeGid2) {
+                newGroups.push(groupsData.groups[j]);
+            }
+        }
+        groupsData.groups = newGroups;
+        filelib.writeFile(groupsPath, JSON.stringify(groupsData));
+        sendJSONResp({ ok: true });
+    }
+
+} else {
+    sendJSONResp({ error: "Unknown action: " + action });
+}

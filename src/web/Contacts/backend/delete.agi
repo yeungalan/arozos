@@ -1,0 +1,38 @@
+/*
+    Contacts - Delete a contact
+    POST: contactId (string)
+*/
+requirelib("filelib");
+
+var baseDir   = "user:/Document/Contacts";
+var indexPath = "user:/Document/Contacts/index.json";
+
+var safeId = contactId.replace(/[^a-zA-Z0-9_-]/g, "");
+if (!safeId || safeId !== contactId) {
+    sendJSONResp({ error: "Invalid contact ID" });
+} else {
+    var path = baseDir + "/" + safeId + ".json";
+    if (filelib.fileExists(path)) {
+        filelib.deleteFile(path);
+    }
+
+    var index = { contacts: [] };
+    if (filelib.fileExists(indexPath)) {
+        try {
+            var raw = filelib.readFile(indexPath);
+            var parsed = JSON.parse(raw);
+            if (parsed && parsed.contacts) index = parsed;
+        } catch(e) {}
+    }
+
+    var remaining = [];
+    for (var i = 0; i < index.contacts.length; i++) {
+        if (index.contacts[i].id !== safeId) {
+            remaining.push(index.contacts[i]);
+        }
+    }
+    index.contacts = remaining;
+    filelib.writeFile(indexPath, JSON.stringify(index));
+
+    sendJSONResp({ ok: true });
+}

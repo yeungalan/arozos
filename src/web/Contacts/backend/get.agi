@@ -1,0 +1,23 @@
+/*
+    Contacts - Get single contact
+    POST: contactId (string)
+*/
+requirelib("filelib");
+
+var safeId = contactId.replace(/[^a-zA-Z0-9_-]/g, "");
+if (!safeId || safeId !== contactId) {
+    sendJSONResp({ error: "Invalid contact ID" });
+} else {
+    var path = "user:/Document/Contacts/" + safeId + ".json";
+    if (!filelib.fileExists(path)) {
+        sendJSONResp({ error: "Contact not found" });
+    } else {
+        try {
+            var raw = filelib.readFile(path);
+            var contact = JSON.parse(raw);
+            sendJSONResp(contact);
+        } catch(e) {
+            sendJSONResp({ error: "Failed to parse contact" });
+        }
+    }
+}

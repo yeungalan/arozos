@@ -1,0 +1,32 @@
+/*
+    Contacts - Initialize
+    Creates the Contacts directory, returns all contacts (index) + groups.
+    No POST params required.
+*/
+requirelib("filelib");
+
+var baseDir    = "user:/Document/Contacts";
+var indexPath  = "user:/Document/Contacts/index.json";
+var groupsPath = "user:/Document/Contacts/groups.json";
+
+filelib.mkdir(baseDir);
+
+var index = { contacts: [] };
+if (filelib.fileExists(indexPath)) {
+    try {
+        var raw = filelib.readFile(indexPath);
+        var parsed = JSON.parse(raw);
+        if (parsed && parsed.contacts) index = parsed;
+    } catch(e) {}
+}
+
+var groupsData = { groups: [] };
+if (filelib.fileExists(groupsPath)) {
+    try {
+        var raw2 = filelib.readFile(groupsPath);
+        var parsed2 = JSON.parse(raw2);
+        if (parsed2 && parsed2.groups) groupsData = parsed2;
+    } catch(e) {}
+}
+
+sendJSONResp({ contacts: index.contacts, groups: groupsData.groups });

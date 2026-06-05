@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contacts</title>
+    <script src="../script/jquery.min.js"></script>
+    <script src="../script/ao_module.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+            --bg:         #ebebeb;
+            --groups-bg:  #dcdcdc;
+            --list-bg:    #f0f0f0;
+            --detail-bg:  #ffffff;
+            --border:     #c8c8c8;
+            --sep:        #e0e0e0;
+            --text:       #1d1d1f;
+            --text2:      #666;
+            --text3:      #aaa;
+            --accent:     #1d6ae5;
+            --accent-bg:  rgba(29,106,229,0.12);
+            --selected-bg:#1d6ae5;
+            --selected-fg:#ffffff;
+            --hover:      rgba(0,0,0,0.06);
+            --action-bg:  #e8e8ed;
+            --action-fg:  #1d6ae5;
+            --danger:     #ff3b30;
+            --input-bg:   rgba(0,0,0,0.06);
+            --label-w:    110px;
+        }
+
+        body.dark {
+            --bg:         #1c1c1e;
+            --groups-bg:  #252527;
+            --list-bg:    #1c1c1e;
+            --detail-bg:  #2c2c2e;
+            --border:     #3a3a3c;
+            --sep:        #38383a;
+            --text:       #f2f2f7;
+            --text2:      #8e8e93;
+            --text3:      #48484a;
+            --accent:     #0a84ff;
+            --accent-bg:  rgba(10,132,255,0.15);
+            --selected-bg:#1d6ae5;
+            --selected-fg:#ffffff;
+            --hover:      rgba(255,255,255,0.07);
+            --action-bg:  #3a3a3c;
+            --action-fg:  #0a84ff;
+            --danger:     #ff453a;
+            --input-bg:   rgba(255,255,255,0.08);
+        }
+
+        html, body { height: 100%; overflow: hidden; font-family: var(--font); color: var(--text); background: var(--bg); font-size: 13px; }
+
+        /* ── App shell ─────────────────────────────────────────────── */
+        .app { display: flex; height: 100%; overflow: hidden; }
+
+        /* ── Dividers ───────────────────────────────────────────────── */
+        .divider { width: 1px; background: var(--border); flex-shrink: 0; }
+
+        /* ── Groups panel ───────────────────────────────────────────── */
+        .p-groups {
+            width: 175px; min-width: 175px;
+            background: var(--groups-bg);
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+        .p-groups .ph {
+            height: 40px; padding: 0 12px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            font-size: 11px; font-weight: 700;
+            color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em;
+            flex-shrink: 0;
+        }
+        .groups-list { flex: 1; overflow-y: auto; padding: 5px 0; }
+        .group-sep { height: 1px; background: var(--border); margin: 4px 10px; }
+        .g-item {
+            display: flex; align-items: center;
+            height: 28px; padding: 0 12px;
+            cursor: pointer; border-radius: 6px; margin: 1px 6px;
+            font-size: 13px; color: var(--text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            user-select: none; gap: 7px;
+        }
+        .g-item:hover { background: var(--hover); }
+        .g-item.active { background: var(--accent); color: #fff; }
+        .g-item svg { flex-shrink: 0; opacity: 0.7; }
+        .g-item.active svg { opacity: 1; }
+        .p-groups .pf {
+            height: 34px; border-top: 1px solid var(--border);
+            display: flex; align-items: center; padding: 0 8px;
+            flex-shrink: 0;
+        }
+
+        /* ── Contacts list panel ────────────────────────────────────── */
+        .p-list {
+            width: 222px; min-width: 222px;
+            background: var(--list-bg);
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+        .p-list .search-wrap {
+            padding: 7px 9px; border-bottom: 1px solid var(--sep);
+            flex-shrink: 0;
+        }
+        .search-box {
+            display: flex; align-items: center;
+            background: var(--input-bg);
+            border-radius: 8px; padding: 0 8px; height: 26px; gap: 5px;
+        }
+        .search-box svg { flex-shrink: 0; color: var(--text3); }
+        .search-box input {
+            flex: 1; background: none; border: none; outline: none;
+            font-size: 12.5px; color: var(--text); font-family: var(--font);
+        }
+        .search-box input::placeholder { color: var(--text3); }
+        .contacts-list { flex: 1; overflow-y: auto; }
+        .letter-hdr {
+            padding: 6px 13px 2px; font-size: 11px; font-weight: 700;
+            color: var(--text2); letter-spacing: 0.05em;
+            background: var(--list-bg); position: sticky; top: 0; z-index: 1;
+        }
+        .c-row {
+            height: 33px; display: flex; align-items: center;
+            padding: 0 13px; cursor: pointer;
+            border-radius: 6px; margin: 1px 5px;
+            font-size: 13px; user-select: none;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .c-row:hover { background: var(--hover); }
+        .c-row.active { background: var(--selected-bg); color: var(--selected-fg); }
+        .p-list .pf {
+            height: 34px; border-top: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 10px; font-size: 11.5px; color: var(--text2);
+            flex-shrink: 0;
+        }
+
+        /* ── Detail panel ───────────────────────────────────────────── */
+        .p-detail {
+            flex: 1; background: var(--detail-bg);
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+        .detail-tb {
+            height: 40px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: flex-end;
+            padding: 0 14px; gap: 7px; flex-shrink: 0;
+        }
+        .detail-scroll { flex: 1; overflow-y: auto; }
+
+        /* Empty state */
+        .empty-st {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            color: var(--text3); gap: 10px; height: 100%;
+        }
+        .empty-st-icon { font-size: 52px; }
+        .empty-st-text { font-size: 14px; }
+
+        /* Contact card view */
+        .card-head {
+            display: flex; flex-direction: column; align-items: center;
+            padding: 22px 20px 16px; text-align: center;
+        }
+        .avatar-lg {
+            width: 88px; height: 88px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 36px; font-weight: 300; color: #fff;
+            margin-bottom: 10px; flex-shrink: 0;
+            background-size: cover; background-position: center;
+            background-repeat: no-repeat;
+        }
+        .card-name { font-size: 24px; font-weight: 600; letter-spacing: -0.2px; margin-bottom: 3px; }
+        .card-sub  { font-size: 13px; color: var(--text2); margin-bottom: 12px; }
+        .action-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+        .act-btn {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 3px; background: var(--action-bg); border: none;
+            border-radius: 10px; padding: 8px 14px; cursor: pointer;
+            font-family: var(--font); font-size: 11px; font-weight: 500;
+            color: var(--action-fg); min-width: 58px; transition: opacity 0.15s;
+        }
+        .act-btn:hover { opacity: 0.72; }
+        .act-btn .ai { font-size: 18px; }
+
+        /* Card fields */
+        .card-sep { height: 1px; background: var(--sep); margin: 0 18px; }
+        .field-section { padding: 4px 18px 6px; }
+        .field-row {
+            display: flex; align-items: flex-start;
+            padding: 4px 0; border-bottom: 1px solid var(--sep);
+        }
+        .field-row:last-child { border-bottom: none; }
+        .f-lbl {
+            width: var(--label-w); min-width: var(--label-w);
+            font-size: 11.5px; color: var(--text2);
+            text-align: right; padding-right: 14px; padding-top: 1px;
+            line-height: 1.55;
+        }
+        .f-val { flex: 1; font-size: 13px; color: var(--text); line-height: 1.55; }
+        .f-val.link { color: var(--accent); cursor: pointer; }
+        .f-val.link:hover { text-decoration: underline; }
+        .f-val.pre { white-space: pre-line; }
+
+        /* ── Edit form ──────────────────────────────────────────────── */
+        .edit-tb {
+            height: 40px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 12px; flex-shrink: 0;
+        }
+        .edit-title { font-size: 13px; font-weight: 600; }
+        .edit-form { padding: 16px 20px; overflow-y: auto; flex: 1; }
+        .avatar-edit-wrap { display: flex; justify-content: center; margin-bottom: 20px; }
+        .avatar-edit {
+            width: 76px; height: 76px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 30px; color: #fff; cursor: pointer;
+            position: relative; overflow: hidden; flex-shrink: 0;
+            background-size: cover; background-position: center;
+        }
+        .avatar-edit-ol {
+            position: absolute; inset: 0; display: flex; align-items: flex-end;
+            justify-content: center; background: rgba(0,0,0,0.0);
+            font-size: 10px; color: #fff; padding-bottom: 6px;
+            transition: background 0.2s;
+        }
+        .avatar-edit:hover .avatar-edit-ol { background: rgba(0,0,0,0.38); }
+        .name-row { display: flex; gap: 8px; margin-bottom: 3px; }
+        .fi { /* form input */
+            width: 100%; height: 34px; background: var(--input-bg);
+            border: 1.5px solid transparent; border-radius: 7px;
+            padding: 0 10px; font-size: 13px; color: var(--text);
+            font-family: var(--font); outline: none; margin-bottom: 3px;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .fi:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-bg);
+            background: var(--detail-bg);
+        }
+        textarea.fi { height: auto; padding-top: 8px; resize: none; }
+        .fs-hdr { /* form section header */
+            font-size: 11px; font-weight: 700; color: var(--text2);
+            text-transform: uppercase; letter-spacing: 0.07em;
+            margin: 14px 0 6px;
+        }
+        .dyn-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+        .dyn-row.addr-row { align-items: flex-start; }
+        .type-sel {
+            width: 88px; min-width: 88px; height: 34px;
+            background: var(--input-bg); border: 1.5px solid transparent;
+            border-radius: 7px; padding: 0 8px; font-size: 12px;
+            color: var(--text2); font-family: var(--font); outline: none;
+            cursor: pointer; appearance: none; -webkit-appearance: none;
+        }
+        .rm-btn {
+            width: 22px; height: 22px; border-radius: 50%;
+            background: var(--danger); color: #fff; border: none;
+            cursor: pointer; font-size: 18px; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; padding-bottom: 1px;
+        }
+        .add-btn {
+            display: flex; align-items: center; gap: 6px;
+            background: none; border: none; cursor: pointer;
+            font-size: 13px; color: var(--accent); padding: 5px 0;
+            font-family: var(--font); font-weight: 500;
+        }
+        .add-btn .plus-circle {
+            width: 22px; height: 22px; border-radius: 50%;
+            background: #34c759; color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; font-weight: 300; padding-bottom: 1px; flex-shrink: 0;
+        }
+        .addr-sub {
+            flex: 1; background: var(--input-bg); border-radius: 9px;
+            padding: 5px; display: flex; flex-direction: column; gap: 3px;
+        }
+        .addr-sub .fi { margin-bottom: 0; }
+        .addr-line2 { display: flex; gap: 4px; }
+        .addr-line2 .fi:first-child { flex: 1; }
+        .addr-line2 .fi:last-child { width: 72px; }
+        .group-cb-row {
+            display: flex; align-items: center; gap: 8px; padding: 4px 0;
+        }
+        .group-cb-row input[type=checkbox] { cursor: pointer; }
+        .group-cb-row label { cursor: pointer; font-size: 13px; }
+        .del-contact-section {
+            margin-top: 22px; padding-top: 14px;
+            border-top: 1px solid var(--sep); text-align: center;
+        }
+
+        /* ── Buttons ────────────────────────────────────────────────── */
+        .btn {
+            height: 28px; border: none; border-radius: 6px;
+            cursor: pointer; font-size: 12.5px; font-family: var(--font);
+            padding: 0 13px; font-weight: 500; transition: opacity 0.15s;
+        }
+        .btn:hover { opacity: 0.78; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-secondary { background: var(--action-bg); color: var(--text); }
+        .btn-danger { background: none; color: var(--danger); padding: 0; }
+        .icon-btn {
+            width: 27px; height: 27px; background: none; border: none;
+            border-radius: 6px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text); font-size: 16px; transition: background 0.12s;
+        }
+        .icon-btn:hover { background: var(--hover); }
+        .icon-btn.accent { color: var(--accent); }
+
+        /* ── Snackbar ───────────────────────────────────────────────── */
+        #snackbar {
+            position: fixed; bottom: 22px; left: 50%;
+            transform: translateX(-50%) translateY(8px);
+            background: rgba(30,30,30,0.88); color: #fff;
+            padding: 8px 18px; border-radius: 10px;
+            font-size: 13px; opacity: 0; pointer-events: none;
+            transition: opacity 0.22s, transform 0.22s; z-index: 9999;
+        }
+        #snackbar.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        /* ── Scrollbars ─────────────────────────────────────────────── */
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.25); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.45); }
+
+        /* ── No-contact / loading ───────────────────────────────────── */
+        .loading-row { padding: 20px; text-align: center; color: var(--text3); font-size: 12px; }
+    </style>
+</head>
+<body>
+<div class="app">
+
+    <!-- ── Panel 1: Groups ──────────────────────────────────────────────── -->
+    <div class="p-groups">
+        <div class="ph">
+            <span>Groups</span>
+        </div>
+        <div class="groups-list" id="groupsList"></div>
+        <div class="pf">
+            <button class="icon-btn accent" id="addGroupBtn" title="New group">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── Panel 2: Contacts list ──────────────────────────────────────── -->
+    <div class="p-list">
+        <div class="search-wrap">
+            <div class="search-box">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <circle cx="5.5" cy="5.5" r="4.5" stroke="currentColor" stroke-width="1.4"/>
+                    <path d="M9 9l2.5 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                </svg>
+                <input id="searchInput" type="search" placeholder="Search">
+            </div>
+        </div>
+        <div class="contacts-list" id="contactsList"></div>
+        <div class="pf">
+            <span id="contactsCount">0 cards</span>
+            <button class="icon-btn accent" id="addContactBtn" title="New contact">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── Panel 3: Detail ──────────────────────────────────────────────── -->
+    <div class="p-detail" id="pDetail">
+        <div class="empty-st">
+            <div class="empty-st-icon">👤</div>
+            <div class="empty-st-text">No contact selected</div>
+        </div>
+    </div>
+
+</div>
+
+<div id="snackbar"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════
+var S = {
+    contacts:      [],   // index entries {id,firstName,lastName,company,groups,updatedAt}
+    groups:        [],   // {id,name,createdAt}
+    activeGroup:   'all',
+    activeId:      null,
+    activeContact: null,
+    editMode:      false,
+    searchQuery:   '',
+    isDark:        false
+};
+
+// ════════════════════════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════════════════════════
+var AVATAR_COLORS = [
+    '#FF6B6B','#FF8E53','#FFC048','#51CF66',
+    '#20C997','#339AF0','#7C50FA','#F06595',
+    '#5C7CFA','#E64980','#74C0FC','#63E6BE'
+];
+
+function avatarColor(str) {
+    var h = 0;
+    for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+    return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+}
+
+function initials(c) {
+    var f = (c.firstName || '').trim(), l = (c.lastName || '').trim();
+    if (f && l) return (f[0] + l[0]).toUpperCase();
+    if (f) return f[0].toUpperCase();
+    if (l) return l[0].toUpperCase();
+    if (c.company) return c.company[0].toUpperCase();
+    return '?';
+}
+
+function displayName(c) {
+    var f = (c.firstName || '').trim(), l = (c.lastName || '').trim();
+    if (f && l) return f + ' ' + l;
+    return f || l || c.company || 'No Name';
+}
+
+function genId() {
+    return 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function mkEl(tag, cls, txt) {
+    var el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (txt !== undefined) el.textContent = txt;
+    return el;
+}
+
+function mkInput(type, val, ph) {
+    var el = document.createElement('input');
+    el.type = type || 'text'; el.value = val || ''; el.placeholder = ph || '';
+    el.className = 'fi';
+    return el;
+}
+
+function mkSelect(opts, sel) {
+    var s = document.createElement('select'); s.className = 'type-sel';
+    opts.forEach(function(o) {
+        var op = document.createElement('option');
+        op.value = o; op.textContent = o;
+        if (o === sel) op.selected = true;
+        s.appendChild(op);
+    });
+    return s;
+}
+
+// ════════════════════════════════════════════════════════════
+//  API
+// ════════════════════════════════════════════════════════════
+function apiInit(cb) {
+    ao_module_agirun('Contacts/backend/init.agi', {}, function(d) {
+        try { cb(typeof d === 'string' ? JSON.parse(d) : d); } catch(e) { cb({contacts:[],groups:[]}); }
+    }, function() { cb({contacts:[],groups:[]}); });
+}
+
+function apiGet(id, cb) {
+    ao_module_agirun('Contacts/backend/get.agi', {contactId:id}, function(d) {
+        try { cb(typeof d === 'string' ? JSON.parse(d) : d); } catch(e) { cb(null); }
+    }, function() { cb(null); });
+}
+
+function apiCreate(contact, cb) {
+    ao_module_agirun('Contacts/backend/create.agi', {contactData:JSON.stringify(contact)}, function(d) {
+        try { cb(typeof d === 'string' ? JSON.parse(d) : d); } catch(e) { cb({error:e.toString()}); }
+    }, function() { cb({error:'Request failed'}); });
+}
+
+function apiUpdate(id, contact, cb) {
+    ao_module_agirun('Contacts/backend/update.agi', {contactId:id, contactData:JSON.stringify(contact)}, function(d) {
+        try { var r=typeof d==='string'?JSON.parse(d):d; if(cb)cb(r); } catch(e) { if(cb)cb({error:e.toString()}); }
+    }, function() { if(cb)cb({error:'Request failed'}); });
+}
+
+function apiDelete(id, cb) {
+    ao_module_agirun('Contacts/backend/delete.agi', {contactId:id}, function(d) {
+        try { cb(typeof d === 'string' ? JSON.parse(d) : d); } catch(e) { cb({error:e.toString()}); }
+    }, function() { cb({error:'Request failed'}); });
+}
+
+function apiGroup(action, params, cb) {
+    var p = Object.assign({action:action}, params);
+    ao_module_agirun('Contacts/backend/groups.agi', p, function(d) {
+        try { cb(typeof d === 'string' ? JSON.parse(d) : d); } catch(e) { cb({error:e.toString()}); }
+    }, function() { cb({error:'Request failed'}); });
+}
+
+// ════════════════════════════════════════════════════════════
+//  COMPUTED
+// ════════════════════════════════════════════════════════════
+function filteredContacts() {
+    var list = S.contacts.slice();
+    if (S.activeGroup !== 'all') {
+        list = list.filter(function(c) { return c.groups && c.groups.indexOf(S.activeGroup) !== -1; });
+    }
+    var q = S.searchQuery.toLowerCase().trim();
+    if (q) {
+        list = list.filter(function(c) {
+            return displayName(c).toLowerCase().indexOf(q) !== -1 ||
+                   (c.company||'').toLowerCase().indexOf(q) !== -1;
+        });
+    }
+    list.sort(function(a,b) {
+        var la=(a.lastName||a.firstName||a.company||'').toLowerCase();
+        var lb=(b.lastName||b.firstName||b.company||'').toLowerCase();
+        if (la<lb) return -1; if (la>lb) return 1;
+        var fa=(a.firstName||'').toLowerCase(), fb=(b.firstName||'').toLowerCase();
+        if (fa<fb) return -1; if (fa>fb) return 1; return 0;
+    });
+    return list;
+}
+
+// ════════════════════════════════════════════════════════════
+//  RENDER — GROUPS
+// ════════════════════════════════════════════════════════════
+function renderGroups() {
+    var list = document.getElementById('groupsList');
+    list.innerHTML = '';
+
+    // All Contacts
+    var allItem = mkEl('div', 'g-item' + (S.activeGroup === 'all' ? ' active' : ''));
+    allItem.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="5" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M2 12c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+    allItem.appendChild(document.createTextNode('All Contacts'));
+    allItem.addEventListener('click', function() { selectGroup('all'); });
+    list.appendChild(allItem);
+
+    if (S.groups.length > 0) {
+        list.appendChild(mkEl('div', 'group-sep'));
+        S.groups.forEach(function(g) {
+            var item = mkEl('div', 'g-item' + (S.activeGroup === g.id ? ' active' : ''));
+            item.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 4h12M1 4a1 1 0 011-1h3.28l.72-1h2l.72 1H12a1 1 0 011 1v8a1 1 0 01-1 1H2a1 1 0 01-1-1V4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+            item.appendChild(document.createTextNode(g.name));
+            item.addEventListener('click', function() { selectGroup(g.id); });
+            item.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                showGroupCtx(e, g);
+            });
+            list.appendChild(item);
+        });
+    }
+}
+
+// ════════════════════════════════════════════════════════════
+//  RENDER — CONTACTS LIST
+// ════════════════════════════════════════════════════════════
+function renderContactsList() {
+    var list = document.getElementById('contactsList');
+    list.innerHTML = '';
+    var contacts = filteredContacts();
+
+    if (contacts.length === 0) {
+        var empty = mkEl('div', 'loading-row', S.searchQuery ? 'No results' : 'No contacts');
+        list.appendChild(empty);
+        document.getElementById('contactsCount').textContent = '0 cards';
+        return;
+    }
+
+    var curLetter = '';
+    contacts.forEach(function(c) {
+        var sortKey = (c.lastName || c.firstName || c.company || '#');
+        var letter  = sortKey[0].toUpperCase();
+        if (!/[A-Z]/.test(letter)) letter = '#';
+        if (letter !== curLetter) {
+            curLetter = letter;
+            list.appendChild(mkEl('div', 'letter-hdr', letter));
+        }
+        var row = mkEl('div', 'c-row' + (c.id === S.activeId ? ' active' : ''), displayName(c));
+        row.dataset.id = c.id;
+        row.addEventListener('click', function() { selectContact(c.id); });
+        list.appendChild(row);
+    });
+
+    var n = contacts.length;
+    document.getElementById('contactsCount').textContent = n + ' card' + (n !== 1 ? 's' : '');
+}
+
+// ════════════════════════════════════════════════════════════
+//  RENDER — DETAIL VIEW
+// ════════════════════════════════════════════════════════════
+function renderDetail() {
+    var panel = document.getElementById('pDetail');
+    panel.innerHTML = '';
+
+    if (!S.activeContact) {
+        panel.innerHTML = '<div class="empty-st"><div class="empty-st-icon">👤</div><div class="empty-st-text">No contact selected</div></div>';
+        return;
+    }
+
+    var c = S.activeContact;
+    var color = avatarColor(c.id);
+    var inits = initials(c);
+    var name  = displayName(c);
+
+    /* toolbar */
+    var tb = mkEl('div', 'detail-tb');
+    var shareBtn = mkEl('button', 'btn btn-secondary', 'Share');
+    shareBtn.title = 'Export as vCard (.vcf)';
+    shareBtn.addEventListener('click', function() { exportVCard(c); });
+    var editBtn = mkEl('button', 'btn btn-primary', 'Edit');
+    editBtn.addEventListener('click', function() { renderEdit(c); });
+    tb.appendChild(shareBtn);
+    tb.appendChild(editBtn);
+    panel.appendChild(tb);
+
+    var scroll = mkEl('div', 'detail-scroll');
+
+    /* header: avatar + name + company */
+    var head = mkEl('div', 'card-head');
+    var av = mkEl('div', 'avatar-lg');
+    av.style.background = color;
+    if (c.photo) {
+        av.style.backgroundImage = 'url("' + esc(c.photo) + '")';
+    } else {
+        av.textContent = inits;
+    }
+    head.appendChild(av);
+    head.appendChild(mkEl('div', 'card-name', name));
+
+    var subParts = [];
+    if (c.jobTitle) subParts.push(c.jobTitle);
+    if (c.company)  subParts.push(c.company);
+    if (subParts.length) head.appendChild(mkEl('div', 'card-sub', subParts.join(' · ')));
+
+    /* action buttons */
+    var hasPhone = c.phones && c.phones.filter(function(p){return p.value;}).length > 0;
+    var hasEmail = c.emails && c.emails.filter(function(e){return e.value;}).length > 0;
+    if (hasPhone || hasEmail) {
+        var row = mkEl('div', 'action-row');
+        if (hasPhone) {
+            var pv = c.phones.filter(function(p){return p.value;})[0].value;
+            row.appendChild(makeActBtn('📞', 'Call', function() { window.location.href='tel:'+pv.replace(/\s/g,''); }));
+            row.appendChild(makeActBtn('💬', 'Message', function() { window.location.href='sms:'+pv.replace(/\s/g,''); }));
+        }
+        if (hasEmail) {
+            var ev = c.emails.filter(function(e){return e.value;})[0].value;
+            row.appendChild(makeActBtn('✉️', 'Mail', function() { window.location.href='mailto:'+ev; }));
+        }
+        head.appendChild(row);
+    }
+    scroll.appendChild(head);
+
+    /* separator */
+    scroll.appendChild(mkEl('div', 'card-sep'));
+
+    /* phones */
+    addFieldSection(scroll, c.phones, function(p) { return { label: p.label||'phone', value: p.value, link: 'tel:'+p.value.replace(/\s/g,'') }; });
+
+    /* emails */
+    addFieldSection(scroll, c.emails, function(e) { return { label: e.label||'email', value: e.value, link: 'mailto:'+e.value }; });
+
+    /* urls */
+    addFieldSection(scroll, c.urls, function(u) { return { label: u.label||'url', value: u.value, link: u.value }; });
+
+    /* addresses */
+    if (c.addresses && c.addresses.length) {
+        var validAddrs = c.addresses.filter(function(a){return a.street||a.city||a.state;});
+        if (validAddrs.length) {
+            var sec = mkEl('div', 'field-section');
+            validAddrs.forEach(function(a) {
+                var frow = mkEl('div', 'field-row');
+                frow.appendChild(mkEl('div', 'f-lbl', a.label || 'address'));
+                var parts = [];
+                if (a.street) parts.push(a.street);
+                var line2 = [a.city, a.state].filter(Boolean).join(', ');
+                if (a.zip) line2 += (line2 ? ' ' : '') + a.zip;
+                if (line2) parts.push(line2);
+                if (a.country) parts.push(a.country);
+                var vEl = mkEl('div', 'f-val link pre', parts.join('\n'));
+                vEl.addEventListener('click', function() {
+                    window.open('https://maps.apple.com/?q=' + encodeURIComponent(parts.join(', ')), '_blank');
+                });
+                frow.appendChild(vEl);
+                sec.appendChild(frow);
+            });
+            scroll.appendChild(sec);
+        }
+    }
+
+    /* birthday */
+    if (c.birthday) {
+        var bsec = mkEl('div', 'field-section');
+        var brow = mkEl('div', 'field-row');
+        brow.appendChild(mkEl('div', 'f-lbl', 'birthday'));
+        var bval = mkEl('div', 'f-val');
+        try {
+            var bp = c.birthday.split('-');
+            bval.textContent = new Date(parseInt(bp[0]), parseInt(bp[1])-1, parseInt(bp[2]))
+                .toLocaleDateString(undefined, {month:'long', day:'numeric', year:'numeric'});
+        } catch(e) { bval.textContent = c.birthday; }
+        brow.appendChild(bval);
+        bsec.appendChild(brow);
+        scroll.appendChild(bsec);
+    }
+
+    /* notes */
+    if (c.notes && c.notes.trim()) {
+        var nsec = mkEl('div', 'field-section');
+        var nrow = mkEl('div', 'field-row');
+        nrow.appendChild(mkEl('div', 'f-lbl', 'notes'));
+        var nval = mkEl('div', 'f-val pre', c.notes);
+        nrow.appendChild(nval);
+        nsec.appendChild(nrow);
+        scroll.appendChild(nsec);
+    }
+
+    /* groups membership */
+    if (c.groups && c.groups.length && S.groups.length) {
+        var gnames = c.groups.map(function(gid) {
+            var g = findById(S.groups, gid);
+            return g ? g.name : null;
+        }).filter(Boolean);
+        if (gnames.length) {
+            var gsec = mkEl('div', 'field-section');
+            var grow = mkEl('div', 'field-row');
+            grow.appendChild(mkEl('div', 'f-lbl', 'groups'));
+            grow.appendChild(mkEl('div', 'f-val', gnames.join(', ')));
+            gsec.appendChild(grow);
+            scroll.appendChild(gsec);
+        }
+    }
+
+    panel.appendChild(scroll);
+}
+
+function makeActBtn(icon, label, onClick) {
+    var btn = mkEl('button', 'act-btn');
+    btn.innerHTML = '<span class="ai">' + icon + '</span>' + esc(label);
+    btn.addEventListener('click', onClick);
+    return btn;
+}
+
+function addFieldSection(scroll, fields, mapper) {
+    if (!fields || !fields.length) return;
+    var valid = fields.filter(function(f) { return f.value && f.value.trim(); });
+    if (!valid.length) return;
+    var sec = mkEl('div', 'field-section');
+    valid.forEach(function(f) {
+        var mapped = mapper(f);
+        var frow = mkEl('div', 'field-row');
+        frow.appendChild(mkEl('div', 'f-lbl', mapped.label));
+        var vEl;
+        if (mapped.link) {
+            vEl = mkEl('div', 'f-val link', mapped.value);
+            (function(href) {
+                vEl.addEventListener('click', function() { window.open(href, '_blank'); });
+            })(mapped.link);
+        } else {
+            vEl = mkEl('div', 'f-val', mapped.value);
+        }
+        frow.appendChild(vEl);
+        sec.appendChild(frow);
+    });
+    scroll.appendChild(sec);
+}
+
+// ════════════════════════════════════════════════════════════
+//  RENDER — EDIT FORM
+// ════════════════════════════════════════════════════════════
+function renderEdit(existingContact) {
+    var panel = document.getElementById('pDetail');
+    panel.innerHTML = '';
+    S.editMode = true;
+
+    var isNew = !existingContact;
+    var c = existingContact ? JSON.parse(JSON.stringify(existingContact)) : {
+        id: genId(), firstName:'', lastName:'', company:'', jobTitle:'',
+        department:'', phones:[], emails:[], urls:[], addresses:[],
+        birthday:'', notes:'', groups:[], photo:'',
+        createdAt: Date.now(), updatedAt: Date.now()
+    };
+    if (!c.phones)    c.phones    = [];
+    if (!c.emails)    c.emails    = [];
+    if (!c.urls)      c.urls      = [];
+    if (!c.addresses) c.addresses = [];
+    if (!c.groups)    c.groups    = [];
+
+    /* edit toolbar */
+    var tb = mkEl('div', 'edit-tb');
+    var cancelBtn = mkEl('button', 'btn btn-secondary', 'Cancel');
+    var doneBtn   = mkEl('button', 'btn btn-primary', 'Done');
+    var titleEl   = mkEl('div', 'edit-title', isNew ? 'New Contact' : 'Edit Contact');
+    cancelBtn.addEventListener('click', function() {
+        S.editMode = false;
+        if (!isNew && S.activeContact) { renderDetail(); }
+        else { S.activeId = null; S.activeContact = null; renderDetail(); renderContactsList(); }
+    });
+    doneBtn.addEventListener('click', function() { doSave(); });
+    tb.appendChild(cancelBtn); tb.appendChild(titleEl); tb.appendChild(doneBtn);
+    panel.appendChild(tb);
+
+    /* form */
+    var form = mkEl('div', 'edit-form');
+
+    /* avatar */
+    var avWrap = mkEl('div', 'avatar-edit-wrap');
+    var avEl = mkEl('div', 'avatar-edit');
+    avEl.style.background = avatarColor(c.id);
+    updateAvatarEl(avEl, c);
+
+    var photoInput = document.createElement('input');
+    photoInput.type='file'; photoInput.accept='image/*'; photoInput.style.display='none';
+    photoInput.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                c.photo = e.target.result;
+                updateAvatarEl(avEl, c);
+            };
+            reader.readAsDataURL(this.files[0]);
+        }
+    });
+    avEl.addEventListener('click', function() { photoInput.click(); });
+    avEl.appendChild(photoInput);
+    avWrap.appendChild(avEl);
+    form.appendChild(avWrap);
+
+    /* name row */
+    var nameRow = mkEl('div', 'name-row');
+    var fNameInp = mkInput('text', c.firstName, 'First name'); fNameInp.id='ef_fn'; fNameInp.style.flex='1';
+    var lNameInp = mkInput('text', c.lastName,  'Last name');  lNameInp.id='ef_ln'; lNameInp.style.flex='1';
+    nameRow.appendChild(fNameInp); nameRow.appendChild(lNameInp);
+    form.appendChild(nameRow);
+
+    var companyInp = mkInput('text', c.company,    'Company');    companyInp.id='ef_co';
+    var jobInp     = mkInput('text', c.jobTitle,   'Job Title');  jobInp.id='ef_jt';
+    var deptInp    = mkInput('text', c.department, 'Department'); deptInp.id='ef_dp';
+    form.appendChild(companyInp); form.appendChild(jobInp); form.appendChild(deptInp);
+
+    /* phones */
+    form.appendChild(mkEl('div', 'fs-hdr', 'Phone'));
+    var phonesC = mkEl('div');
+    form.appendChild(phonesC);
+    if (c.phones.length === 0) c.phones.push({label:'mobile', value:''});
+    c.phones.forEach(function(p) { addDynRow(phonesC, p, c.phones, 'phone', ['mobile','home','work','school','iPhone','main','home fax','work fax','pager','other']); });
+    var addPhoneBtn = mkAddBtn('add phone');
+    addPhoneBtn.addEventListener('click', function() {
+        var p={label:'mobile',value:''}; c.phones.push(p);
+        addDynRow(phonesC, p, c.phones, 'phone', ['mobile','home','work','school','iPhone','main','home fax','work fax','pager','other']);
+    });
+    form.appendChild(addPhoneBtn);
+
+    /* emails */
+    form.appendChild(mkEl('div', 'fs-hdr', 'Email'));
+    var emailsC = mkEl('div');
+    form.appendChild(emailsC);
+    if (c.emails.length === 0) c.emails.push({label:'home', value:''});
+    c.emails.forEach(function(e) { addDynRow(emailsC, e, c.emails, 'email', ['home','work','iCloud','school','other']); });
+    var addEmailBtn = mkAddBtn('add email');
+    addEmailBtn.addEventListener('click', function() {
+        var e={label:'home',value:''}; c.emails.push(e);
+        addDynRow(emailsC, e, c.emails, 'email', ['home','work','iCloud','school','other']);
+    });
+    form.appendChild(addEmailBtn);
+
+    /* urls */
+    form.appendChild(mkEl('div', 'fs-hdr', 'Website'));
+    var urlsC = mkEl('div');
+    form.appendChild(urlsC);
+    c.urls.forEach(function(u) { addDynRow(urlsC, u, c.urls, 'url', ['homepage','work','home','other']); });
+    var addUrlBtn = mkAddBtn('add website');
+    addUrlBtn.addEventListener('click', function() {
+        var u={label:'homepage',value:''}; c.urls.push(u);
+        addDynRow(urlsC, u, c.urls, 'url', ['homepage','work','home','other']);
+    });
+    form.appendChild(addUrlBtn);
+
+    /* addresses */
+    form.appendChild(mkEl('div', 'fs-hdr', 'Address'));
+    var addrsC = mkEl('div');
+    form.appendChild(addrsC);
+    c.addresses.forEach(function(a) { addAddressRow(addrsC, a, c.addresses); });
+    var addAddrBtn = mkAddBtn('add address');
+    addAddrBtn.addEventListener('click', function() {
+        var a={label:'home',street:'',city:'',state:'',zip:'',country:''};
+        c.addresses.push(a); addAddressRow(addrsC, a, c.addresses);
+    });
+    form.appendChild(addAddrBtn);
+
+    /* birthday */
+    form.appendChild(mkEl('div', 'fs-hdr', 'Birthday'));
+    var bdInp = document.createElement('input');
+    bdInp.type='date'; bdInp.className='fi'; bdInp.id='ef_bd'; bdInp.value=c.birthday||'';
+    form.appendChild(bdInp);
+
+    /* groups */
+    if (S.groups.length > 0) {
+        form.appendChild(mkEl('div', 'fs-hdr', 'Groups'));
+        S.groups.forEach(function(g) {
+            var row = mkEl('div', 'group-cb-row');
+            var cb  = document.createElement('input'); cb.type='checkbox'; cb.id='gcb_'+g.id;
+            cb.checked = c.groups.indexOf(g.id) !== -1;
+            cb.addEventListener('change', function() {
+                var idx = c.groups.indexOf(g.id);
+                if (this.checked && idx === -1) c.groups.push(g.id);
+                else if (!this.checked && idx !== -1) c.groups.splice(idx,1);
+            });
+            var lbl = document.createElement('label'); lbl.htmlFor='gcb_'+g.id; lbl.textContent=g.name;
+            row.appendChild(cb); row.appendChild(lbl); form.appendChild(row);
+        });
+    }
+
+    /* notes */
+    form.appendChild(mkEl('div', 'fs-hdr', 'Notes'));
+    var notesTA = document.createElement('textarea');
+    notesTA.className='fi'; notesTA.id='ef_no'; notesTA.value=c.notes||''; notesTA.rows=4;
+    form.appendChild(notesTA);
+
+    /* delete */
+    if (!isNew) {
+        var delSec = mkEl('div', 'del-contact-section');
+        var delBtn = mkEl('button', 'btn btn-danger', 'Delete Contact');
+        delBtn.addEventListener('click', function() {
+            if (confirm('Delete "' + displayName(c) + '"?\nThis cannot be undone.')) {
+                doDeleteContact(c.id);
+            }
+        });
+        delSec.appendChild(delBtn); form.appendChild(delSec);
+    }
+
+    panel.appendChild(form);
+    setTimeout(function() { var fn=document.getElementById('ef_fn'); if(fn)fn.focus(); }, 40);
+
+    /* save logic */
+    function doSave() {
+        c.firstName  = (document.getElementById('ef_fn')||{}).value || '';
+        c.lastName   = (document.getElementById('ef_ln')||{}).value || '';
+        c.company    = (document.getElementById('ef_co')||{}).value || '';
+        c.jobTitle   = (document.getElementById('ef_jt')||{}).value || '';
+        c.department = (document.getElementById('ef_dp')||{}).value || '';
+        c.birthday   = (document.getElementById('ef_bd')||{}).value || '';
+        c.notes      = (document.getElementById('ef_no')||{}).value || '';
+        c.updatedAt  = Date.now();
+
+        c.firstName = c.firstName.trim(); c.lastName = c.lastName.trim();
+        c.company = c.company.trim(); c.jobTitle = c.jobTitle.trim();
+
+        c.phones    = c.phones.filter(function(p){ return p.value && p.value.trim(); });
+        c.emails    = c.emails.filter(function(e){ return e.value && e.value.trim(); });
+        c.urls      = c.urls.filter(function(u){   return u.value && u.value.trim(); });
+        c.addresses = c.addresses.filter(function(a){ return a.street||a.city||a.state||a.zip||a.country; });
+
+        if (!c.firstName && !c.lastName && !c.company) {
+            showSnackbar('Please enter a name or company');
+            return;
+        }
+
+        var entry = { id:c.id, firstName:c.firstName, lastName:c.lastName, company:c.company, groups:c.groups, updatedAt:c.updatedAt };
+
+        if (isNew) {
+            c.createdAt = Date.now();
+            apiCreate(c, function(r) {
+                if (r.error) { showSnackbar('Error: '+r.error); return; }
+                S.contacts.push(entry);
+                S.activeId = c.id; S.activeContact = c; S.editMode = false;
+                renderContactsList(); renderDetail();
+                showSnackbar('Contact created');
+            });
+        } else {
+            apiUpdate(c.id, c, function(r) {
+                if (r && r.error) { showSnackbar('Error: '+r.error); return; }
+                var idx = indexOfId(S.contacts, c.id);
+                if (idx !== -1) S.contacts[idx] = entry; else S.contacts.push(entry);
+                S.activeContact = c; S.editMode = false;
+                renderContactsList(); renderDetail();
+                showSnackbar('Contact saved');
+            });
+        }
+    }
+
+    // Override doneBtn handler to close over doSave
+    doneBtn.removeEventListener('click', doneBtn._handler);
+    doneBtn._handler = function() { doSave(); };
+    doneBtn.addEventListener('click', doneBtn._handler);
+}
+
+function updateAvatarEl(avEl, c) {
+    var initText = avEl.querySelector('.av-init');
+    var olEl     = avEl.querySelector('.avatar-edit-ol');
+    var photoInp = avEl.querySelector('input[type=file]');
+
+    if (c.photo) {
+        avEl.style.backgroundImage = 'url("' + esc(c.photo) + '")';
+        avEl.style.backgroundSize  = 'cover';
+        avEl.style.backgroundPosition = 'center';
+        if (!olEl) {
+            olEl = mkEl('div', 'avatar-edit-ol', 'Edit');
+            avEl.appendChild(olEl);
+        } else { olEl.textContent = 'Edit'; }
+        if (initText) initText.remove();
+    } else {
+        avEl.style.backgroundImage = '';
+        if (!initText) {
+            var sp = mkEl('span', 'av-init', initials(c));
+            if (olEl) avEl.insertBefore(sp, olEl); else avEl.appendChild(sp);
+        } else { initText.textContent = initials(c); }
+        if (!olEl) {
+            olEl = mkEl('div', 'avatar-edit-ol', 'Add Photo');
+            avEl.appendChild(olEl);
+        } else { olEl.textContent = 'Add Photo'; }
+    }
+    if (photoInp) avEl.appendChild(photoInp); // keep file input
+}
+
+function addDynRow(container, field, arr, inputType, typeOpts) {
+    var row  = mkEl('div', 'dyn-row');
+    var rm   = mkEl('button', 'rm-btn', '−'); rm.type='button';
+    var sel  = mkSelect(typeOpts, field.label || typeOpts[0]);
+    var inp  = mkInput(inputType === 'phone' ? 'tel' : (inputType === 'email' ? 'email' : 'url'), field.value, inputType === 'phone' ? '+1 555 000 0000' : inputType === 'email' ? 'email@example.com' : 'https://');
+    inp.style.flex = '1';
+    sel.addEventListener('change', function() { field.label = this.value; });
+    inp.addEventListener('input',  function() { field.value = this.value; });
+    rm.addEventListener('click', function() {
+        var idx = arr.indexOf(field);
+        if (idx !== -1) arr.splice(idx, 1);
+        row.remove();
+    });
+    row.appendChild(rm); row.appendChild(sel); row.appendChild(inp);
+    container.appendChild(row);
+}
+
+function addAddressRow(container, addr, arr) {
+    var row = mkEl('div', 'dyn-row addr-row');
+    var rm  = mkEl('button', 'rm-btn', '−'); rm.type='button'; rm.style.marginTop='4px';
+    var sel = mkSelect(['home','work','school','other'], addr.label||'home');
+    sel.style.marginTop='4px';
+    sel.addEventListener('change', function() { addr.label = this.value; });
+
+    var sub = mkEl('div', 'addr-sub');
+    var stInp = mkInput('text', addr.street,  'Street');    stInp.addEventListener('input', function(){addr.street=this.value;});
+    var ctInp = mkInput('text', addr.city,    'City');      ctInp.addEventListener('input', function(){addr.city=this.value;});
+    var line2 = mkEl('div', 'addr-line2');
+    var stateInp = mkInput('text', addr.state, 'State');    stateInp.addEventListener('input', function(){addr.state=this.value;});
+    var zipInp   = mkInput('text', addr.zip,   'ZIP');      zipInp.addEventListener('input',   function(){addr.zip=this.value;});
+    var coInp  = mkInput('text', addr.country, 'Country');  coInp.addEventListener('input',   function(){addr.country=this.value;});
+    line2.appendChild(stateInp); line2.appendChild(zipInp);
+    sub.appendChild(stInp); sub.appendChild(ctInp); sub.appendChild(line2); sub.appendChild(coInp);
+
+    rm.addEventListener('click', function() {
+        var idx = arr.indexOf(addr);
+        if (idx !== -1) arr.splice(idx, 1);
+        row.remove();
+    });
+    row.appendChild(rm); row.appendChild(sel); row.appendChild(sub);
+    container.appendChild(row);
+}
+
+function mkAddBtn(label) {
+    var btn = mkEl('button', 'add-btn'); btn.type='button';
+    var circle = mkEl('div', 'plus-circle', '+');
+    btn.appendChild(circle);
+    btn.appendChild(document.createTextNode(' ' + label));
+    return btn;
+}
+
+// ════════════════════════════════════════════════════════════
+//  ACTIONS
+// ════════════════════════════════════════════════════════════
+function selectGroup(groupId) {
+    S.activeGroup = groupId;
+    S.activeId = null; S.activeContact = null; S.editMode = false;
+    renderGroups(); renderContactsList(); renderDetail();
+}
+
+function selectContact(id) {
+    if (S.editMode) return;
+    S.activeId = id;
+    renderContactsList();
+    var panel = document.getElementById('pDetail');
+    panel.innerHTML = '<div class="empty-st"><div class="empty-st-text">Loading…</div></div>';
+    apiGet(id, function(contact) {
+        if (!contact || contact.error) { showSnackbar('Failed to load contact'); return; }
+        S.activeContact = contact;
+        renderDetail();
+    });
+}
+
+function doDeleteContact(id) {
+    apiDelete(id, function(r) {
+        if (r.error) { showSnackbar('Error: '+r.error); return; }
+        S.contacts = S.contacts.filter(function(c){ return c.id !== id; });
+        S.activeId = null; S.activeContact = null; S.editMode = false;
+        renderContactsList(); renderDetail();
+        showSnackbar('Contact deleted');
+    });
+}
+
+function showGroupCtx(e, g) {
+    removeCtx();
+    var menu = mkEl('div');
+    menu.id = 'g-ctx';
+    menu.style.cssText = 'position:fixed;background:var(--detail-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.18);padding:4px;z-index:9999;min-width:120px;';
+    menu.style.left = e.clientX + 'px'; menu.style.top = e.clientY + 'px';
+
+    var renameItem = mkEl('div', '', 'Rename');
+    renameItem.style.cssText = 'padding:6px 12px;cursor:pointer;font-size:13px;border-radius:5px;';
+    renameItem.addEventListener('mouseenter', function(){ this.style.background='var(--accent)'; this.style.color='#fff'; });
+    renameItem.addEventListener('mouseleave', function(){ this.style.background=''; this.style.color=''; });
+    renameItem.addEventListener('click', function() { removeCtx(); promptRenameGroup(g.id, g.name); });
+
+    var deleteItem = mkEl('div', '', 'Delete');
+    deleteItem.style.cssText = 'padding:6px 12px;cursor:pointer;font-size:13px;border-radius:5px;color:var(--danger);';
+    deleteItem.addEventListener('mouseenter', function(){ this.style.background='var(--danger)'; this.style.color='#fff'; });
+    deleteItem.addEventListener('mouseleave', function(){ this.style.background=''; this.style.color='var(--danger)'; });
+    deleteItem.addEventListener('click', function() { removeCtx(); promptDeleteGroup(g.id, g.name); });
+
+    menu.appendChild(renameItem); menu.appendChild(deleteItem);
+    document.body.appendChild(menu);
+    setTimeout(function(){ document.addEventListener('click', removeCtx, {once:true}); }, 0);
+}
+
+function removeCtx() {
+    var m = document.getElementById('g-ctx');
+    if (m) m.remove();
+}
+
+function promptAddGroup() {
+    var name = prompt('New group name:');
+    if (!name || !name.trim()) return;
+    apiGroup('create', {groupName: name.trim()}, function(r) {
+        if (r.error) { showSnackbar('Error: '+r.error); return; }
+        S.groups.push({id:r.id, name:name.trim(), createdAt:Date.now()});
+        renderGroups(); showSnackbar('Group created');
+    });
+}
+
+function promptRenameGroup(id, current) {
+    var newName = prompt('Rename group:', current);
+    if (!newName || !newName.trim() || newName.trim() === current) return;
+    apiGroup('rename', {groupId:id, groupName:newName.trim()}, function(r) {
+        if (r.error) { showSnackbar('Error: '+r.error); return; }
+        var g = findById(S.groups, id); if (g) g.name = newName.trim();
+        renderGroups(); showSnackbar('Group renamed');
+    });
+}
+
+function promptDeleteGroup(id, name) {
+    if (!confirm('Delete group "' + name + '"?\nContacts in this group will not be deleted.')) return;
+    apiGroup('delete', {groupId:id}, function(r) {
+        if (r.error) { showSnackbar('Error: '+r.error); return; }
+        S.groups = S.groups.filter(function(g){ return g.id !== id; });
+        if (S.activeGroup === id) selectGroup('all'); else renderGroups();
+        showSnackbar('Group deleted');
+    });
+}
+
+// ════════════════════════════════════════════════════════════
+//  vCARD EXPORT
+// ════════════════════════════════════════════════════════════
+function exportVCard(c) {
+    var lines = ['BEGIN:VCARD','VERSION:3.0'];
+    lines.push('N:' + (c.lastName||'') + ';' + (c.firstName||'') + ';;;');
+    lines.push('FN:' + displayName(c));
+    if (c.company)  lines.push('ORG:' + c.company);
+    if (c.jobTitle) lines.push('TITLE:' + c.jobTitle);
+    (c.phones||[]).forEach(function(p) {
+        lines.push('TEL;TYPE=' + (p.label||'voice').toUpperCase().replace(/ /g,'_') + ':' + (p.value||''));
+    });
+    (c.emails||[]).forEach(function(e) {
+        lines.push('EMAIL;TYPE=' + (e.label||'home').toUpperCase() + ':' + (e.value||''));
+    });
+    (c.urls||[]).forEach(function(u) {
+        lines.push('URL:' + (u.value||''));
+    });
+    (c.addresses||[]).forEach(function(a) {
+        lines.push('ADR;TYPE=' + (a.label||'home').toUpperCase() + ':;;' +
+            (a.street||'') + ';' + (a.city||'') + ';' + (a.state||'') + ';' + (a.zip||'') + ';' + (a.country||''));
+    });
+    if (c.birthday) lines.push('BDAY:' + c.birthday.replace(/-/g,''));
+    if (c.notes)    lines.push('NOTE:' + c.notes.replace(/\n/g,'\\n'));
+    lines.push('END:VCARD');
+
+    var blob = new Blob([lines.join('\r\n')], {type:'text/vcard;charset=utf-8'});
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url;
+    a.download = displayName(c).replace(/[\\/:*?"<>|]/g,'_') + '.vcf';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+// ════════════════════════════════════════════════════════════
+//  UTILS
+// ════════════════════════════════════════════════════════════
+function findById(arr, id) {
+    for (var i=0; i<arr.length; i++) if (arr[i].id===id) return arr[i];
+    return null;
+}
+
+function indexOfId(arr, id) {
+    for (var i=0; i<arr.length; i++) if (arr[i].id===id) return i;
+    return -1;
+}
+
+var _sbTimer = null;
+function showSnackbar(msg) {
+    var sb = document.getElementById('snackbar');
+    sb.textContent = msg; sb.classList.add('show');
+    clearTimeout(_sbTimer);
+    _sbTimer = setTimeout(function(){ sb.classList.remove('show'); }, 2600);
+}
+
+// ════════════════════════════════════════════════════════════
+//  BOOT
+// ════════════════════════════════════════════════════════════
+(function boot() {
+    ao_module_getSystemThemeColor(function(t) {
+        S.isDark = (t !== 'whiteTheme');
+        if (S.isDark) document.body.classList.add('dark');
+
+        apiInit(function(data) {
+            S.contacts = data.contacts || [];
+            S.groups   = data.groups   || [];
+            renderGroups();
+            renderContactsList();
+            renderDetail();
+        });
+    });
+
+    document.getElementById('addContactBtn').addEventListener('click', function() {
+        S.activeId = null; S.activeContact = null;
+        renderEdit(null);
+    });
+
+    document.getElementById('addGroupBtn').addEventListener('click', promptAddGroup);
+
+    document.getElementById('searchInput').addEventListener('input', function() {
+        S.searchQuery = this.value;
+        renderContactsList();
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if ((e.metaKey||e.ctrlKey) && e.key==='n') { e.preventDefault(); renderEdit(null); }
+        if (e.key==='Escape' && S.editMode) { document.querySelector('.btn-secondary') && document.querySelector('.btn-secondary').click(); }
+    });
+})();
+</script>
+</body>
+</html>

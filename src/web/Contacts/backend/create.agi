@@ -1,0 +1,48 @@
+/*
+    Contacts - Create a new contact
+    POST: contactData (JSON string)
+*/
+requirelib("filelib");
+
+var baseDir   = "user:/Document/Contacts";
+var indexPath = "user:/Document/Contacts/index.json";
+
+try {
+    var contact = JSON.parse(contactData);
+    var safeId = (contact.id || "").replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!safeId) {
+        sendJSONResp({ error: "Invalid contact ID" });
+    } else {
+        contact.id = safeId;
+        var now = new Date().getTime();
+        contact.createdAt = parseInt(contact.createdAt) || now;
+        contact.updatedAt = parseInt(contact.updatedAt) || now;
+
+        var path = baseDir + "/" + safeId + ".json";
+        filelib.writeFile(path, JSON.stringify(contact));
+
+        var index = { contacts: [] };
+        if (filelib.fileExists(indexPath)) {
+            try {
+                var raw = filelib.readFile(indexPath);
+                var parsed = JSON.parse(raw);
+                if (parsed && parsed.contacts) index = parsed;
+            } catch(e) {}
+        }
+
+        var entry = {
+            id: safeId,
+            firstName: contact.firstName || "",
+            lastName:  contact.lastName  || "",
+            company:   contact.company   || "",
+            groups:    contact.groups    || [],
+            updatedAt: contact.updatedAt
+        };
+        index.contacts.push(entry);
+        filelib.writeFile(indexPath, JSON.stringify(index));
+
+        sendJSONResp({ ok: true, id: safeId });
+    }
+} catch(e) {
+    sendJSONResp({ error: "Invalid contact data: " + e.toString() });
+}

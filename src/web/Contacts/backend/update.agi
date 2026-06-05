@@ -1,0 +1,55 @@
+/*
+    Contacts - Update a contact
+    POST: contactId (string), contactData (JSON string)
+*/
+requirelib("filelib");
+
+var baseDir   = "user:/Document/Contacts";
+var indexPath = "user:/Document/Contacts/index.json";
+
+var safeId = contactId.replace(/[^a-zA-Z0-9_-]/g, "");
+if (!safeId || safeId !== contactId) {
+    sendJSONResp({ error: "Invalid contact ID" });
+} else {
+    try {
+        var contact = JSON.parse(contactData);
+        contact.id = safeId;
+        contact.updatedAt = new Date().getTime();
+
+        var path = baseDir + "/" + safeId + ".json";
+        filelib.writeFile(path, JSON.stringify(contact));
+
+        var index = { contacts: [] };
+        if (filelib.fileExists(indexPath)) {
+            try {
+                var raw = filelib.readFile(indexPath);
+                var parsed = JSON.parse(raw);
+                if (parsed && parsed.contacts) index = parsed;
+            } catch(e) {}
+        }
+
+        var entry = {
+            id: safeId,
+            firstName: contact.firstName || "",
+            lastName:  contact.lastName  || "",
+            company:   contact.company   || "",
+            groups:    contact.groups    || [],
+            updatedAt: contact.updatedAt
+        };
+
+        var found = false;
+        for (var i = 0; i < index.contacts.length; i++) {
+            if (index.contacts[i].id === safeId) {
+                index.contacts[i] = entry;
+                found = true;
+                break;
+            }
+        }
+        if (!found) index.contacts.push(entry);
+
+        filelib.writeFile(indexPath, JSON.stringify(index));
+        sendJSONResp({ ok: true });
+    } catch(e) {
+        sendJSONResp({ error: "Failed to update: " + e.toString() });
+    }
+}
