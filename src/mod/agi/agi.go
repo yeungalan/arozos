@@ -19,7 +19,6 @@ import (
 	apt "imuslab.com/arozos/mod/apt"
 	"imuslab.com/arozos/mod/filesystem"
 	"imuslab.com/arozos/mod/filesystem/arozfs"
-	"imuslab.com/arozos/mod/info/logger"
 	metadata "imuslab.com/arozos/mod/filesystem/metadata"
 	"imuslab.com/arozos/mod/info/logger"
 	"imuslab.com/arozos/mod/iot"
@@ -292,7 +291,7 @@ func (g *Gateway) ExecuteAGIScript(scriptContent string, fsh *filesystem.FileSys
 	//Create a new vm for this request
 	vm := otto.New()
 	//Inject standard libs into the vm
-	g.injectStandardLibs(vm, scriptFile, scriptScope)
+	execID := g.injectStandardLibs(vm, scriptFile, scriptScope)
 	g.injectUserFunctions(vm, fsh, scriptFile, scriptScope, thisuser, w, r)
 
 	//Detect cotent type
@@ -325,7 +324,7 @@ func (g *Gateway) ExecuteAGIScript(scriptContent string, fsh *filesystem.FileSys
 		if thisuser != nil {
 			username = thisuser.Username
 		}
-		logger.PrintAndLog("Agi", fmt.Sprintf("[AGI] Script error in %s (user: %s): %s", scriptFile, username, err.Error()), nil)
+		logger.PrintAndLog("Agi", fmt.Sprintf("[AGI][%s] Script error in %s (user: %s): %s", execID, scriptFile, username, err.Error()), nil)
 
 		if devMode {
 			// Return a detailed JSON error payload for developer inspection
@@ -448,7 +447,7 @@ func (g *Gateway) ExecuteAGIScriptAsUser(fsh *filesystem.FileSystemHandler, scri
 
 	_, err = vm.Run(scriptContent)
 	if err != nil {
-		logger.PrintAndLog("Agi", fmt.Sprintf("[AGI] Script error in %s (user: %s): %s", scriptFile, targetUser.Username, err.Error()), nil)
+		logger.PrintAndLog("Agi", fmt.Sprintf("[AGI][%s] Script error in %s (user: %s): %s", execID, scriptFile, targetUser.Username, err.Error()), nil)
 		return execID, "", err
 	}
 
