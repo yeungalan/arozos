@@ -117,6 +117,7 @@ func RunStartup() {
 	OAuthInit()        //Oauth system init
 	ldapInit()         //LDAP system init
 	notificationInit() //Notification system init
+	AppleNotesInit()   //Apple Notes IMAP Sync
 
 	//Start High Level Services that requires full arozos architectures
 	FileServerInit()

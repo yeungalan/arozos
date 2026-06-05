@@ -362,6 +362,9 @@
         <div class="sidebar-header">
             <span class="sidebar-title">Notes</span>
             <div class="sidebar-header-actions">
+                <button class="icon-btn" id="appleSyncBtn" title="Apple Notes Sync" onclick="openAppleSyncSettings()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="appleSyncIcon"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/></svg>
+                </button>
                 <button class="icon-btn" id="themeToggle" title="Toggle theme">
                     <img id="themeIcon" src="img/theme_white.svg" alt="theme">
                 </button>
@@ -790,6 +793,17 @@
                 });
             });
         })();
+
+        // ── Apple Notes Sync ──────────────────────────────────────────────────
+        function openAppleSyncSettings() {
+            ao_module_newfw({
+                url: 'Notes/apple_sync.html',
+                width: 640,
+                height: 580,
+                appicon: 'Notes/img/module_icon.png',
+                title: 'Apple Notes Sync'
+            });
+        }
     </script>
 </body>
 </html>
