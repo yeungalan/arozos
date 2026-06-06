@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Docker Manager</title>
+    <script src="../../script/jquery.min.js"></script>
+</head>
+<body>
+<!-- NOTE: <style> is intentionally in <body> so it is injected correctly
+     when this page is loaded via jQuery .load() into system settings.    -->
+<style>
+/* ── Docker Manager ── */
+#dk-root {
+    --dk-bg:           #ffffff;
+    --dk-card-bg:      #f5f5f7;
+    --dk-border:       rgba(0,0,0,0.08);
+    --dk-text:         #1a1a1a;
+    --dk-dim:          #555555;
+    --dk-muted:        #999999;
+    --dk-accent:       #2496ED;
+    --dk-accent-dim:   rgba(36,150,237,0.12);
+    --dk-danger:       #d93025;
+    --dk-danger-dim:   rgba(217,48,37,0.1);
+    --dk-warn:         #e8720c;
+    --dk-warn-dim:     rgba(232,114,12,0.1);
+    --dk-success:      #1a7f37;
+    --dk-success-bg:   rgba(26,127,55,0.1);
+    --dk-paused-bg:    rgba(232,114,12,0.1);
+    --dk-stopped-bg:   rgba(0,0,0,0.06);
+    --dk-stopped-fg:   #666666;
+    --dk-row-hover:    rgba(0,0,0,0.03);
+    --dk-sep:          rgba(0,0,0,0.06);
+    --dk-shadow:       0 1px 4px rgba(0,0,0,0.08), 0 0 1px rgba(0,0,0,0.04);
+    --dk-btn-bg:       #f0f0f0;
+    --dk-btn-hover:    #e4e4e4;
+    --dk-btn-text:     #1a1a1a;
+    --dk-input-bg:     #ffffff;
+    --dk-input-border: rgba(0,0,0,0.18);
+    --dk-tab-active:   #ffffff;
+    --dk-tab-bg:       transparent;
+    --dk-topbar:       #2496ED;
+    --dk-overlay-bg:   rgba(0,0,0,0.45);
+    --dk-modal-bg:     #ffffff;
+    --dk-modal-border: rgba(0,0,0,0.12);
+    --dk-log-bg:       #1e1e1e;
+    --dk-log-text:     #d4d4d4;
+
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    color: var(--dk-text);
+    background: var(--dk-bg);
+}
+
+body.dark #dk-root {
+    --dk-bg:           #1c1c1e;
+    --dk-card-bg:      #2c2c2e;
+    --dk-border:       rgba(255,255,255,0.1);
+    --dk-text:         #f0f0f0;
+    --dk-dim:          #aaaaaa;
+    --dk-muted:        #666666;
+    --dk-accent:       #4db8ff;
+    --dk-accent-dim:   rgba(77,184,255,0.14);
+    --dk-danger:       #ff6b6b;
+    --dk-danger-dim:   rgba(255,107,107,0.12);
+    --dk-warn:         #ffad5c;
+    --dk-warn-dim:     rgba(255,173,92,0.12);
+    --dk-success:      #4cba6a;
+    --dk-success-bg:   rgba(76,186,106,0.14);
+    --dk-paused-bg:    rgba(255,173,92,0.14);
+    --dk-stopped-bg:   rgba(255,255,255,0.06);
+    --dk-stopped-fg:   #999999;
+    --dk-row-hover:    rgba(255,255,255,0.04);
+    --dk-sep:          rgba(255,255,255,0.08);
+    --dk-shadow:       0 1px 6px rgba(0,0,0,0.3), 0 0 1px rgba(0,0,0,0.5);
+    --dk-btn-bg:       #3a3a3c;
+    --dk-btn-hover:    #48484a;
+    --dk-btn-text:     #f0f0f0;
+    --dk-input-bg:     #2c2c2e;
+    --dk-input-border: rgba(255,255,255,0.2);
+    --dk-tab-active:   #2c2c2e;
+    --dk-tab-bg:       transparent;
+    --dk-overlay-bg:   rgba(0,0,0,0.65);
+    --dk-modal-bg:     #1c1c1e;
+    --dk-modal-border: rgba(255,255,255,0.12);
+    --dk-log-bg:       #0d0d0d;
+    --dk-log-text:     #cccccc;
+}
+
+/* ── Reset ── */
+#dk-root *, #dk-root *::before, #dk-root *::after { box-sizing: border-box; }
+#dk-root { padding-bottom: 32px; }
+
+/* ── Top accent bar ── */
+.dk-topbar { height: 3px; background: var(--dk-topbar); margin-bottom: 0; }
+
+/* ── Page header ── */
+.dk-header {
+    padding: 18px 20px 14px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 1px solid var(--dk-sep);
+}
+
+.dk-header-icon {
+    width: 40px; height: 40px;
+    background: var(--dk-accent-dim);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+
+.dk-header-icon svg { width: 22px; height: 22px; }
+
+.dk-header-text { flex: 1; min-width: 0; }
+
+.dk-header-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--dk-text);
+    line-height: 1.2;
+}
+
+.dk-header-sub {
+    font-size: 12px;
+    color: var(--dk-muted);
+    margin-top: 2px;
+}
+
+.dk-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    flex-shrink: 0;
+    cursor: default;
+}
+
+.dk-status-pill.ok   { background: var(--dk-success-bg); color: var(--dk-success); }
+.dk-status-pill.err  { background: var(--dk-danger-dim);  color: var(--dk-danger);  }
+
+.dk-status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+}
+
+/* ── Tabs ── */
+.dk-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 10px 20px 0;
+    border-bottom: 1px solid var(--dk-sep);
+    background: var(--dk-bg);
+}
+
+.dk-tab {
+    padding: 7px 16px;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--dk-dim);
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    user-select: none;
+    border: 1px solid transparent;
+    border-bottom: none;
+    background: var(--dk-tab-bg);
+    transition: color 0.1s, background 0.1s;
+    position: relative;
+    bottom: -1px;
+}
+
+.dk-tab:hover { color: var(--dk-text); }
+
+.dk-tab.active {
+    color: var(--dk-accent);
+    background: var(--dk-tab-active);
+    border-color: var(--dk-sep);
+}
+
+/* ── Tab panels ── */
+.dk-panel { display: none; padding: 16px 20px; }
+.dk-panel.active { display: block; }
+
+/* ── Toolbar (search + actions) ── */
+.dk-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.dk-search {
+    flex: 1;
+    min-width: 140px;
+    max-width: 280px;
+    display: flex;
+    align-items: center;
+    background: var(--dk-input-bg);
+    border: 1px solid var(--dk-input-border);
+    border-radius: 6px;
+    padding: 0 10px;
+    gap: 6px;
+    height: 32px;
+}
+
+.dk-search svg { width: 14px; height: 14px; color: var(--dk-muted); flex-shrink: 0; }
+
+.dk-search input {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 13px;
+    color: var(--dk-text);
+    min-width: 0;
+}
+
+.dk-search input::placeholder { color: var(--dk-muted); }
+
+.dk-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    border: 1px solid var(--dk-border);
+    background: var(--dk-btn-bg);
+    color: var(--dk-btn-text);
+    transition: background 0.08s;
+    white-space: nowrap;
+    height: 32px;
+}
+
+.dk-btn:hover:not(:disabled) { background: var(--dk-btn-hover); }
+.dk-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.dk-btn.primary {
+    background: var(--dk-accent);
+    border-color: var(--dk-accent);
+    color: #ffffff;
+}
+
+.dk-btn.primary:hover:not(:disabled) { filter: brightness(1.1); }
+
+.dk-btn.danger {
+    background: var(--dk-danger-dim);
+    border-color: transparent;
+    color: var(--dk-danger);
+}
+
+.dk-btn.danger:hover:not(:disabled) { filter: brightness(0.9); }
+
+.dk-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+.dk-spacer { flex: 1; }
+
+/* ── Table ── */
+.dk-table-wrap {
+    border-radius: 8px;
+    border: 1px solid var(--dk-border);
+    background: var(--dk-card-bg);
+    overflow: hidden;
+    box-shadow: var(--dk-shadow);
+}
+
+.dk-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.dk-table thead th {
+    padding: 9px 12px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--dk-muted);
+    border-bottom: 1px solid var(--dk-sep);
+    background: var(--dk-card-bg);
+    white-space: nowrap;
+    user-select: none;
+}
+
+.dk-table tbody tr {
+    border-bottom: 1px solid var(--dk-sep);
+    transition: background 0.08s;
+}
+
+.dk-table tbody tr:last-child { border-bottom: none; }
+
+.dk-table tbody tr:hover { background: var(--dk-row-hover); }
+
+.dk-table td {
+    padding: 9px 12px;
+    color: var(--dk-text);
+    vertical-align: middle;
+}
+
+.dk-table td.mono {
+    font-family: 'Cascadia Mono', 'Consolas', 'Menlo', 'Monaco', monospace;
+    font-size: 12px;
+    color: var(--dk-dim);
+}
+
+/* State badges */
+.dk-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px 2px 7px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.dk-badge.running  { background: var(--dk-success-bg); color: var(--dk-success); }
+.dk-badge.exited   { background: var(--dk-stopped-bg); color: var(--dk-stopped-fg); }
+.dk-badge.paused   { background: var(--dk-paused-bg);  color: var(--dk-warn); }
+.dk-badge.created  { background: var(--dk-accent-dim); color: var(--dk-accent); }
+.dk-badge.restarting { background: var(--dk-paused-bg); color: var(--dk-warn); }
+.dk-badge.removing { background: var(--dk-danger-dim); color: var(--dk-danger); }
+.dk-badge.dead     { background: var(--dk-danger-dim); color: var(--dk-danger); }
+
+.dk-badge-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+}
+
+/* Actions cell */
+.dk-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.dk-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--dk-dim);
+    transition: background 0.08s, color 0.08s;
+    flex-shrink: 0;
+}
+
+.dk-icon-btn:hover { background: var(--dk-btn-bg); border-color: var(--dk-border); }
+.dk-icon-btn:hover.start  { color: var(--dk-success); }
+.dk-icon-btn:hover.stop   { color: var(--dk-warn); }
+.dk-icon-btn:hover.remove { color: var(--dk-danger); }
+.dk-icon-btn svg { width: 14px; height: 14px; }
+
+/* ── Empty / error state ── */
+.dk-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 56px 24px;
+    gap: 10px;
+    color: var(--dk-muted);
+    text-align: center;
+}
+
+.dk-empty svg { opacity: 0.3; }
+.dk-empty-msg { font-size: 13px; }
+
+/* ── Info bar ── */
+.dk-info-bar {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    background: var(--dk-card-bg);
+    border: 1px solid var(--dk-border);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    font-size: 12.5px;
+    box-shadow: var(--dk-shadow);
+}
+
+.dk-info-item { display: flex; flex-direction: column; gap: 1px; }
+.dk-info-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dk-muted); font-weight: 600; }
+.dk-info-value { font-size: 13px; color: var(--dk-text); font-weight: 500; }
+
+/* ── Pull form ── */
+.dk-pull-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--dk-accent-dim);
+    border: 1px solid rgba(36,150,237,0.2);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.dk-pull-row label {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--dk-text);
+    white-space: nowrap;
+}
+
+.dk-pull-input {
+    flex: 1;
+    min-width: 160px;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 6px;
+    border: 1px solid var(--dk-input-border);
+    background: var(--dk-input-bg);
+    font-size: 13px;
+    color: var(--dk-text);
+    outline: none;
+    transition: border-color 0.1s;
+}
+
+.dk-pull-input:focus { border-color: var(--dk-accent); }
+.dk-pull-input::placeholder { color: var(--dk-muted); }
+
+/* ── Modal overlay ── */
+.dk-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: var(--dk-overlay-bg);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.dk-overlay.open { display: flex; }
+
+.dk-modal {
+    background: var(--dk-modal-bg);
+    border: 1px solid var(--dk-modal-border);
+    border-radius: 12px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+    width: 100%;
+    max-width: 600px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.dk-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--dk-sep);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--dk-text);
+    flex-shrink: 0;
+}
+
+.dk-modal-close {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: var(--dk-muted);
+    background: transparent;
+    border: none;
+    transition: background 0.08s;
+}
+
+.dk-modal-close:hover { background: var(--dk-btn-bg); }
+.dk-modal-close svg { width: 14px; height: 14px; }
+
+.dk-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 18px;
+}
+
+.dk-modal-footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 12px 18px;
+    border-top: 1px solid var(--dk-sep);
+    flex-shrink: 0;
+}
+
+/* Log viewer */
+.dk-log-box {
+    background: var(--dk-log-bg);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-family: 'Cascadia Mono', 'Consolas', 'Menlo', 'Monaco', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--dk-log-text);
+    overflow-y: auto;
+    max-height: 360px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    min-height: 80px;
+}
+
+/* ── Notification toast (uses parent's msgbox if available) ── */
+.dk-toast-inner { display: flex; align-items: center; gap: 8px; }
+
+/* ── Spinner ── */
+@keyframes dk-spin { to { transform: rotate(360deg); } }
+.dk-spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: dk-spin 0.6s linear infinite;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+    .dk-table thead th:nth-child(4),
+    .dk-table tbody td:nth-child(4),
+    .dk-table thead th:nth-child(5),
+    .dk-table tbody td:nth-child(5) { display: none; }
+    .dk-info-bar { gap: 10px; }
+}
+</style>
+
+<div id="dk-root">
+    <div class="dk-topbar"></div>
+
+    <!-- Page header -->
+    <div class="dk-header">
+        <div class="dk-header-icon">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="9" width="4" height="3.5" rx="0.5" stroke="#2496ED" stroke-width="1.5"/>
+                <rect x="7" y="9" width="4" height="3.5" rx="0.5" stroke="#2496ED" stroke-width="1.5"/>
+                <rect x="12" y="9" width="4" height="3.5" rx="0.5" stroke="#2496ED" stroke-width="1.5"/>
+                <rect x="7" y="4.5" width="4" height="3.5" rx="0.5" stroke="#2496ED" stroke-width="1.5"/>
+                <rect x="12" y="4.5" width="4" height="3.5" rx="0.5" stroke="#2496ED" stroke-width="1.5"/>
+                <path d="M1 14.5C3 14.5 4.5 16.5 7 16.5C9.5 16.5 11 14.5 13 14.5C15 14.5 16.5 16.5 18.5 14.5" stroke="#2496ED" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+                <path d="M18.5 14.5C20 14.5 22 13 22 11.5C20 11 18.5 12 18.5 14.5Z" fill="#2496ED"/>
+                <circle cx="20.5" cy="11" r="0.7" fill="#2496ED"/>
+            </svg>
+        </div>
+        <div class="dk-header-text">
+            <div class="dk-header-title">Docker Manager</div>
+            <div class="dk-header-sub">Manage images and containers</div>
+        </div>
+        <div id="dk-status-pill" class="dk-status-pill err">
+            <span class="dk-status-dot"></span>
+            <span id="dk-status-text">Checking…</span>
+        </div>
+    </div>
+
+    <!-- Daemon info bar (shown when Docker is available) -->
+    <div id="dk-info-bar" class="dk-info-bar" style="display:none; margin: 0 20px 0;">
+        <div class="dk-info-item">
+            <span class="dk-info-label">Version</span>
+            <span class="dk-info-value" id="dki-version">—</span>
+        </div>
+        <div class="dk-info-item">
+            <span class="dk-info-label">Storage Driver</span>
+            <span class="dk-info-value" id="dki-driver">—</span>
+        </div>
+        <div class="dk-info-item">
+            <span class="dk-info-label">Running</span>
+            <span class="dk-info-value" id="dki-running">—</span>
+        </div>
+        <div class="dk-info-item">
+            <span class="dk-info-label">Stopped</span>
+            <span class="dk-info-value" id="dki-stopped">—</span>
+        </div>
+        <div class="dk-info-item">
+            <span class="dk-info-label">Images</span>
+            <span class="dk-info-value" id="dki-images">—</span>
+        </div>
+        <div class="dk-info-item">
+            <span class="dk-info-label">OS / Arch</span>
+            <span class="dk-info-value" id="dki-arch">—</span>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="dk-tabs">
+        <div class="dk-tab active" id="tab-images" onclick="dkSwitchTab('images')">Images</div>
+        <div class="dk-tab" id="tab-containers" onclick="dkSwitchTab('containers')">Containers</div>
+    </div>
+
+    <!-- ── Images panel ── -->
+    <div class="dk-panel active" id="panel-images">
+        <!-- Pull new image -->
+        <div class="dk-pull-row">
+            <label for="dk-pull-input">Pull Image:</label>
+            <input type="text" id="dk-pull-input" class="dk-pull-input"
+                   placeholder="e.g. nginx:latest, ubuntu:22.04"
+                   onkeydown="if(event.key==='Enter')dkPullImage()">
+            <button class="dk-btn primary" id="dk-pull-btn" onclick="dkPullImage()">
+                <svg viewBox="0 0 16 16" fill="none"><path d="M8 2v8M4 7l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                Pull
+            </button>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="dk-toolbar">
+            <div class="dk-search">
+                <svg viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4" stroke="currentColor" stroke-width="1.4"/><path d="M11 11l3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                <input type="text" id="img-search" placeholder="Filter images…" oninput="dkFilterImages()">
+            </div>
+            <div class="dk-spacer"></div>
+            <button class="dk-btn" onclick="dkLoadImages()" title="Refresh">
+                <svg viewBox="0 0 16 16" fill="none"><path d="M2 8a6 6 0 1 0 1.5-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 4v4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Refresh
+            </button>
+        </div>
+
+        <!-- Images table -->
+        <div class="dk-table-wrap">
+            <table class="dk-table" id="images-table">
+                <thead>
+                    <tr>
+                        <th>Repository</th>
+                        <th>Tag</th>
+                        <th>Image ID</th>
+                        <th>Size</th>
+                        <th>Created</th>
+                        <th style="text-align:right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="images-tbody">
+                    <tr><td colspan="6"><div class="dk-empty"><span class="dk-spinner"></span></div></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ── Containers panel ── -->
+    <div class="dk-panel" id="panel-containers">
+        <!-- Toolbar -->
+        <div class="dk-toolbar">
+            <div class="dk-search">
+                <svg viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4" stroke="currentColor" stroke-width="1.4"/><path d="M11 11l3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                <input type="text" id="ctr-search" placeholder="Filter containers…" oninput="dkFilterContainers()">
+            </div>
+            <div class="dk-spacer"></div>
+            <button class="dk-btn" onclick="dkLoadContainers()" title="Refresh">
+                <svg viewBox="0 0 16 16" fill="none"><path d="M2 8a6 6 0 1 0 1.5-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 4v4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Refresh
+            </button>
+        </div>
+
+        <!-- Containers table -->
+        <div class="dk-table-wrap">
+            <table class="dk-table" id="containers-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Image</th>
+                        <th>Status</th>
+                        <th>Ports</th>
+                        <th>Uptime</th>
+                        <th style="text-align:right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="containers-tbody">
+                    <tr><td colspan="6"><div class="dk-empty"><span class="dk-spinner"></span></div></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Not available panel -->
+    <div class="dk-panel active" id="panel-unavailable" style="display:none;">
+        <div class="dk-empty" style="padding: 64px 24px;">
+            <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+                <circle cx="28" cy="28" r="24" stroke="currentColor" stroke-width="2"/>
+                <path d="M28 17v13" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                <circle cx="28" cy="37" r="1.8" fill="currentColor"/>
+            </svg>
+            <div class="dk-empty-msg" id="unavail-msg">Docker is not available on this host.</div>
+            <div style="font-size:12px;color:var(--dk-muted);max-width:340px;margin-top:4px;line-height:1.5;">
+                Install Docker Engine and ensure the Docker daemon is running.
+                Only administrators can use Docker Manager.
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Logs modal ── -->
+<div class="dk-overlay" id="logs-overlay" onclick="dkCloseLogsIfBackdrop(event)">
+    <div class="dk-modal">
+        <div class="dk-modal-header">
+            <span id="logs-title">Container Logs</span>
+            <button class="dk-modal-close" onclick="dkCloseLogs()">
+                <svg viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </button>
+        </div>
+        <div class="dk-modal-body">
+            <div class="dk-log-box" id="logs-content">Loading…</div>
+        </div>
+        <div class="dk-modal-footer">
+            <button class="dk-btn" onclick="dkCloseLogs()">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Confirm remove modal ── -->
+<div class="dk-overlay" id="confirm-overlay" onclick="dkCloseConfirmIfBackdrop(event)">
+    <div class="dk-modal" style="max-width:420px;">
+        <div class="dk-modal-header">
+            <span id="confirm-title">Confirm Remove</span>
+            <button class="dk-modal-close" onclick="dkCloseConfirm()">
+                <svg viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </button>
+        </div>
+        <div class="dk-modal-body">
+            <p id="confirm-msg" style="margin:0;font-size:13.5px;line-height:1.6;color:var(--dk-text);"></p>
+        </div>
+        <div class="dk-modal-footer">
+            <button class="dk-btn" onclick="dkCloseConfirm()">Cancel</button>
+            <button class="dk-btn danger" id="confirm-ok-btn" onclick="dkConfirmOk()">Remove</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    /* ── State ── */
+    var allImages     = [];
+    var allContainers = [];
+    var confirmCb     = null;
+
+    /* ── Helpers ── */
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function toast(msg, ok) {
+        if (typeof msgbox === 'function') { msgbox(msg, ok !== false); return; }
+        // Fallback: brief console log
+        console.log('[DK]', msg);
+    }
+
+    function apiBase() { return '../../'; }
+
+    function ajaxPost(path, params, done, fail) {
+        var url = apiBase() + path + (params ? '?' + params : '');
+        $.ajax({ url: url, method: 'POST',
+            success: function(d) { done && done(d); },
+            error:   function(xhr) {
+                var msg = 'Request failed';
+                try { var j = JSON.parse(xhr.responseText); if(j && j.error) msg = j.error; } catch(e){}
+                fail && fail(msg);
+            }
+        });
+    }
+
+    function ajaxGet(path, params, done, fail) {
+        var url = apiBase() + path + (params ? '?' + params : '');
+        $.ajax({ url: url, method: 'GET',
+            success: function(d) { done && done(d); },
+            error:   function(xhr) {
+                var msg = 'Request failed';
+                try { var j = JSON.parse(xhr.responseText); if(j && j.error) msg = j.error; } catch(e){}
+                fail && fail(msg);
+            }
+        });
+    }
+
+    /* ── Tab switching ── */
+    window.dkSwitchTab = function(tab) {
+        ['images','containers'].forEach(function(t) {
+            document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+            document.getElementById('panel-'+t).classList.toggle('active', t===tab);
+        });
+    };
+
+    /* ── Availability check ── */
+    function dkCheckAvailable() {
+        ajaxGet('system/docker/available', null,
+            function(data) {
+                var pill    = document.getElementById('dk-status-pill');
+                var txt     = document.getElementById('dk-status-text');
+                var tabArea = document.querySelector('.dk-tabs');
+                if (data && data.available) {
+                    pill.className = 'dk-status-pill ok';
+                    txt.textContent = 'Docker ' + (data.version || '');
+                    document.getElementById('panel-unavailable').style.display = 'none';
+                    tabArea.style.display = '';
+                    dkLoadInfo();
+                    dkLoadImages();
+                    dkLoadContainers();
+                } else {
+                    pill.className = 'dk-status-pill err';
+                    txt.textContent = 'Not available';
+                    showUnavailable((data && data.error) || 'Docker is not available on this host.');
+                }
+            },
+            function(err) {
+                document.getElementById('dk-status-pill').className = 'dk-status-pill err';
+                document.getElementById('dk-status-text').textContent = 'Error';
+                showUnavailable('Could not contact the Docker Manager backend: ' + err);
+            }
+        );
+    }
+
+    function showUnavailable(msg) {
+        document.getElementById('unavail-msg').textContent = msg;
+        document.getElementById('panel-unavailable').style.display = '';
+        // hide tabs and panels
+        document.querySelector('.dk-tabs').style.display = 'none';
+        ['images','containers'].forEach(function(t) {
+            document.getElementById('panel-'+t).classList.remove('active');
+        });
+    }
+
+    /* ── Daemon info ── */
+    function dkLoadInfo() {
+        ajaxGet('system/docker/info', null, function(data) {
+            if (!data) return;
+            document.getElementById('dki-version').textContent = data.serverVersion || '—';
+            document.getElementById('dki-driver').textContent  = data.storageDriver  || '—';
+            document.getElementById('dki-running').textContent = data.containersRunning != null ? data.containersRunning : '—';
+            document.getElementById('dki-stopped').textContent = data.containersStopped != null ? data.containersStopped : '—';
+            document.getElementById('dki-images').textContent  = data.images != null ? data.images : '—';
+            document.getElementById('dki-arch').textContent    = (data.osType || '') + (data.architecture ? ' / ' + data.architecture : '');
+            document.getElementById('dk-info-bar').style.display = '';
+        });
+    }
+
+    /* ── Images ── */
+    window.dkLoadImages = function() {
+        setTableLoading('images-tbody', 6);
+        ajaxGet('system/docker/images/list', null,
+            function(data) { allImages = data || []; renderImages(allImages); },
+            function(err)  { setTableError('images-tbody', 6, err); }
+        );
+    };
+
+    function renderImages(rows) {
+        var tb = document.getElementById('images-tbody');
+        if (!rows || rows.length === 0) {
+            tb.innerHTML = '<tr><td colspan="6">' + emptyState('No images found. Pull an image above.') + '</td></tr>';
+            return;
+        }
+        var html = '';
+        rows.forEach(function(img) {
+            var repo = esc(img.repository === '<none>' ? '—' : (img.repository || '—'));
+            var tag  = esc(img.tag        === '<none>' ? '—' : (img.tag        || '—'));
+            html +=
+                '<tr>' +
+                '<td><strong>' + repo + '</strong></td>' +
+                '<td>' + tag + '</td>' +
+                '<td class="mono">' + esc(img.id || '—') + '</td>' +
+                '<td>' + esc(img.size || '—') + '</td>' +
+                '<td style="color:var(--dk-muted);font-size:12px;">' + esc(img.createdAt || '—') + '</td>' +
+                '<td style="text-align:right">' +
+                  '<div class="dk-actions" style="justify-content:flex-end">' +
+                    iconBtn('remove', 'Remove image', 'dkAskRemoveImage("' + esc(img.id) + '","' + esc(img.repository + ':' + img.tag) + '")') +
+                  '</div>' +
+                '</td>' +
+                '</tr>';
+        });
+        tb.innerHTML = html;
+    }
+
+    window.dkFilterImages = function() {
+        var q = document.getElementById('img-search').value.toLowerCase();
+        if (!q) { renderImages(allImages); return; }
+        renderImages(allImages.filter(function(img) {
+            return (img.repository + ':' + img.tag + ' ' + img.id).toLowerCase().includes(q);
+        }));
+    };
+
+    window.dkAskRemoveImage = function(id, label) {
+        dkOpenConfirm(
+            'Remove Image',
+            'Remove image <strong>' + esc(label) + '</strong>?  This cannot be undone.  Running containers using this image will prevent removal.',
+            function() { dkRemoveImage(id, label); }
+        );
+    };
+
+    function dkRemoveImage(id, label) {
+        ajaxPost('system/docker/images/remove', 'id=' + encodeURIComponent(id),
+            function() { toast('Removed ' + label, true); dkLoadImages(); dkLoadInfo(); },
+            function(err) { toast('Remove failed: ' + err, false); }
+        );
+    }
+
+    /* ── Pull image ── */
+    window.dkPullImage = function() {
+        var imageName = document.getElementById('dk-pull-input').value.trim();
+        if (!imageName) {
+            toast('Please enter an image name.', false);
+            document.getElementById('dk-pull-input').focus();
+            return;
+        }
+        var btn = document.getElementById('dk-pull-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="dk-spinner"></span> Pulling…';
+
+        ajaxPost('system/docker/images/pull', 'image=' + encodeURIComponent(imageName),
+            function() {
+                btn.disabled = false;
+                btn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M8 2v8M4 7l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg> Pull';
+                document.getElementById('dk-pull-input').value = '';
+                toast('Pulled ' + imageName, true);
+                dkLoadImages();
+                dkLoadInfo();
+            },
+            function(err) {
+                btn.disabled = false;
+                btn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M8 2v8M4 7l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg> Pull';
+                toast('Pull failed: ' + err, false);
+            }
+        );
+    };
+
+    /* ── Containers ── */
+    window.dkLoadContainers = function() {
+        setTableLoading('containers-tbody', 6);
+        ajaxGet('system/docker/containers/list', null,
+            function(data) { allContainers = data || []; renderContainers(allContainers); },
+            function(err)  { setTableError('containers-tbody', 6, err); }
+        );
+    };
+
+    function renderContainers(rows) {
+        var tb = document.getElementById('containers-tbody');
+        if (!rows || rows.length === 0) {
+            tb.innerHTML = '<tr><td colspan="6">' + emptyState('No containers found.') + '</td></tr>';
+            return;
+        }
+        var html = '';
+        rows.forEach(function(c) {
+            var state   = (c.state || 'unknown').toLowerCase();
+            var running = state === 'running';
+            var actions = '';
+
+            if (running) {
+                actions +=
+                    iconBtn('stop',    'Stop container',    'dkStopContainer("'    + esc(c.id) + '","' + esc(c.names) + '")') +
+                    iconBtn('restart', 'Restart container', 'dkRestartContainer("' + esc(c.id) + '","' + esc(c.names) + '")');
+            } else {
+                actions +=
+                    iconBtn('start', 'Start container', 'dkStartContainer("' + esc(c.id) + '","' + esc(c.names) + '")');
+            }
+            actions += iconBtn('logs',   'View logs',        'dkViewLogs("'         + esc(c.id) + '","' + esc(c.names) + '")');
+            actions += iconBtn('remove', 'Remove container', 'dkAskRemoveContainer("' + esc(c.id) + '","' + esc(c.names) + '",' + (running ? 'true' : 'false') + ')');
+
+            html +=
+                '<tr>' +
+                '<td><strong>' + esc(c.names || c.id) + '</strong></td>' +
+                '<td style="color:var(--dk-dim)">' + esc(c.image || '—') + '</td>' +
+                '<td>' + stateBadge(state) + '</td>' +
+                '<td class="mono" style="font-size:11px;color:var(--dk-muted);">' + esc(c.ports || '—') + '</td>' +
+                '<td style="color:var(--dk-muted);font-size:12px;">' + esc(c.runningFor || '—') + '</td>' +
+                '<td style="text-align:right">' +
+                  '<div class="dk-actions" style="justify-content:flex-end">' + actions + '</div>' +
+                '</td>' +
+                '</tr>';
+        });
+        tb.innerHTML = html;
+    }
+
+    window.dkFilterContainers = function() {
+        var q = document.getElementById('ctr-search').value.toLowerCase();
+        if (!q) { renderContainers(allContainers); return; }
+        renderContainers(allContainers.filter(function(c) {
+            return (c.names + ' ' + c.image + ' ' + c.id).toLowerCase().includes(q);
+        }));
+    };
+
+    window.dkStartContainer = function(id, name) {
+        ajaxPost('system/docker/containers/start', 'id=' + encodeURIComponent(id),
+            function() { toast('Started ' + (name || id), true); dkLoadContainers(); dkLoadInfo(); },
+            function(err) { toast('Start failed: ' + err, false); }
+        );
+    };
+
+    window.dkStopContainer = function(id, name) {
+        ajaxPost('system/docker/containers/stop', 'id=' + encodeURIComponent(id),
+            function() { toast('Stopped ' + (name || id), true); dkLoadContainers(); dkLoadInfo(); },
+            function(err) { toast('Stop failed: ' + err, false); }
+        );
+    };
+
+    window.dkRestartContainer = function(id, name) {
+        ajaxPost('system/docker/containers/restart', 'id=' + encodeURIComponent(id),
+            function() { toast('Restarted ' + (name || id), true); dkLoadContainers(); dkLoadInfo(); },
+            function(err) { toast('Restart failed: ' + err, false); }
+        );
+    };
+
+    window.dkAskRemoveContainer = function(id, name, isRunning) {
+        var msg = isRunning
+            ? 'Container <strong>' + esc(name) + '</strong> is currently running.  It will be force-stopped before removal.  Proceed?'
+            : 'Remove container <strong>' + esc(name) + '</strong>?  This cannot be undone.';
+        dkOpenConfirm('Remove Container', msg, function() {
+            ajaxPost('system/docker/containers/remove',
+                'id=' + encodeURIComponent(id) + (isRunning ? '&force=true' : ''),
+                function() { toast('Removed ' + (name || id), true); dkLoadContainers(); dkLoadInfo(); },
+                function(err) { toast('Remove failed: ' + err, false); }
+            );
+        });
+    };
+
+    /* ── Logs ── */
+    window.dkViewLogs = function(id, name) {
+        document.getElementById('logs-title').textContent = 'Logs – ' + (name || id);
+        document.getElementById('logs-content').textContent = 'Loading…';
+        document.getElementById('logs-overlay').classList.add('open');
+
+        ajaxGet('system/docker/containers/logs', 'id=' + encodeURIComponent(id) + '&lines=200',
+            function(data) {
+                var lines = (data && data.logs) ? data.logs : [];
+                document.getElementById('logs-content').textContent =
+                    lines.length ? lines.join('\n') : '(no output)';
+                // Scroll to bottom
+                var box = document.getElementById('logs-content');
+                box.scrollTop = box.scrollHeight;
+            },
+            function(err) {
+                document.getElementById('logs-content').textContent = 'Error: ' + err;
+            }
+        );
+    };
+
+    window.dkCloseLogs = function() {
+        document.getElementById('logs-overlay').classList.remove('open');
+    };
+
+    window.dkCloseLogsIfBackdrop = function(e) {
+        if (e.target === document.getElementById('logs-overlay')) dkCloseLogs();
+    };
+
+    /* ── Confirm dialog ── */
+    function dkOpenConfirm(title, msg, cb) {
+        document.getElementById('confirm-title').textContent = title;
+        document.getElementById('confirm-msg').innerHTML     = msg;
+        confirmCb = cb;
+        document.getElementById('confirm-overlay').classList.add('open');
+    }
+
+    window.dkCloseConfirm = function() {
+        document.getElementById('confirm-overlay').classList.remove('open');
+        confirmCb = null;
+    };
+
+    window.dkCloseConfirmIfBackdrop = function(e) {
+        if (e.target === document.getElementById('confirm-overlay')) dkCloseConfirm();
+    };
+
+    window.dkConfirmOk = function() {
+        if (typeof confirmCb === 'function') confirmCb();
+        dkCloseConfirm();
+    };
+
+    /* ── UI builders ── */
+    function stateBadge(state) {
+        var label = state.charAt(0).toUpperCase() + state.slice(1);
+        return '<span class="dk-badge ' + state + '">' +
+               '<span class="dk-badge-dot"></span>' + esc(label) + '</span>';
+    }
+
+    function iconBtn(type, title, onclick) {
+        var svgs = {
+            start:   '<svg viewBox="0 0 16 16" fill="none"><path d="M5 3.5l8 4.5-8 4.5z" fill="currentColor"/></svg>',
+            stop:    '<svg viewBox="0 0 16 16" fill="none"><rect x="4" y="4" width="8" height="8" rx="1" fill="currentColor"/></svg>',
+            restart: '<svg viewBox="0 0 16 16" fill="none"><path d="M2 8a6 6 0 1 0 1.5-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 4v4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+            remove:  '<svg viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V3h4v1M5 4v8a1 1 0 001 1h4a1 1 0 001-1V4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M7 7v4M9 7v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+            logs:    '<svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>'
+        };
+        var extraClass = (type === 'remove') ? ' remove' : (type === 'stop') ? ' stop' : (type === 'start') ? ' start' : '';
+        return '<button class="dk-icon-btn' + extraClass + '" title="' + esc(title) + '" onclick="' + onclick + '">' +
+               (svgs[type] || '') + '</button>';
+    }
+
+    function emptyState(msg) {
+        return '<div class="dk-empty">' +
+               '<svg width="44" height="44" viewBox="0 0 44 44" fill="none">' +
+               '<circle cx="22" cy="22" r="19" stroke="currentColor" stroke-width="1.5"/>' +
+               '<path d="M22 14v9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
+               '<circle cx="22" cy="29" r="1.4" fill="currentColor"/>' +
+               '</svg>' +
+               '<div class="dk-empty-msg">' + esc(msg) + '</div></div>';
+    }
+
+    function setTableLoading(tbodyId, cols) {
+        document.getElementById(tbodyId).innerHTML =
+            '<tr><td colspan="' + cols + '"><div class="dk-empty"><span class="dk-spinner"></span></div></td></tr>';
+    }
+
+    function setTableError(tbodyId, cols, msg) {
+        document.getElementById(tbodyId).innerHTML =
+            '<tr><td colspan="' + cols + '">' + emptyState('Error: ' + msg) + '</td></tr>';
+    }
+
+    /* ── Boot ── */
+    dkCheckAvailable();
+}());
+</script>
+</body>
+</html>
