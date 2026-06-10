@@ -439,6 +439,7 @@ function arozcastApp() {
         // Screen share (WebRTC)
         _pc: null,
         _iceQueue: [],
+        _pendingIceServers: [],
 
         get progressPct() {
             if (!this.duration) return 0;
@@ -592,6 +593,7 @@ function arozcastApp() {
                     break;
                 case 'screen.start':
                     this._touchPeer();
+                    this._pendingIceServers = Array.isArray(msg.payload.iceServers) ? msg.payload.iceServers : [];
                     this._prepareScreen();
                     break;
                 case 'webrtc.offer':
@@ -749,7 +751,8 @@ function arozcastApp() {
         // ── Screen share (WebRTC) ─────────────────────────────────────
         _prepareScreen() {
             if (this._pc) { this._pc.close(); this._pc = null; }
-            this._iceQueue = [];
+            this._iceQueue         = [];
+            this._pendingIceServers = [];
             this._audio.pause();
             this._audio.removeAttribute('src');
             this._video.pause();
@@ -766,12 +769,17 @@ function arozcastApp() {
             if (this._pc) { this._pc.close(); }
             this._iceQueue = [];
 
-            const pc = new RTCPeerConnection({
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                ]
-            });
+            // Merge sender-supplied ICE servers (which include any TURN config)
+            // with a local STUN fallback so the receiver uses the same relay path.
+            const defaultStun = [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+            ];
+            const iceServers = (this._pendingIceServers && this._pendingIceServers.length)
+                ? this._pendingIceServers
+                : defaultStun;
+
+            const pc = new RTCPeerConnection({ iceServers });
             // Assign early so arriving webrtc.ice messages are queued correctly
             this._pc = pc;
 
