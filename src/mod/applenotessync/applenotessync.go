@@ -12,14 +12,28 @@ package applenotessync
 	Content-Type: text/html and these identifying headers:
 	  X-Uniform-Type-Identifier:      com.apple.mail-note
 	  X-Universally-Unique-Identifier: <note UUID, stable across edits>
+
+	TLS: a self-signed certificate is generated on first start and stored
+	in the database so it remains stable across restarts. Apple devices
+	connect with "Use SSL: On" and accept the certificate warning once.
 */
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"math/big"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/emersion/go-imap/server"
 
@@ -42,19 +56,21 @@ type Options struct {
 
 // ServerConfig is the admin-managed configuration of the IMAP listener.
 type ServerConfig struct {
-	Enabled bool `json:"enabled"`
-	Port    int  `json:"port"`
+	Enabled    bool `json:"enabled"`
+	Port       int  `json:"port"`
+	TLSEnabled bool `json:"tlsEnabled"`
 }
 
 // Handler owns the IMAP server lifecycle and the HTTP management endpoints.
 type Handler struct {
 	opts Options
 
-	mu       sync.Mutex
-	server   *server.Server
-	listener net.Listener
-	running  bool
-	lastErr  string
+	mu        sync.Mutex
+	server    *server.Server
+	listener  net.Listener
+	running   bool
+	lastErr   string
+	tlsConfig *tls.Config // nil until loadOrGenerateTLS succeeds
 
 	// Maps a username to the real path of their Notes directory; replaced
 	// in tests to avoid the full user / storage subsystem
@@ -71,9 +87,16 @@ func NewHandler(opts Options) *Handler {
 	h := &Handler{opts: opts}
 	h.notesDirResolver = h.resolveUserNotesDir
 
+	tlsCfg, err := h.loadOrGenerateTLS()
+	if err != nil {
+		opts.Logger.PrintAndLog("AppleNotesSync", "TLS init failed (falling back to plaintext): "+err.Error(), err)
+	} else {
+		h.tlsConfig = tlsCfg
+	}
+
 	cfg := h.loadServerConfig()
 	if cfg.Enabled {
-		if err := h.startServer(cfg.Port); err != nil {
+		if err := h.startServer(cfg); err != nil {
 			h.lastErr = err.Error()
 			opts.Logger.PrintAndLog("AppleNotesSync", "IMAP server failed to start: "+err.Error(), err)
 		}
@@ -86,30 +109,143 @@ func (h *Handler) lockUser(username string) *sync.Mutex {
 	return m.(*sync.Mutex)
 }
 
+// ── TLS certificate ───────────────────────────────────────────────────────────
+
+func (h *Handler) loadOrGenerateTLS() (*tls.Config, error) {
+	var certPEM, keyPEM string
+	h.opts.Database.Read(dbTable, "tls:cert", &certPEM)
+	h.opts.Database.Read(dbTable, "tls:key", &keyPEM)
+
+	if certPEM == "" || keyPEM == "" {
+		h.opts.Logger.PrintAndLog("AppleNotesSync", "Generating self-signed TLS certificate…", nil)
+		var err error
+		certPEM, keyPEM, err = generateSelfSignedCert()
+		if err != nil {
+			return nil, err
+		}
+		h.opts.Database.Write(dbTable, "tls:cert", certPEM)
+		h.opts.Database.Write(dbTable, "tls:key", keyPEM)
+		h.opts.Logger.PrintAndLog("AppleNotesSync", "Self-signed TLS certificate generated and stored", nil)
+	}
+
+	tlsCert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
+	if err != nil {
+		return nil, fmt.Errorf("loading TLS key pair: %w", err)
+	}
+	return &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
+		MinVersion:   tls.VersionTLS12,
+	}, nil
+}
+
+// generateSelfSignedCert returns PEM-encoded certificate and private key.
+// The cert is valid for 20 years and lists common LAN hostnames as SANs.
+func generateSelfSignedCert() (certPEM, keyPEM string, err error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return "", "", err
+	}
+
+	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	tmpl := &x509.Certificate{
+		SerialNumber: serial,
+		Subject:      pkix.Name{Organization: []string{"arozos Notes IMAP"}},
+		NotBefore:    time.Now().Add(-24 * time.Hour),
+		NotAfter:     time.Now().Add(20 * 365 * 24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:     []string{"localhost", "arozos.local"},
+		IPAddresses: []net.IP{
+			net.ParseIP("127.0.0.1"),
+			net.ParseIP("::1"),
+		},
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		return "", "", err
+	}
+
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return "", "", err
+	}
+
+	certPEM = string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}))
+	keyPEM = string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}))
+	return certPEM, keyPEM, nil
+}
+
+// ── Debug logging helpers ─────────────────────────────────────────────────────
+
+// imapDebugWriter forwards raw IMAP traffic to the arozos logger.
+type imapDebugWriter struct {
+	log *logger.Logger
+}
+
+func (w *imapDebugWriter) Write(p []byte) (n int, err error) {
+	line := strings.TrimRight(string(p), "\r\n")
+	if line != "" {
+		w.log.PrintAndLog("AppleNotesSync/IMAP", line, nil)
+	}
+	return len(p), nil
+}
+
+// imapErrorLogger wraps the arozos logger for go-imap's ErrorLog interface.
+type imapErrorLogger struct {
+	log *logger.Logger
+}
+
+func (l *imapErrorLogger) Printf(format string, v ...interface{}) {
+	l.log.PrintAndLog("AppleNotesSync", fmt.Sprintf(format, v...), nil)
+}
+
+func (l *imapErrorLogger) Println(v ...interface{}) {
+	l.log.PrintAndLog("AppleNotesSync", fmt.Sprint(v...), nil)
+}
+
 // ── Server lifecycle ──────────────────────────────────────────────────────────
 
-func (h *Handler) startServer(port int) error {
+func (h *Handler) startServer(cfg ServerConfig) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	if h.running {
 		return nil
 	}
+
+	port := cfg.Port
+	useTLS := cfg.TLSEnabled && h.tlsConfig != nil
+
 	if port <= 0 {
-		port = 143
+		if useTLS {
+			port = 993
+		} else {
+			port = 143
+		}
+	}
+
+	addr := fmt.Sprintf(":%d", port)
+
+	var l net.Listener
+	var err error
+	if useTLS {
+		l, err = tls.Listen("tcp", addr, h.tlsConfig)
+		h.opts.Logger.PrintAndLog("AppleNotesSync", fmt.Sprintf("Starting IMAP notes server with TLS on port %d", port), nil)
+	} else {
+		l, err = net.Listen("tcp", addr)
+		h.opts.Logger.PrintAndLog("AppleNotesSync", fmt.Sprintf("Starting IMAP notes server (plaintext) on port %d", port), nil)
+	}
+	if err != nil {
+		return err
 	}
 
 	be := &imapBackend{handler: h}
 	s := server.New(be)
-	s.Addr = fmt.Sprintf(":%d", port)
-	// LAN usage: allow LOGIN over plaintext connections. Apple devices must
-	// have "Use SSL" switched off for this account.
-	s.AllowInsecureAuth = true
-
-	l, err := net.Listen("tcp", s.Addr)
-	if err != nil {
-		return err
-	}
+	s.Addr = addr
+	s.AllowInsecureAuth = true // safe: connection is either TLS or a trusted LAN
+	s.Debug = &imapDebugWriter{log: h.opts.Logger}
+	s.ErrorLog = &imapErrorLogger{log: h.opts.Logger}
 
 	h.server = s
 	h.listener = l
@@ -126,7 +262,11 @@ func (h *Handler) startServer(port int) error {
 		h.mu.Unlock()
 	}()
 
-	h.opts.Logger.PrintAndLog("AppleNotesSync", fmt.Sprintf("IMAP notes server started on port %d", port), nil)
+	proto := "plaintext"
+	if useTLS {
+		proto = "TLS"
+	}
+	h.opts.Logger.PrintAndLog("AppleNotesSync", fmt.Sprintf("IMAP notes server started on port %d (%s)", port, proto), nil)
 	return nil
 }
 
@@ -163,12 +303,13 @@ func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 
 	resp := map[string]interface{}{
-		"enabled":   cfg.Enabled,
-		"running":   running,
-		"port":      cfg.Port,
-		"lastError": lastErr,
-		"username":  userinfo.Username,
-		"isAdmin":   userinfo.IsAdmin(),
+		"enabled":    cfg.Enabled,
+		"running":    running,
+		"port":       cfg.Port,
+		"tlsEnabled": cfg.TLSEnabled,
+		"lastError":  lastErr,
+		"username":   userinfo.Username,
+		"isAdmin":    userinfo.IsAdmin(),
 	}
 	js, _ := json.Marshal(resp)
 	utils.SendJSONResponse(w, string(js))
@@ -190,7 +331,11 @@ func (h *Handler) HandleConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if incoming.Port <= 0 || incoming.Port > 65535 {
-			incoming.Port = 143
+			if incoming.TLSEnabled {
+				incoming.Port = 993
+			} else {
+				incoming.Port = 143
+			}
 		}
 		if err := h.opts.Database.Write(dbTable, "config", incoming); err != nil {
 			utils.SendErrorResponse(w, "failed to save configuration")
@@ -200,7 +345,7 @@ func (h *Handler) HandleConfig(w http.ResponseWriter, r *http.Request) {
 		// Apply: restart listener with the new settings
 		h.stopServer()
 		if incoming.Enabled {
-			if err := h.startServer(incoming.Port); err != nil {
+			if err := h.startServer(incoming); err != nil {
 				h.mu.Lock()
 				h.lastErr = err.Error()
 				h.mu.Unlock()
@@ -216,10 +361,14 @@ func (h *Handler) HandleConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) loadServerConfig() ServerConfig {
-	cfg := ServerConfig{Enabled: false, Port: 143}
+	cfg := ServerConfig{Enabled: false, Port: 993, TLSEnabled: true}
 	h.opts.Database.Read(dbTable, "config", &cfg)
 	if cfg.Port <= 0 {
-		cfg.Port = 143
+		if cfg.TLSEnabled {
+			cfg.Port = 993
+		} else {
+			cfg.Port = 143
+		}
 	}
 	return cfg
 }

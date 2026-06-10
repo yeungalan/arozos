@@ -584,7 +584,7 @@
                 <div class="conn-row"><span class="conn-label">Port</span><span class="conn-value" id="connPort"></span></div>
                 <div class="conn-row"><span class="conn-label">Username</span><span class="conn-value" id="connUser"></span></div>
                 <div class="conn-row"><span class="conn-label">Password</span><span class="conn-value">your arozos password</span></div>
-                <div class="conn-row" style="border-bottom:none;"><span class="conn-label">Use SSL</span><span class="conn-value">Off</span></div>
+                <div class="conn-row" style="border-bottom:none;"><span class="conn-label">Use SSL</span><span class="conn-value" id="connSSL">On</span></div>
             </div>
 
             <details id="syncHowTo" style="display:none;">
@@ -592,11 +592,11 @@
                 <ol>
                     <li><b>iPhone:</b> Settings &rarr; Mail &rarr; Accounts &rarr; Add Account &rarr; Other &rarr; <b>Add Mail Account</b></li>
                     <li>Enter any name and email (e.g. <i>you@arozos</i>), then choose <b>IMAP</b> and fill both incoming and outgoing servers with the values above</li>
-                    <li>If a connection warning appears, choose <b>Continue</b> / save anyway &mdash; the outgoing (SMTP) server is not used for notes</li>
-                    <li>In the account&#x2019;s <b>Advanced</b> settings turn <b>Use SSL off</b> and confirm the port</li>
+                    <li>If a certificate warning appears, tap <b>Continue</b> to trust the self-signed certificate &mdash; this is expected for a local server</li>
+                    <li>In the account&#x2019;s <b>Advanced</b> settings confirm SSL is <span id="howToSSL">On</span> and the port matches</li>
                     <li>Switch <b>Notes ON</b> (Mail can stay off) for the account</li>
                 </ol>
-                <p><b>Mac:</b> System Settings &rarr; Internet Accounts &rarr; Add Other Account &rarr; Mail Account, then enable only Notes for it.</p>
+                <p><b>Mac:</b> System Settings &rarr; Internet Accounts &rarr; Add Other Account &rarr; Mail Account, then enable only Notes for it. Accept the certificate prompt when it appears.</p>
             </details>
 
             <!-- Admin controls -->
@@ -607,10 +607,13 @@
                         <label style="font-size:13px;display:flex;align-items:center;gap:7px;padding:8px 0;cursor:pointer;">
                             <input type="checkbox" id="syncEnabled"> Enabled
                         </label>
+                        <label style="font-size:13px;display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;">
+                            <input type="checkbox" id="syncTLS" checked> Use TLS (self-signed cert, recommended)
+                        </label>
                     </div>
                     <div class="form-group" style="flex:1;">
                         <label class="form-label">Port</label>
-                        <input class="form-input" id="syncPort" type="number" value="143" min="1" max="65535">
+                        <input class="form-input" id="syncPort" type="number" value="993" min="1" max="65535">
                     </div>
                 </div>
                 <div class="modal-actions">
@@ -996,16 +999,19 @@
             var connInfo = document.getElementById('syncConnInfo');
             var howTo    = document.getElementById('syncHowTo');
             var admin    = document.getElementById('syncAdminControls');
+            var useTLS   = s.tlsEnabled !== false; // default true
 
             if (s.running) {
                 dot.className = 'sync-indicator synced';
                 dot.style.display = '';
                 state.className = 'sync-status-bar visible ok';
-                state.textContent = 'IMAP server running on port ' + s.port +
-                    ' — connect your Apple devices with the details below';
+                state.textContent = 'IMAP notes server running on port ' + s.port +
+                    ' (' + (useTLS ? 'TLS' : 'plaintext') + ') — connect your Apple devices with the details below';
                 document.getElementById('connHost').textContent = window.location.hostname;
                 document.getElementById('connPort').textContent = s.port;
                 document.getElementById('connUser').textContent = s.username || '';
+                document.getElementById('connSSL').textContent = useTLS ? 'On' : 'Off';
+                document.getElementById('howToSSL').textContent = useTLS ? 'On' : 'Off';
                 connInfo.style.display = '';
                 howTo.style.display = '';
             } else {
@@ -1028,15 +1034,28 @@
             if (s.isAdmin) {
                 admin.style.display = '';
                 document.getElementById('syncEnabled').checked = !!s.enabled;
-                document.getElementById('syncPort').value = s.port || 143;
+                document.getElementById('syncTLS').checked = useTLS;
+                document.getElementById('syncPort').value = s.port || (useTLS ? 993 : 143);
             } else {
                 admin.style.display = 'none';
             }
         }
 
+        // Auto-adjust default port when TLS checkbox changes
+        document.getElementById('syncTLS').addEventListener('change', function () {
+            var portEl = document.getElementById('syncPort');
+            var currentPort = parseInt(portEl.value) || 0;
+            if (this.checked && (currentPort === 143 || currentPort === 0)) {
+                portEl.value = 993;
+            } else if (!this.checked && (currentPort === 993 || currentPort === 0)) {
+                portEl.value = 143;
+            }
+        });
+
         function syncApplyConfig() {
             var enabled = document.getElementById('syncEnabled').checked;
-            var port    = parseInt(document.getElementById('syncPort').value) || 143;
+            var tlsEnabled = document.getElementById('syncTLS').checked;
+            var port    = parseInt(document.getElementById('syncPort').value) || (tlsEnabled ? 993 : 143);
             var btn     = document.getElementById('syncApplyBtn');
             btn.disabled = true;
             btn.textContent = 'Applying…';
@@ -1045,7 +1064,7 @@
                 url: '/api/notes/apple/config',
                 method: 'POST',
                 contentType: 'application/json',
-                data: JSON.stringify({ enabled: enabled, port: port }),
+                data: JSON.stringify({ enabled: enabled, port: port, tlsEnabled: tlsEnabled }),
                 success: function (data) {
                     btn.disabled = false;
                     btn.textContent = 'Apply';
