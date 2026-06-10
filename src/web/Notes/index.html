@@ -324,6 +324,124 @@
             margin-right: 2px;
         }
 
+        /* ── Apple Notes Sync modal ───────────────────────────────────────── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+
+        .modal {
+            width: 340px;
+            max-width: 92vw;
+            border-radius: 16px;
+            padding: 24px 22px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+        }
+        body.light-mode .modal { background: #ffffff; color: #1c1c1e; }
+        body.dark-mode  .modal { background: #2c2c2e; color: #ffffff; }
+
+        .modal-title {
+            font-size: 17px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            opacity: 0.5;
+            color: inherit;
+            padding: 0;
+            line-height: 1;
+        }
+        .modal-close:hover { opacity: 1; }
+
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .form-label { font-size: 12px; font-weight: 600; opacity: 0.6; text-transform: uppercase; letter-spacing: 0.5px; }
+        .form-input {
+            padding: 8px 10px;
+            border-radius: 9px;
+            border: 1px solid;
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        body.light-mode .form-input { background: #f2f2f7; border-color: #d1d1d6; color: #1c1c1e; }
+        body.dark-mode  .form-input { background: #3a3a3c; border-color: #48484a; color: #ffffff; }
+        .form-input:focus { border-color: #ffd60a; }
+
+        .form-row { display: flex; gap: 8px; }
+        .form-row .form-group { flex: 1; }
+
+        .modal-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+
+        .btn-primary {
+            padding: 10px;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            background: #ffd60a;
+            color: #1c1c1e;
+            transition: opacity 0.15s ease;
+        }
+        .btn-primary:hover { opacity: 0.85; }
+        .btn-primary:disabled { opacity: 0.4; cursor: default; }
+
+        .btn-secondary {
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            font-family: inherit;
+            background: transparent;
+            color: inherit;
+            transition: opacity 0.15s ease;
+        }
+        body.light-mode .btn-secondary { border-color: #d1d1d6; }
+        body.dark-mode  .btn-secondary { border-color: #48484a; }
+        .btn-secondary:hover { opacity: 0.7; }
+
+        .sync-status-bar {
+            font-size: 12px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            display: none;
+        }
+        .sync-status-bar.visible { display: block; }
+        .sync-status-bar.ok  { background: rgba(52,199,89,0.15); color: #34c759; }
+        .sync-status-bar.err { background: rgba(255,69,58,0.15);  color: #ff453a; }
+        .sync-status-bar.info { opacity: 0.6; }
+
+        .sync-indicator {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+        .sync-indicator.synced  { background: #34c759; }
+        .sync-indicator.error   { background: #ff453a; }
+        .sync-indicator.pending { background: #ffd60a; }
+
         /* RWD: phone portrait */
         @media (max-width: 600px) {
             .sidebar {
@@ -362,6 +480,9 @@
         <div class="sidebar-header">
             <span class="sidebar-title">Notes</span>
             <div class="sidebar-header-actions">
+                <button class="icon-btn" id="syncSettingsBtn" title="Apple Notes Sync" style="font-size:15px;">
+                    &#9729;&#xFE0E;<span id="syncDot" class="sync-indicator" style="display:none;"></span>
+                </button>
                 <button class="icon-btn" id="themeToggle" title="Toggle theme">
                     <img id="themeIcon" src="img/theme_white.svg" alt="theme">
                 </button>
@@ -415,6 +536,48 @@
 
     <!-- Snackbar -->
     <div id="snackbar"></div>
+
+    <!-- Apple Notes Sync modal -->
+    <div class="modal-overlay" id="syncModal">
+        <div class="modal">
+            <div class="modal-title">
+                <span>&#9729;&#xFE0E; Apple Notes Sync</span>
+                <button class="modal-close" id="syncModalClose">&#x2715;</button>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="flex:2;">
+                    <label class="form-label">IMAP Server</label>
+                    <input class="form-input" id="syncServer" type="text" value="imap.mail.me.com" placeholder="imap.mail.me.com">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label class="form-label">Port</label>
+                    <input class="form-input" id="syncPort" type="number" value="993" placeholder="993">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Apple ID (email)</label>
+                <input class="form-input" id="syncUsername" type="email" placeholder="you@icloud.com">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">App-Specific Password</label>
+                <input class="form-input" id="syncPassword" type="password" placeholder="xxxx-xxxx-xxxx-xxxx">
+                <span style="font-size:11px;opacity:0.45;margin-top:3px;">
+                    Generate at <strong>appleid.apple.com</strong> under Sign-In &amp; Security &rarr; App-Specific Passwords
+                </span>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-primary" id="syncSaveBtn">Save &amp; Sync Now</button>
+                <button class="btn-secondary" id="syncNowBtn" style="display:none;">Sync Now</button>
+                <button class="btn-secondary" id="syncDisableBtn" style="display:none;color:#ff453a;">Remove Credentials</button>
+            </div>
+
+            <div class="sync-status-bar" id="syncStatusBar"></div>
+        </div>
+    </div>
 
     <script>
         // ── Mobile helpers ─────────────────────────────────────────────────────
@@ -762,6 +925,183 @@
                 saveNow();
             }
         });
+
+        // ── Apple Notes Sync ──────────────────────────────────────────────────
+        var syncPollTimer = null;
+
+        function syncApiBase() { return '/api/notes/apple/'; }
+
+        function syncLoadConfig() {
+            $.ajax({
+                url: syncApiBase() + 'config',
+                method: 'GET',
+                success: function(data) {
+                    var cfg = (typeof data === 'string') ? JSON.parse(data) : data;
+                    if (cfg && cfg.username) {
+                        document.getElementById('syncUsername').value = cfg.username || '';
+                        document.getElementById('syncServer').value  = cfg.imapServer || 'imap.mail.me.com';
+                        document.getElementById('syncPort').value    = cfg.imapPort || 993;
+                        // password intentionally left blank in the form
+                        document.getElementById('syncNowBtn').style.display    = '';
+                        document.getElementById('syncDisableBtn').style.display = '';
+                        document.getElementById('syncSaveBtn').textContent = 'Update & Sync Now';
+                    }
+                    syncLoadStatus();
+                },
+                error: function() { syncLoadStatus(); }
+            });
+        }
+
+        function syncLoadStatus() {
+            $.ajax({
+                url: syncApiBase() + 'status',
+                method: 'GET',
+                success: function(data) {
+                    var s = (typeof data === 'string') ? JSON.parse(data) : data;
+                    syncRenderStatus(s);
+                }
+            });
+        }
+
+        function syncRenderStatus(s) {
+            var dot  = document.getElementById('syncDot');
+            var bar  = document.getElementById('syncStatusBar');
+            if (!s) return;
+
+            if (s.inProgress) {
+                dot.className = 'sync-indicator pending';
+                dot.style.display = '';
+                bar.className = 'sync-status-bar visible info';
+                bar.textContent = 'Syncing…';
+                syncPollTimer = setTimeout(syncLoadStatus, 2000);
+                return;
+            }
+
+            clearTimeout(syncPollTimer);
+
+            if (!s.lastSyncTime) {
+                dot.style.display = 'none';
+                bar.className = 'sync-status-bar';
+                return;
+            }
+
+            if (s.lastError) {
+                dot.className = 'sync-indicator error';
+                dot.style.display = '';
+                bar.className = 'sync-status-bar visible err';
+                bar.textContent = 'Sync failed: ' + s.lastError;
+            } else {
+                dot.className = 'sync-indicator synced';
+                dot.style.display = '';
+                var d = new Date(s.lastSyncTime);
+                bar.className = 'sync-status-bar visible ok';
+                bar.textContent = 'Last sync ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) +
+                    ' — ' + s.pulled + ' pulled, ' + s.pushed + ' pushed';
+            }
+        }
+
+        function syncSave(thenSync) {
+            var username = document.getElementById('syncUsername').value.trim();
+            var password = document.getElementById('syncPassword').value;
+            var server   = document.getElementById('syncServer').value.trim() || 'imap.mail.me.com';
+            var port     = parseInt(document.getElementById('syncPort').value) || 993;
+
+            if (!username) {
+                showSnackbar('Apple ID is required');
+                return;
+            }
+
+            var btn = document.getElementById('syncSaveBtn');
+            btn.disabled = true;
+            btn.textContent = 'Saving…';
+
+            $.ajax({
+                url: syncApiBase() + 'config',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    imapServer: server,
+                    imapPort:   port,
+                    username:   username,
+                    password:   password,
+                    enabled:    true
+                }),
+                success: function() {
+                    btn.disabled = false;
+                    btn.textContent = 'Update & Sync Now';
+                    document.getElementById('syncNowBtn').style.display    = '';
+                    document.getElementById('syncDisableBtn').style.display = '';
+                    if (thenSync !== false) syncTrigger();
+                },
+                error: function() {
+                    btn.disabled = false;
+                    btn.textContent = 'Update & Sync Now';
+                    showSnackbar('Failed to save settings');
+                }
+            });
+        }
+
+        function syncTrigger() {
+            var bar = document.getElementById('syncStatusBar');
+            bar.className = 'sync-status-bar visible info';
+            bar.textContent = 'Starting sync…';
+
+            $.ajax({
+                url: syncApiBase() + 'sync',
+                method: 'POST',
+                success: function() {
+                    setTimeout(function pollProgress() {
+                        syncLoadStatus();
+                        var s = document.getElementById('syncStatusBar');
+                        if (s && s.textContent.indexOf('Syncing') !== -1) {
+                            setTimeout(pollProgress, 2000);
+                        } else {
+                            // Refresh note list after sync
+                            apiInit(function(loadedMeta) {
+                                meta  = loadedMeta;
+                                notes = meta.notes || [];
+                                renderNoteList();
+                            });
+                        }
+                    }, 1500);
+                },
+                error: function() { showSnackbar('Sync request failed'); }
+            });
+        }
+
+        function syncRemove() {
+            if (!confirm('Remove Apple Notes sync credentials? Existing synced notes are kept.')) return;
+            $.ajax({
+                url: syncApiBase() + 'config',
+                method: 'DELETE',
+                success: function() {
+                    document.getElementById('syncUsername').value = '';
+                    document.getElementById('syncPassword').value = '';
+                    document.getElementById('syncNowBtn').style.display    = 'none';
+                    document.getElementById('syncDisableBtn').style.display = 'none';
+                    document.getElementById('syncSaveBtn').textContent = 'Save & Sync Now';
+                    document.getElementById('syncDot').style.display = 'none';
+                    var bar = document.getElementById('syncStatusBar');
+                    bar.className = 'sync-status-bar';
+                    showSnackbar('Credentials removed');
+                }
+            });
+        }
+
+        // Modal open/close
+        document.getElementById('syncSettingsBtn').addEventListener('click', function() {
+            document.getElementById('syncModal').classList.add('open');
+            syncLoadConfig();
+        });
+        document.getElementById('syncModalClose').addEventListener('click', function() {
+            document.getElementById('syncModal').classList.remove('open');
+        });
+        document.getElementById('syncModal').addEventListener('click', function(e) {
+            if (e.target === this) this.classList.remove('open');
+        });
+        document.getElementById('syncSaveBtn').addEventListener('click', function() { syncSave(true); });
+        document.getElementById('syncNowBtn').addEventListener('click', syncTrigger);
+        document.getElementById('syncDisableBtn').addEventListener('click', syncRemove);
 
         // ── Boot ───────────────────────────────────────────────────────────────
         (function init() {

@@ -117,7 +117,8 @@ func RunStartup() {
 	storageHeartbeatTickerInit()
 	OAuthInit()        //Oauth system init
 	ldapInit()         //LDAP system init
-	notificationInit() //Notification system init
+	notificationInit()    //Notification system init
+	AppleNotesSyncInit() //Apple Notes IMAP sync
 
 	//Start High Level Services that requires full arozos architectures
 	FileServerInit()
