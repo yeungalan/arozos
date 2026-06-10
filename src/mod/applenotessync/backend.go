@@ -13,6 +13,7 @@ package applenotessync
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/emersion/go-imap"
@@ -24,9 +25,26 @@ type imapBackend struct {
 }
 
 func (b *imapBackend) Login(connInfo *imap.ConnInfo, username, password string) (backend.User, error) {
+	log := b.handler.opts.Logger
+
+	addr, proto := "unknown", "plaintext"
+	if connInfo != nil {
+		if connInfo.RemoteAddr != nil {
+			addr = connInfo.RemoteAddr.String()
+		}
+		if connInfo.TLS != nil {
+			proto = "TLS"
+		}
+	}
+
+	log.PrintAndLog("AppleNotesSync", fmt.Sprintf("AUTH attempt: user=%q addr=%s proto=%s", username, addr, proto), nil)
+
 	if !b.handler.opts.AuthAgent.ValidateUsernameAndPassword(username, password) {
+		log.PrintAndLog("AppleNotesSync", fmt.Sprintf("AUTH failed: bad credentials for user=%q addr=%s", username, addr), nil)
 		return nil, backend.ErrInvalidCredentials
 	}
+
+	log.PrintAndLog("AppleNotesSync", fmt.Sprintf("AUTH ok: user=%q addr=%s proto=%s", username, addr, proto), nil)
 	return &imapUser{handler: b.handler, username: username}, nil
 }
 

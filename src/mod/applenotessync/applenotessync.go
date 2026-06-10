@@ -204,6 +204,35 @@ func (l *imapErrorLogger) Println(v ...interface{}) {
 	l.log.PrintAndLog("AppleNotesSync", fmt.Sprint(v...), nil)
 }
 
+// loggingListener wraps net.Listener and logs each new TCP connection.
+type loggingListener struct {
+	net.Listener
+	log *logger.Logger
+}
+
+func (l *loggingListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	addr := conn.RemoteAddr().String()
+	l.log.PrintAndLog("AppleNotesSync", fmt.Sprintf("TCP connect: %s", addr), nil)
+	return &loggingConn{Conn: conn, log: l.log, addr: addr}, nil
+}
+
+// loggingConn logs when a TCP connection is closed.
+type loggingConn struct {
+	net.Conn
+	log  *logger.Logger
+	addr string
+}
+
+func (c *loggingConn) Close() error {
+	err := c.Conn.Close()
+	c.log.PrintAndLog("AppleNotesSync", fmt.Sprintf("TCP disconnect: %s", c.addr), nil)
+	return err
+}
+
 // ── Server lifecycle ──────────────────────────────────────────────────────────
 
 func (h *Handler) startServer(cfg ServerConfig) error {
@@ -227,18 +256,19 @@ func (h *Handler) startServer(cfg ServerConfig) error {
 
 	addr := fmt.Sprintf(":%d", port)
 
-	var l net.Listener
+	var rawL net.Listener
 	var err error
 	if useTLS {
-		l, err = tls.Listen("tcp", addr, h.tlsConfig)
+		rawL, err = tls.Listen("tcp", addr, h.tlsConfig)
 		h.opts.Logger.PrintAndLog("AppleNotesSync", fmt.Sprintf("Starting IMAP notes server with TLS on port %d", port), nil)
 	} else {
-		l, err = net.Listen("tcp", addr)
+		rawL, err = net.Listen("tcp", addr)
 		h.opts.Logger.PrintAndLog("AppleNotesSync", fmt.Sprintf("Starting IMAP notes server (plaintext) on port %d", port), nil)
 	}
 	if err != nil {
 		return err
 	}
+	l := &loggingListener{Listener: rawL, log: h.opts.Logger}
 
 	be := &imapBackend{handler: h}
 	s := server.New(be)
