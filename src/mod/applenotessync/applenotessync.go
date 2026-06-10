@@ -2,592 +2,224 @@ package applenotessync
 
 /*
 	Apple Notes Sync Module
-	Syncs notes between arozos Notes app and Apple Notes via IMAP.
 
-	Apple Notes stores notes as emails in an IMAP folder named "Notes"
-	on imap.mail.me.com (iCloud). Each note is an RFC 2822 message with
-	Content-Type: text/html and X-Uniform-Type-Identifier: com.apple.mail-note.
+	Runs an IMAP server inside arozos that exposes each user's Notes
+	(user:/Document/Notes) as the "Notes" mailbox Apple Notes expects.
+	Apple devices connect to arozos as a regular IMAP account with
+	Notes enabled, so the arozos Notes app is the single source of truth.
+
+	Apple Notes over IMAP stores each note as an RFC 2822 message with
+	Content-Type: text/html and these identifying headers:
+	  X-Uniform-Type-Identifier:      com.apple.mail-note
+	  X-Universally-Unique-Identifier: <note UUID, stable across edits>
 */
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io"
-	"mime"
-	"mime/multipart"
-	"mime/quotedprintable"
+	"net"
 	"net/http"
-	"net/mail"
-	"net/textproto"
-	"os"
-	"path/filepath"
-	"regexp"
-	"strconv"
-	"strings"
-	"time"
+	"sync"
 
-	"github.com/emersion/go-imap"
-	imapClient "github.com/emersion/go-imap/client"
+	"github.com/emersion/go-imap/server"
 
+	auth "imuslab.com/arozos/mod/auth"
 	db "imuslab.com/arozos/mod/database"
 	"imuslab.com/arozos/mod/info/logger"
 	user "imuslab.com/arozos/mod/user"
 	"imuslab.com/arozos/mod/utils"
 )
 
-const dbTable = "apple_notes_sync"
+const dbTable = "apple_notes_imap"
 
-// Options holds dependencies for the sync handler.
+// Options holds dependencies for the IMAP notes server.
 type Options struct {
 	UserHandler *user.UserHandler
+	AuthAgent   *auth.AuthAgent
 	Database    *db.Database
 	Logger      *logger.Logger
 }
 
-// Handler provides HTTP handlers and sync logic.
+// ServerConfig is the admin-managed configuration of the IMAP listener.
+type ServerConfig struct {
+	Enabled bool `json:"enabled"`
+	Port    int  `json:"port"`
+}
+
+// Handler owns the IMAP server lifecycle and the HTTP management endpoints.
 type Handler struct {
 	opts Options
+
+	mu       sync.Mutex
+	server   *server.Server
+	listener net.Listener
+	running  bool
+	lastErr  string
+
+	// Maps a username to the real path of their Notes directory; replaced
+	// in tests to avoid the full user / storage subsystem
+	notesDirResolver func(username string) (string, error)
+
+	// Serializes mailbox state mutation per user (reconcile / append / expunge)
+	userLocks sync.Map // username -> *sync.Mutex
 }
 
-// SyncConfig stores the user's IMAP credentials.
-type SyncConfig struct {
-	IMAPServer string `json:"imapServer"`
-	IMAPPort   int    `json:"imapPort"`
-	Username   string `json:"username"`
-	Password   string `json:"password"`
-	Enabled    bool   `json:"enabled"`
-}
-
-// SyncEntry maps one arozos note to one Apple Note by IMAP UID.
-type SyncEntry struct {
-	ArozosID string `json:"arozosId"`
-	AppleUID uint32 `json:"appleUid"`
-}
-
-// SyncStatus records the outcome of the most recent sync.
-type SyncStatus struct {
-	LastSyncTime int64  `json:"lastSyncTime"`
-	LastError    string `json:"lastError"`
-	Pulled       int    `json:"pulled"`
-	Pushed       int    `json:"pushed"`
-	InProgress   bool   `json:"inProgress"`
-}
-
-// notesMeta mirrors the meta.json written by the AGI scripts.
-type notesMeta struct {
-	LastOpened string     `json:"lastOpened"`
-	Theme      string     `json:"theme"`
-	Notes      []noteMeta `json:"notes"`
-}
-
-type noteMeta struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	UpdatedAt int64  `json:"updatedAt"`
-}
-
-// NewHandler creates a sync handler and ensures the DB table exists.
+// NewHandler creates the handler, ensures the DB table exists and starts
+// the IMAP server if it was enabled previously.
 func NewHandler(opts Options) *Handler {
 	opts.Database.NewTable(dbTable)
-	return &Handler{opts: opts}
+	h := &Handler{opts: opts}
+	h.notesDirResolver = h.resolveUserNotesDir
+
+	cfg := h.loadServerConfig()
+	if cfg.Enabled {
+		if err := h.startServer(cfg.Port); err != nil {
+			h.lastErr = err.Error()
+			opts.Logger.PrintAndLog("AppleNotesSync", "IMAP server failed to start: "+err.Error(), err)
+		}
+	}
+	return h
+}
+
+func (h *Handler) lockUser(username string) *sync.Mutex {
+	m, _ := h.userLocks.LoadOrStore(username, &sync.Mutex{})
+	return m.(*sync.Mutex)
+}
+
+// ── Server lifecycle ──────────────────────────────────────────────────────────
+
+func (h *Handler) startServer(port int) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.running {
+		return nil
+	}
+	if port <= 0 {
+		port = 143
+	}
+
+	be := &imapBackend{handler: h}
+	s := server.New(be)
+	s.Addr = fmt.Sprintf(":%d", port)
+	// LAN usage: allow LOGIN over plaintext connections. Apple devices must
+	// have "Use SSL" switched off for this account.
+	s.AllowInsecureAuth = true
+
+	l, err := net.Listen("tcp", s.Addr)
+	if err != nil {
+		return err
+	}
+
+	h.server = s
+	h.listener = l
+	h.running = true
+	h.lastErr = ""
+
+	go func() {
+		serveErr := s.Serve(l)
+		h.mu.Lock()
+		if h.running { // unexpected exit, not a manual stop
+			h.lastErr = serveErr.Error()
+			h.running = false
+		}
+		h.mu.Unlock()
+	}()
+
+	h.opts.Logger.PrintAndLog("AppleNotesSync", fmt.Sprintf("IMAP notes server started on port %d", port), nil)
+	return nil
+}
+
+func (h *Handler) stopServer() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.running {
+		return
+	}
+	h.running = false
+	if h.server != nil {
+		h.server.Close()
+		h.server = nil
+		h.listener = nil
+	}
+	h.opts.Logger.PrintAndLog("AppleNotesSync", "IMAP notes server stopped", nil)
 }
 
 // ── HTTP handlers ─────────────────────────────────────────────────────────────
 
-// HandleConfig responds to GET/POST/DELETE on the sync configuration endpoint.
-func (h *Handler) HandleConfig(w http.ResponseWriter, r *http.Request) {
-	userinfo, err := h.opts.UserHandler.GetUserInfoFromRequest(w, r)
-	if err != nil {
-		utils.SendErrorResponse(w, "authentication required")
-		return
-	}
-
-	switch r.Method {
-	case http.MethodGet:
-		cfg := h.loadConfig(userinfo.Username)
-		resp := map[string]interface{}{
-			"imapServer":  cfg.IMAPServer,
-			"imapPort":    cfg.IMAPPort,
-			"username":    cfg.Username,
-			"hasPassword": cfg.Password != "",
-			"enabled":     cfg.Enabled,
-		}
-		js, _ := json.Marshal(resp)
-		utils.SendJSONResponse(w, string(js))
-
-	case http.MethodPost:
-		var incoming SyncConfig
-		if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
-			utils.SendErrorResponse(w, "invalid JSON body")
-			return
-		}
-		// Preserve stored password when the client omits it
-		if incoming.Password == "" {
-			existing := h.loadConfig(userinfo.Username)
-			incoming.Password = existing.Password
-		}
-		if incoming.IMAPPort == 0 {
-			incoming.IMAPPort = 993
-		}
-		if incoming.IMAPServer == "" {
-			incoming.IMAPServer = "imap.mail.me.com"
-		}
-		if err := h.opts.Database.Write(dbTable, userinfo.Username+":config", incoming); err != nil {
-			utils.SendErrorResponse(w, "failed to save configuration")
-			return
-		}
-		utils.SendOK(w)
-
-	case http.MethodDelete:
-		h.opts.Database.Delete(dbTable, userinfo.Username+":config")
-		h.opts.Database.Delete(dbTable, userinfo.Username+":map")
-		utils.SendOK(w)
-
-	default:
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-// HandleSync triggers an asynchronous sync and returns immediately.
-func (h *Handler) HandleSync(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	userinfo, err := h.opts.UserHandler.GetUserInfoFromRequest(w, r)
-	if err != nil {
-		utils.SendErrorResponse(w, "authentication required")
-		return
-	}
-
-	cfg := h.loadConfig(userinfo.Username)
-	if !cfg.Enabled || cfg.Username == "" || cfg.Password == "" {
-		utils.SendErrorResponse(w, "sync not configured or disabled")
-		return
-	}
-
-	status := h.loadStatus(userinfo.Username)
-	if status.InProgress {
-		utils.SendErrorResponse(w, "sync already in progress")
-		return
-	}
-
-	go h.runSync(userinfo.Username, cfg)
-	utils.SendOK(w)
-}
-
-// HandleStatus returns the latest sync status for the authenticated user.
+// HandleStatus returns server state plus the per-user connection hints.
+// Available to all authenticated users.
 func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	userinfo, err := h.opts.UserHandler.GetUserInfoFromRequest(w, r)
 	if err != nil {
 		utils.SendErrorResponse(w, "authentication required")
 		return
 	}
-	status := h.loadStatus(userinfo.Username)
-	js, _ := json.Marshal(status)
+
+	cfg := h.loadServerConfig()
+	h.mu.Lock()
+	running := h.running
+	lastErr := h.lastErr
+	h.mu.Unlock()
+
+	resp := map[string]interface{}{
+		"enabled":   cfg.Enabled,
+		"running":   running,
+		"port":      cfg.Port,
+		"lastError": lastErr,
+		"username":  userinfo.Username,
+		"isAdmin":   userinfo.IsAdmin(),
+	}
+	js, _ := json.Marshal(resp)
 	utils.SendJSONResponse(w, string(js))
 }
 
-// ── Sync orchestration ────────────────────────────────────────────────────────
+// HandleConfig gets or sets the IMAP server configuration. Admin only
+// (enforced by the admin router this is registered on).
+func (h *Handler) HandleConfig(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		cfg := h.loadServerConfig()
+		js, _ := json.Marshal(cfg)
+		utils.SendJSONResponse(w, string(js))
 
-func (h *Handler) runSync(username string, cfg SyncConfig) {
-	status := h.loadStatus(username)
-	status.InProgress = true
-	h.saveStatus(username, status)
-
-	pulled, pushed, syncErr := h.syncNotes(username, cfg)
-
-	status.InProgress = false
-	status.LastSyncTime = time.Now().UnixMilli()
-	status.Pulled = pulled
-	status.Pushed = pushed
-	if syncErr != nil {
-		status.LastError = syncErr.Error()
-		h.opts.Logger.PrintAndLog("AppleNotesSync", "sync error for "+username+": "+syncErr.Error(), syncErr)
-	} else {
-		status.LastError = ""
-	}
-	h.saveStatus(username, status)
-}
-
-func (h *Handler) syncNotes(username string, cfg SyncConfig) (pulled, pushed int, retErr error) {
-	c, err := dialIMAP(cfg)
-	if err != nil {
-		return 0, 0, fmt.Errorf("IMAP connect: %w", err)
-	}
-	defer c.Logout()
-
-	mbox, err := c.Select("Notes", false)
-	if err != nil {
-		return 0, 0, fmt.Errorf("select Notes mailbox: %w", err)
-	}
-
-	notesDir, err := h.resolveNotesDir(username)
-	if err != nil {
-		return 0, 0, fmt.Errorf("resolve notes directory: %w", err)
-	}
-
-	meta := loadNotesMeta(notesDir)
-	entries := h.loadSyncEntries(username)
-	lastSync := time.UnixMilli(h.loadStatus(username).LastSyncTime)
-
-	// Build in-memory lookup tables
-	arozosToUID := map[string]uint32{}
-	uidToArozos := map[uint32]string{}
-	for _, e := range entries {
-		arozosToUID[e.ArozosID] = e.AppleUID
-		uidToArozos[e.AppleUID] = e.ArozosID
-	}
-
-	// ── Pull: Apple → arozos ─────────────────────────────────────────────
-	appleUIDs := []uint32{}
-	if mbox.Messages > 0 {
-		criteria := imap.NewSearchCriteria()
-		appleUIDs, err = c.UidSearch(criteria)
-		if err != nil {
-			return 0, 0, fmt.Errorf("IMAP search: %w", err)
-		}
-	}
-
-	// Track which Apple UIDs still exist (for future deletion sync)
-	existingAppleUIDs := map[uint32]bool{}
-	for _, uid := range appleUIDs {
-		existingAppleUIDs[uid] = true
-	}
-
-	if len(appleUIDs) > 0 {
-		seqset := new(imap.SeqSet)
-		seqset.AddNum(appleUIDs...)
-
-		section := &imap.BodySectionName{}
-		fetchItems := []imap.FetchItem{imap.FetchUid, imap.FetchEnvelope, section.FetchItem()}
-		msgCh := make(chan *imap.Message, 20)
-		doneCh := make(chan error, 1)
-		go func() { doneCh <- c.UidFetch(seqset, fetchItems, msgCh) }()
-
-		for msg := range msgCh {
-			uid := msg.Uid
-			if uid == 0 || msg.Envelope == nil {
-				continue
-			}
-
-			subject := msg.Envelope.Subject
-			noteDate := msg.Envelope.Date
-			needsPull := noteDate.After(lastSync) || lastSync.IsZero()
-
-			existingID, alreadySynced := uidToArozos[uid]
-
-			if alreadySynced && !needsPull {
-				continue // unchanged since last sync
-			}
-
-			bodyR := msg.GetBody(section)
-			if bodyR == nil {
-				continue
-			}
-			content, parseErr := extractTextFromMessage(bodyR)
-			if parseErr != nil {
-				continue
-			}
-
-			title := derivedTitle(subject, content)
-			ts := noteDate.UnixMilli()
-			if ts <= 0 {
-				ts = time.Now().UnixMilli()
-			}
-
-			if alreadySynced {
-				// Overwrite arozos note with the Apple version
-				if os.WriteFile(filepath.Join(notesDir, existingID+".txt"), []byte(content), 0644) == nil {
-					updateMetaEntry(meta, existingID, title, ts)
-					pulled++
-				}
-			} else {
-				// Create a new arozos note for this Apple note
-				newID := "apple_" + strconv.FormatUint(uint64(uid), 16)
-				if os.WriteFile(filepath.Join(notesDir, newID+".txt"), []byte(content), 0644) == nil {
-					meta.Notes = append(meta.Notes, noteMeta{ID: newID, Title: title, UpdatedAt: ts})
-					entries = append(entries, SyncEntry{ArozosID: newID, AppleUID: uid})
-					arozosToUID[newID] = uid
-					uidToArozos[uid] = newID
-					pulled++
-				}
-			}
-		}
-		if fetchErr := <-doneCh; fetchErr != nil {
-			h.opts.Logger.PrintAndLog("AppleNotesSync", "fetch partial error: "+fetchErr.Error(), fetchErr)
-		}
-	}
-
-	// ── Push: arozos → Apple ─────────────────────────────────────────────
-	for _, nm := range meta.Notes {
-		if _, ok := arozosToUID[nm.ID]; ok {
-			continue // already tracked
-		}
-		rawContent, err := os.ReadFile(filepath.Join(notesDir, nm.ID+".txt"))
-		if err != nil {
-			continue
-		}
-		title := nm.Title
-		if title == "" {
-			title = derivedTitle("", string(rawContent))
-		}
-		appleHTML := wrapInAppleHTML(string(rawContent))
-		rawMsg := buildRawMessage(title, appleHTML)
-
-		if appendErr := c.Append("Notes", []string{imap.SeenFlag}, time.Now(), strings.NewReader(rawMsg)); appendErr != nil {
-			continue
-		}
-		pushed++
-
-		// Retrieve the UID of the note we just created by searching on Subject
-		sc := imap.NewSearchCriteria()
-		sc.Header = make(textproto.MIMEHeader)
-		sc.Header["Subject"] = []string{title}
-		newUIDs, searchErr := c.UidSearch(sc)
-		if searchErr == nil && len(newUIDs) > 0 {
-			newUID := newUIDs[len(newUIDs)-1]
-			entries = append(entries, SyncEntry{ArozosID: nm.ID, AppleUID: newUID})
-			arozosToUID[nm.ID] = newUID
-			uidToArozos[newUID] = nm.ID
-		}
-	}
-
-	// Persist updated state
-	saveNotesMeta(notesDir, meta)
-	h.saveSyncEntries(username, entries)
-
-	return pulled, pushed, nil
-}
-
-// ── IMAP helpers ──────────────────────────────────────────────────────────────
-
-func dialIMAP(cfg SyncConfig) (*imapClient.Client, error) {
-	addr := fmt.Sprintf("%s:%d", cfg.IMAPServer, cfg.IMAPPort)
-	c, err := imapClient.DialTLS(addr, &tls.Config{ServerName: cfg.IMAPServer})
-	if err != nil {
-		return nil, err
-	}
-	if err := c.Login(cfg.Username, cfg.Password); err != nil {
-		c.Logout()
-		return nil, fmt.Errorf("login failed: %w", err)
-	}
-	return c, nil
-}
-
-// extractTextFromMessage parses a raw RFC 2822 message and returns plain text.
-func extractTextFromMessage(r io.Reader) (string, error) {
-	msg, err := mail.ReadMessage(r)
-	if err != nil {
-		return "", err
-	}
-	ct := msg.Header.Get("Content-Type")
-	cte := strings.ToLower(msg.Header.Get("Content-Transfer-Encoding"))
-	mediaType, params, _ := mime.ParseMediaType(ct)
-
-	decode := func(body io.Reader) io.Reader {
-		switch cte {
-		case "quoted-printable":
-			return quotedprintable.NewReader(body)
-		default:
-			return body
-		}
-	}
-
-	switch {
-	case strings.HasPrefix(mediaType, "multipart/"):
-		boundary := params["boundary"]
-		mr := multipart.NewReader(msg.Body, boundary)
-		htmlPart, textPart := "", ""
-		for {
-			part, err := mr.NextPart()
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				continue
-			}
-			partType, _, _ := mime.ParseMediaType(part.Header.Get("Content-Type"))
-			partCTE := strings.ToLower(part.Header.Get("Content-Transfer-Encoding"))
-			var partReader io.Reader = part
-			if partCTE == "quoted-printable" {
-				partReader = quotedprintable.NewReader(part)
-			}
-			data, _ := io.ReadAll(partReader)
-			switch {
-			case strings.EqualFold(partType, "text/html"):
-				htmlPart = stripHTML(string(data))
-			case strings.EqualFold(partType, "text/plain"):
-				textPart = string(data)
-			}
-		}
-		if htmlPart != "" {
-			return htmlPart, nil
-		}
-		return textPart, nil
-
-	case strings.EqualFold(mediaType, "text/html"):
-		data, _ := io.ReadAll(decode(msg.Body))
-		return stripHTML(string(data)), nil
-
-	default:
-		data, _ := io.ReadAll(decode(msg.Body))
-		return string(data), nil
-	}
-}
-
-var (
-	tagRE        = regexp.MustCompile(`<[^>]+>`)
-	blankLinesRE = regexp.MustCompile(`\n{3,}`)
-	blockTagRE   = regexp.MustCompile(`(?i)</?(?:br|p|div|li|h[1-6]|tr)\b[^>]*>`)
-)
-
-func stripHTML(h string) string {
-	h = blockTagRE.ReplaceAllString(h, "\n")
-	h = tagRE.ReplaceAllString(h, "")
-	replacer := strings.NewReplacer(
-		"&amp;", "&", "&lt;", "<", "&gt;", ">",
-		"&nbsp;", " ", "&quot;", `"`, "&#x27;", "'", "&#39;", "'",
-	)
-	h = replacer.Replace(h)
-	h = blankLinesRE.ReplaceAllString(h, "\n\n")
-	return strings.TrimSpace(h)
-}
-
-func wrapInAppleHTML(text string) string {
-	var sb strings.Builder
-	sb.WriteString(`<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8" /></head>`)
-	sb.WriteString(`<body style="word-wrap: break-word; -webkit-nbsp-mode: space; line-break: after-white-space; ">`)
-	for _, line := range strings.Split(text, "\n") {
-		esc := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(line)
-		if esc == "" {
-			sb.WriteString("<div><br></div>\n")
-		} else {
-			sb.WriteString("<div>" + esc + "</div>\n")
-		}
-	}
-	sb.WriteString("</body></html>")
-	return sb.String()
-}
-
-func buildRawMessage(subject, htmlBody string) string {
-	now := time.Now().Format(time.RFC1123Z)
-	var qp strings.Builder
-	w := quotedprintable.NewWriter(&qp)
-	w.Write([]byte(htmlBody))
-	w.Close()
-	return "Date: " + now + "\r\n" +
-		"MIME-Version: 1.0\r\n" +
-		"Subject: " + subject + "\r\n" +
-		"X-Uniform-Type-Identifier: com.apple.mail-note\r\n" +
-		"Content-Type: text/html; charset=utf-8\r\n" +
-		"Content-Transfer-Encoding: quoted-printable\r\n\r\n" +
-		qp.String()
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-func derivedTitle(subject, content string) string {
-	if subject != "" {
-		if len(subject) > 60 {
-			return subject[:60]
-		}
-		return subject
-	}
-	for _, line := range strings.Split(content, "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			if len(line) > 60 {
-				return line[:60]
-			}
-			return line
-		}
-	}
-	return "New Note"
-}
-
-func updateMetaEntry(meta *notesMeta, id, title string, ts int64) {
-	for i, n := range meta.Notes {
-		if n.ID == id {
-			meta.Notes[i].Title = title
-			meta.Notes[i].UpdatedAt = ts
+	case http.MethodPost:
+		var incoming ServerConfig
+		if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
+			utils.SendErrorResponse(w, "invalid JSON body")
 			return
 		}
+		if incoming.Port <= 0 || incoming.Port > 65535 {
+			incoming.Port = 143
+		}
+		if err := h.opts.Database.Write(dbTable, "config", incoming); err != nil {
+			utils.SendErrorResponse(w, "failed to save configuration")
+			return
+		}
+
+		// Apply: restart listener with the new settings
+		h.stopServer()
+		if incoming.Enabled {
+			if err := h.startServer(incoming.Port); err != nil {
+				h.mu.Lock()
+				h.lastErr = err.Error()
+				h.mu.Unlock()
+				utils.SendErrorResponse(w, "failed to start IMAP server: "+err.Error())
+				return
+			}
+		}
+		utils.SendOK(w)
+
+	default:
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-// ── Notes filesystem helpers ──────────────────────────────────────────────────
-
-func (h *Handler) resolveNotesDir(username string) (string, error) {
-	userinfo, err := h.opts.UserHandler.GetUserInfoFromUsername(username)
-	if err != nil {
-		return "", err
+func (h *Handler) loadServerConfig() ServerConfig {
+	cfg := ServerConfig{Enabled: false, Port: 143}
+	h.opts.Database.Read(dbTable, "config", &cfg)
+	if cfg.Port <= 0 {
+		cfg.Port = 143
 	}
-	homeFSH, err := userinfo.GetHomeFileSystemHandler()
-	if err != nil {
-		return "", err
-	}
-	realPath, err := homeFSH.FileSystemAbstraction.VirtualPathToRealPath("user:/Document/Notes", username)
-	if err != nil {
-		return "", err
-	}
-	if mkErr := os.MkdirAll(realPath, 0755); mkErr != nil {
-		return "", mkErr
-	}
-	return realPath, nil
-}
-
-func loadNotesMeta(dir string) *notesMeta {
-	data, err := os.ReadFile(filepath.Join(dir, "meta.json"))
-	if err != nil {
-		return &notesMeta{Theme: "dark", Notes: []noteMeta{}}
-	}
-	var m notesMeta
-	if json.Unmarshal(data, &m) != nil {
-		return &notesMeta{Theme: "dark", Notes: []noteMeta{}}
-	}
-	if m.Notes == nil {
-		m.Notes = []noteMeta{}
-	}
-	return &m
-}
-
-func saveNotesMeta(dir string, m *notesMeta) error {
-	data, err := json.Marshal(m)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(dir, "meta.json"), data, 0644)
-}
-
-// ── Database helpers ──────────────────────────────────────────────────────────
-
-func (h *Handler) loadConfig(username string) SyncConfig {
-	var cfg SyncConfig
-	h.opts.Database.Read(dbTable, username+":config", &cfg)
 	return cfg
-}
-
-func (h *Handler) loadStatus(username string) SyncStatus {
-	var s SyncStatus
-	h.opts.Database.Read(dbTable, username+":status", &s)
-	return s
-}
-
-func (h *Handler) saveStatus(username string, s SyncStatus) {
-	h.opts.Database.Write(dbTable, username+":status", s)
-}
-
-func (h *Handler) loadSyncEntries(username string) []SyncEntry {
-	var entries []SyncEntry
-	h.opts.Database.Read(dbTable, username+":map", &entries)
-	if entries == nil {
-		entries = []SyncEntry{}
-	}
-	return entries
-}
-
-func (h *Handler) saveSyncEntries(username string, entries []SyncEntry) {
-	h.opts.Database.Write(dbTable, username+":map", entries)
 }

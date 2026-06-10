@@ -13,6 +13,12 @@
           Notes/backend/write.agi   - write/create a note + update metadata
           Notes/backend/delete.agi  - delete a note + update metadata
           Notes/backend/savemeta.agi- persist theme preference only
+
+        Apple Notes sync (Go module, mod/applenotessync):
+          arozos runs an IMAP server exposing these notes as the "Notes"
+          mailbox; Apple devices connect to it as an IMAP account.
+          /api/notes/apple/status - server state + connection details
+          /api/notes/apple/config - admin: enable/disable + port
     -->
     <style>
         * {
@@ -442,6 +448,31 @@
         .sync-indicator.error   { background: #ff453a; }
         .sync-indicator.pending { background: #ffd60a; }
 
+        /* Connection details rows */
+        .conn-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+            padding: 7px 2px;
+            border-bottom: 1px solid rgba(128,128,128,0.18);
+        }
+        .conn-label { opacity: 0.55; flex-shrink: 0; }
+        .conn-value {
+            font-weight: 600;
+            user-select: text;
+            -webkit-user-select: text;
+            text-align: right;
+            word-break: break-all;
+        }
+
+        /* Setup instructions */
+        #syncHowTo { font-size: 12.5px; }
+        #syncHowTo summary { cursor: pointer; font-weight: 600; padding: 2px 0; opacity: 0.85; }
+        #syncHowTo ol { margin: 8px 0 4px 18px; display: flex; flex-direction: column; gap: 5px; opacity: 0.8; }
+        #syncHowTo p  { margin-top: 8px; opacity: 0.7; }
+
         /* RWD: phone portrait */
         @media (max-width: 600px) {
             .sidebar {
@@ -545,34 +576,46 @@
                 <button class="modal-close" id="syncModalClose">&#x2715;</button>
             </div>
 
-            <div class="form-row">
-                <div class="form-group" style="flex:2;">
-                    <label class="form-label">IMAP Server</label>
-                    <input class="form-input" id="syncServer" type="text" value="imap.mail.me.com" placeholder="imap.mail.me.com">
+            <div class="sync-status-bar visible info" id="syncServerState">Checking server status&#x2026;</div>
+
+            <!-- Connection details, shown while the server is running -->
+            <div id="syncConnInfo" style="display:none;">
+                <div class="conn-row"><span class="conn-label">Server</span><span class="conn-value" id="connHost"></span></div>
+                <div class="conn-row"><span class="conn-label">Port</span><span class="conn-value" id="connPort"></span></div>
+                <div class="conn-row"><span class="conn-label">Username</span><span class="conn-value" id="connUser"></span></div>
+                <div class="conn-row"><span class="conn-label">Password</span><span class="conn-value">your arozos password</span></div>
+                <div class="conn-row" style="border-bottom:none;"><span class="conn-label">Use SSL</span><span class="conn-value">Off</span></div>
+            </div>
+
+            <details id="syncHowTo" style="display:none;">
+                <summary>How to connect an iPhone / iPad / Mac</summary>
+                <ol>
+                    <li><b>iPhone:</b> Settings &rarr; Mail &rarr; Accounts &rarr; Add Account &rarr; Other &rarr; <b>Add Mail Account</b></li>
+                    <li>Enter any name and email (e.g. <i>you@arozos</i>), then choose <b>IMAP</b> and fill both incoming and outgoing servers with the values above</li>
+                    <li>If a connection warning appears, choose <b>Continue</b> / save anyway &mdash; the outgoing (SMTP) server is not used for notes</li>
+                    <li>In the account&#x2019;s <b>Advanced</b> settings turn <b>Use SSL off</b> and confirm the port</li>
+                    <li>Switch <b>Notes ON</b> (Mail can stay off) for the account</li>
+                </ol>
+                <p><b>Mac:</b> System Settings &rarr; Internet Accounts &rarr; Add Other Account &rarr; Mail Account, then enable only Notes for it.</p>
+            </details>
+
+            <!-- Admin controls -->
+            <div id="syncAdminControls" style="display:none;">
+                <div class="form-row" style="align-items:flex-end;">
+                    <div class="form-group" style="flex:1.4;">
+                        <label class="form-label">IMAP Server</label>
+                        <label style="font-size:13px;display:flex;align-items:center;gap:7px;padding:8px 0;cursor:pointer;">
+                            <input type="checkbox" id="syncEnabled"> Enabled
+                        </label>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label class="form-label">Port</label>
+                        <input class="form-input" id="syncPort" type="number" value="143" min="1" max="65535">
+                    </div>
                 </div>
-                <div class="form-group" style="flex:1;">
-                    <label class="form-label">Port</label>
-                    <input class="form-input" id="syncPort" type="number" value="993" placeholder="993">
+                <div class="modal-actions">
+                    <button class="btn-primary" id="syncApplyBtn">Apply</button>
                 </div>
-            </div>
-
-            <div class="form-group">
-                <label class="form-label">Apple ID (email)</label>
-                <input class="form-input" id="syncUsername" type="email" placeholder="you@icloud.com">
-            </div>
-
-            <div class="form-group">
-                <label class="form-label">App-Specific Password</label>
-                <input class="form-input" id="syncPassword" type="password" placeholder="xxxx-xxxx-xxxx-xxxx">
-                <span style="font-size:11px;opacity:0.45;margin-top:3px;">
-                    Generate at <strong>appleid.apple.com</strong> under Sign-In &amp; Security &rarr; App-Specific Passwords
-                </span>
-            </div>
-
-            <div class="modal-actions">
-                <button class="btn-primary" id="syncSaveBtn">Save &amp; Sync Now</button>
-                <button class="btn-secondary" id="syncNowBtn" style="display:none;">Sync Now</button>
-                <button class="btn-secondary" id="syncDisableBtn" style="display:none;color:#ff453a;">Remove Credentials</button>
             </div>
 
             <div class="sync-status-bar" id="syncStatusBar"></div>
@@ -926,182 +969,120 @@
             }
         });
 
-        // ── Apple Notes Sync ──────────────────────────────────────────────────
-        var syncPollTimer = null;
-
-        function syncApiBase() { return '/api/notes/apple/'; }
-
-        function syncLoadConfig() {
-            $.ajax({
-                url: syncApiBase() + 'config',
-                method: 'GET',
-                success: function(data) {
-                    var cfg = (typeof data === 'string') ? JSON.parse(data) : data;
-                    if (cfg && cfg.username) {
-                        document.getElementById('syncUsername').value = cfg.username || '';
-                        document.getElementById('syncServer').value  = cfg.imapServer || 'imap.mail.me.com';
-                        document.getElementById('syncPort').value    = cfg.imapPort || 993;
-                        // password intentionally left blank in the form
-                        document.getElementById('syncNowBtn').style.display    = '';
-                        document.getElementById('syncDisableBtn').style.display = '';
-                        document.getElementById('syncSaveBtn').textContent = 'Update & Sync Now';
-                    }
-                    syncLoadStatus();
-                },
-                error: function() { syncLoadStatus(); }
-            });
-        }
-
+        // ── Apple Notes Sync (arozos as IMAP server) ──────────────────────────
+        // arozos runs an IMAP server exposing this app's notes as the "Notes"
+        // mailbox; Apple devices connect to it as a regular IMAP account.
         function syncLoadStatus() {
             $.ajax({
-                url: syncApiBase() + 'status',
+                url: '/api/notes/apple/status',
                 method: 'GET',
-                success: function(data) {
+                success: function (data) {
                     var s = (typeof data === 'string') ? JSON.parse(data) : data;
                     syncRenderStatus(s);
+                },
+                error: function () {
+                    var state = document.getElementById('syncServerState');
+                    state.className = 'sync-status-bar visible err';
+                    state.textContent = 'Could not query sync server status';
                 }
             });
         }
 
         function syncRenderStatus(s) {
-            var dot  = document.getElementById('syncDot');
-            var bar  = document.getElementById('syncStatusBar');
-            if (!s) return;
+            if (!s || s.error) return;
 
-            if (s.inProgress) {
-                dot.className = 'sync-indicator pending';
-                dot.style.display = '';
-                bar.className = 'sync-status-bar visible info';
-                bar.textContent = 'Syncing…';
-                syncPollTimer = setTimeout(syncLoadStatus, 2000);
-                return;
-            }
+            var dot      = document.getElementById('syncDot');
+            var state    = document.getElementById('syncServerState');
+            var connInfo = document.getElementById('syncConnInfo');
+            var howTo    = document.getElementById('syncHowTo');
+            var admin    = document.getElementById('syncAdminControls');
 
-            clearTimeout(syncPollTimer);
-
-            if (!s.lastSyncTime) {
-                dot.style.display = 'none';
-                bar.className = 'sync-status-bar';
-                return;
-            }
-
-            if (s.lastError) {
-                dot.className = 'sync-indicator error';
-                dot.style.display = '';
-                bar.className = 'sync-status-bar visible err';
-                bar.textContent = 'Sync failed: ' + s.lastError;
-            } else {
+            if (s.running) {
                 dot.className = 'sync-indicator synced';
                 dot.style.display = '';
-                var d = new Date(s.lastSyncTime);
-                bar.className = 'sync-status-bar visible ok';
-                bar.textContent = 'Last sync ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) +
-                    ' — ' + s.pulled + ' pulled, ' + s.pushed + ' pushed';
+                state.className = 'sync-status-bar visible ok';
+                state.textContent = 'IMAP server running on port ' + s.port +
+                    ' — connect your Apple devices with the details below';
+                document.getElementById('connHost').textContent = window.location.hostname;
+                document.getElementById('connPort').textContent = s.port;
+                document.getElementById('connUser').textContent = s.username || '';
+                connInfo.style.display = '';
+                howTo.style.display = '';
+            } else {
+                connInfo.style.display = 'none';
+                howTo.style.display = 'none';
+                if (s.enabled && s.lastError) {
+                    dot.className = 'sync-indicator error';
+                    dot.style.display = '';
+                    state.className = 'sync-status-bar visible err';
+                    state.textContent = 'IMAP server failed to start: ' + s.lastError;
+                } else {
+                    dot.style.display = 'none';
+                    state.className = 'sync-status-bar visible info';
+                    state.textContent = s.isAdmin
+                        ? 'Apple Notes sync is not enabled. Enable the IMAP server below.'
+                        : 'Apple Notes sync is not enabled on this server. Ask your administrator to enable it.';
+                }
+            }
+
+            if (s.isAdmin) {
+                admin.style.display = '';
+                document.getElementById('syncEnabled').checked = !!s.enabled;
+                document.getElementById('syncPort').value = s.port || 143;
+            } else {
+                admin.style.display = 'none';
             }
         }
 
-        function syncSave(thenSync) {
-            var username = document.getElementById('syncUsername').value.trim();
-            var password = document.getElementById('syncPassword').value;
-            var server   = document.getElementById('syncServer').value.trim() || 'imap.mail.me.com';
-            var port     = parseInt(document.getElementById('syncPort').value) || 993;
-
-            if (!username) {
-                showSnackbar('Apple ID is required');
-                return;
-            }
-
-            var btn = document.getElementById('syncSaveBtn');
+        function syncApplyConfig() {
+            var enabled = document.getElementById('syncEnabled').checked;
+            var port    = parseInt(document.getElementById('syncPort').value) || 143;
+            var btn     = document.getElementById('syncApplyBtn');
             btn.disabled = true;
-            btn.textContent = 'Saving…';
+            btn.textContent = 'Applying…';
 
             $.ajax({
-                url: syncApiBase() + 'config',
+                url: '/api/notes/apple/config',
                 method: 'POST',
                 contentType: 'application/json',
-                data: JSON.stringify({
-                    imapServer: server,
-                    imapPort:   port,
-                    username:   username,
-                    password:   password,
-                    enabled:    true
-                }),
-                success: function() {
+                data: JSON.stringify({ enabled: enabled, port: port }),
+                success: function (data) {
                     btn.disabled = false;
-                    btn.textContent = 'Update & Sync Now';
-                    document.getElementById('syncNowBtn').style.display    = '';
-                    document.getElementById('syncDisableBtn').style.display = '';
-                    if (thenSync !== false) syncTrigger();
+                    btn.textContent = 'Apply';
+                    var r = (typeof data === 'string') ? JSON.parse(data) : data;
+                    if (r && r.error) {
+                        var bar = document.getElementById('syncStatusBar');
+                        bar.className = 'sync-status-bar visible err';
+                        bar.textContent = r.error;
+                    } else {
+                        showSnackbar(enabled ? 'IMAP server enabled' : 'IMAP server disabled');
+                        document.getElementById('syncStatusBar').className = 'sync-status-bar';
+                    }
+                    syncLoadStatus();
                 },
-                error: function() {
+                error: function () {
                     btn.disabled = false;
-                    btn.textContent = 'Update & Sync Now';
-                    showSnackbar('Failed to save settings');
-                }
-            });
-        }
-
-        function syncTrigger() {
-            var bar = document.getElementById('syncStatusBar');
-            bar.className = 'sync-status-bar visible info';
-            bar.textContent = 'Starting sync…';
-
-            $.ajax({
-                url: syncApiBase() + 'sync',
-                method: 'POST',
-                success: function() {
-                    setTimeout(function pollProgress() {
-                        syncLoadStatus();
-                        var s = document.getElementById('syncStatusBar');
-                        if (s && s.textContent.indexOf('Syncing') !== -1) {
-                            setTimeout(pollProgress, 2000);
-                        } else {
-                            // Refresh note list after sync
-                            apiInit(function(loadedMeta) {
-                                meta  = loadedMeta;
-                                notes = meta.notes || [];
-                                renderNoteList();
-                            });
-                        }
-                    }, 1500);
-                },
-                error: function() { showSnackbar('Sync request failed'); }
-            });
-        }
-
-        function syncRemove() {
-            if (!confirm('Remove Apple Notes sync credentials? Existing synced notes are kept.')) return;
-            $.ajax({
-                url: syncApiBase() + 'config',
-                method: 'DELETE',
-                success: function() {
-                    document.getElementById('syncUsername').value = '';
-                    document.getElementById('syncPassword').value = '';
-                    document.getElementById('syncNowBtn').style.display    = 'none';
-                    document.getElementById('syncDisableBtn').style.display = 'none';
-                    document.getElementById('syncSaveBtn').textContent = 'Save & Sync Now';
-                    document.getElementById('syncDot').style.display = 'none';
-                    var bar = document.getElementById('syncStatusBar');
-                    bar.className = 'sync-status-bar';
-                    showSnackbar('Credentials removed');
+                    btn.textContent = 'Apply';
+                    showSnackbar('Failed to apply settings');
                 }
             });
         }
 
         // Modal open/close
-        document.getElementById('syncSettingsBtn').addEventListener('click', function() {
+        document.getElementById('syncSettingsBtn').addEventListener('click', function () {
             document.getElementById('syncModal').classList.add('open');
-            syncLoadConfig();
+            syncLoadStatus();
         });
-        document.getElementById('syncModalClose').addEventListener('click', function() {
+        document.getElementById('syncModalClose').addEventListener('click', function () {
             document.getElementById('syncModal').classList.remove('open');
         });
-        document.getElementById('syncModal').addEventListener('click', function(e) {
+        document.getElementById('syncModal').addEventListener('click', function (e) {
             if (e.target === this) this.classList.remove('open');
         });
-        document.getElementById('syncSaveBtn').addEventListener('click', function() { syncSave(true); });
-        document.getElementById('syncNowBtn').addEventListener('click', syncTrigger);
-        document.getElementById('syncDisableBtn').addEventListener('click', syncRemove);
+        document.getElementById('syncApplyBtn').addEventListener('click', syncApplyConfig);
+
+        // Show the sidebar sync dot on boot if the server is running
+        syncLoadStatus();
 
         // ── Boot ───────────────────────────────────────────────────────────────
         (function init() {

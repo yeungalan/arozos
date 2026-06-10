@@ -97,7 +97,7 @@ func RunStartup() {
 	SystemInfoInit()          //System Information UI
 	AuthSettingsInit()        //Authentication Settings Handler, must be start after user Handler
 	AdvanceSettingInit()      //System Advance Settings
-	AGIRuntimeManagerInit()  //AGI VM lifecycle monitor (Developer Options tab)
+	AGIRuntimeManagerInit()   //AGI VM lifecycle monitor (Developer Options tab)
 	StartupFlagsInit()        //System BootFlag settibg
 	HardwarePowerInit()       //Start host power manager
 	RegisterStorageSettings() //Storage Settings
@@ -115,9 +115,9 @@ func RunStartup() {
 	mediaServer_init()
 	security_init()
 	storageHeartbeatTickerInit()
-	OAuthInit()        //Oauth system init
-	ldapInit()         //LDAP system init
-	notificationInit()    //Notification system init
+	OAuthInit()          //Oauth system init
+	ldapInit()           //LDAP system init
+	notificationInit()   //Notification system init
 	AppleNotesSyncInit() //Apple Notes IMAP sync
 
 	//Start High Level Services that requires full arozos architectures
