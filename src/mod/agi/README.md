@@ -15,7 +15,7 @@ This document is updated to match the current AGI implementation in `mod/agi/agi
 
 ## AGI Version
 
-- Runtime version: `3.0` (`AgiVersion` in `agi.go`)
+- Runtime version: `3.1` (`AgiVersion` in `agi.go`)
 
 ## Quick Start
 
@@ -270,6 +270,7 @@ Registered library IDs:
 - `appdata`
 - `sysinfo`
 - `ziplib`
+- `converter`
 - `ffmpeg` (only when ffmpeg exists on host)
 
 Special case:
@@ -723,6 +724,82 @@ ziplib.extractAnyFile("user:/archive.any", "user:/out/");
 
 ```javascript
 ziplib.createAnyZipFile(["user:/folder"], "user:/bundle.tar.gz", "tar.gz");
+```
+
+## converter API
+
+Load:
+
+```javascript
+requirelib("converter");
+```
+
+Converts source files browsers cannot display directly (camera RAW photos and
+PDF documents) into JPEG images.
+
+RAW conversion (`.arw`, `.cr2`, `.dng`, `.nef`, `.raf`, `.orf`) is performed
+purely in Go by extracting the embedded full-resolution preview, so it is
+always available.
+
+PDF conversion prefers a host PDF rasterizer (`pdftoppm`, `pdftocairo`,
+`mutool` or `gs`/ghostscript) for faithful rendering of vector and text pages.
+When none is installed it falls back to extracting the largest embedded JPEG
+image from the PDF, which works for scanned / image-based documents.
+
+All conversion functions return `true` on success and `false` on failure. The
+destination path must end in `.jpg` or `.jpeg`.
+
+### `converter.rawToJpg(src, dest)`
+Converts a camera RAW file to JPEG.
+
+```javascript
+converter.rawToJpg("user:/Desktop/DSC02977.ARW", "user:/Desktop/photo.jpg");
+```
+
+### `converter.pdfToJpg(src, dest, page, dpi)`
+Renders a single PDF page to JPEG. `page` defaults to `1`, `dpi` defaults to
+`150`. `page`/`dpi` are honoured when a host rasterizer is available; the
+pure-Go fallback ignores them.
+
+```javascript
+converter.pdfToJpg("user:/Desktop/report.pdf", "user:/Desktop/page1.jpg", 1, 150);
+```
+
+### `converter.toJpg(src, dest)`
+Auto-detects the source type by extension and routes to `rawToJpg` /
+`pdfToJpg`.
+
+```javascript
+converter.toJpg("user:/Desktop/scan.pdf", "user:/Desktop/scan.jpg");
+```
+
+### `converter.isRawFile(path)`
+Returns `true` if the path has a supported RAW extension.
+
+```javascript
+if (converter.isRawFile("user:/Desktop/a.arw")) sendOK();
+```
+
+### `converter.isPdfFile(path)`
+Returns `true` if the path has a `.pdf` extension.
+
+```javascript
+if (converter.isPdfFile("user:/Desktop/a.pdf")) sendOK();
+```
+
+### `converter.pdfEngineAvailable()`
+Returns `true` if a host PDF rasterizer is installed. When `false`, PDF
+conversion still works for image-based PDFs via the pure-Go fallback.
+
+```javascript
+var faithful = converter.pdfEngineAvailable();
+```
+
+### `converter.supportedRawFormats()`
+Returns the array of supported RAW extensions.
+
+```javascript
+var formats = converter.supportedRawFormats(); // [".arw", ".cr2", ".dng", ".nef", ".raf", ".orf"]
 ```
 
 ## ffmpeg API

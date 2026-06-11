@@ -124,6 +124,15 @@ func generateThumbnailForRAW(fsh *filesystem.FileSystemHandler, cacheFolder stri
 	return "", nil
 }
 
+// ExtractLargestEmbeddedJPEG scans arbitrary binary data for embedded JPEG
+// streams (delimited by the SOI/EOI markers) and returns the largest one by
+// pixel count. RAW files and image-based ("scanned") PDFs both store their
+// full-resolution previews as raw JPEG streams, so this provides a
+// dependency-free way to pull a usable JPEG out of either container.
+func ExtractLargestEmbeddedJPEG(data []byte) ([]byte, error) {
+	return extractLargestJPEG(data)
+}
+
 // Extract largest embedded JPEG from RAW file
 // Most RAW files (ARW, CR2, DNG, NEF, etc.) are TIFF-based and contain embedded JPEG previews
 // This follows the approach used by dcraw.c for thumbnail extraction
