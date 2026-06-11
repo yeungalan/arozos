@@ -20,14 +20,10 @@ import (
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 // newConverterTestFSH creates a FileSystemHandler backed by a temporary local
-// directory, with a usable local buffer path so BufferRemoteToLocal works.
+// directory.
 func newConverterTestFSH(t *testing.T) (*filesystem.FileSystemHandler, string) {
 	t.Helper()
 	dir := t.TempDir()
-	bufdir := filepath.Join(dir, ".buffer")
-	if err := os.MkdirAll(bufdir, 0755); err != nil {
-		t.Fatalf("mkdir buffer: %v", err)
-	}
 	abs := localfs.NewLocalFileSystemAbstraction("TEST", dir+"/", "public", false)
 	fsh := &filesystem.FileSystemHandler{
 		Name:                  "test",
@@ -39,7 +35,6 @@ func newConverterTestFSH(t *testing.T) (*filesystem.FileSystemHandler, string) {
 		FileSystemAbstraction: abs,
 		Filesystem:            "ext4",
 	}
-	fsh.RuntimePersistenceConfig.LocalBufferPath = bufdir
 	return fsh, dir
 }
 
@@ -100,10 +95,7 @@ func TestInjectConverterLib_JSObjectExposed(t *testing.T) {
 	payload := &static.AgiLibInjectionPayload{VM: vm, User: stubUser("alice")}
 	g.injectConverterFunctions(payload)
 
-	methods := []string{
-		"rawToJpg", "pdfToJpg", "toJpg",
-		"isRawFile", "isPdfFile", "pdfEngineAvailable", "supportedRawFormats",
-	}
+	methods := []string{"rawToJpg", "isRawFile", "supportedRawFormats"}
 	for _, m := range methods {
 		val, err := vm.Run(`typeof converter.` + m)
 		if err != nil {
@@ -140,49 +132,6 @@ func TestConverter_IsRawFileJS(t *testing.T) {
 	}
 }
 
-func TestConverter_IsPdfFileJS(t *testing.T) {
-	g := minimalGateway()
-	vm := otto.New()
-	g.injectConverterFunctions(&static.AgiLibInjectionPayload{VM: vm, User: stubUser("alice")})
-
-	cases := map[string]bool{
-		`converter.isPdfFile("user:/doc.pdf")`: true,
-		`converter.isPdfFile("user:/doc.PDF")`: true,
-		`converter.isPdfFile("user:/doc.jpg")`: false,
-		`converter.isPdfFile("user:/doc.arw")`: false,
-	}
-	for expr, want := range cases {
-		val, err := vm.Run(expr)
-		if err != nil {
-			t.Fatalf("%s errored: %v", expr, err)
-		}
-		got, _ := val.ToBoolean()
-		if got != want {
-			t.Errorf("%s = %v, want %v", expr, got, want)
-		}
-	}
-}
-
-func TestConverter_PdfEngineAvailableJS(t *testing.T) {
-	g := minimalGateway()
-	vm := otto.New()
-	g.injectConverterFunctions(&static.AgiLibInjectionPayload{VM: vm, User: stubUser("alice")})
-
-	val, err := vm.Run(`converter.pdfEngineAvailable()`)
-	if err != nil {
-		t.Fatalf("pdfEngineAvailable() errored: %v", err)
-	}
-	// The value depends on the host; we only require that it is a boolean
-	// and matches the Go-side detector.
-	if !val.IsBoolean() {
-		t.Fatalf("pdfEngineAvailable() should return a boolean, got %q", val.Class())
-	}
-	got, _ := val.ToBoolean()
-	if want := findPdfRasterizer() != ""; got != want {
-		t.Errorf("pdfEngineAvailable() = %v, want %v", got, want)
-	}
-}
-
 func TestConverter_SupportedRawFormatsJS(t *testing.T) {
 	g := minimalGateway()
 	vm := otto.New()
@@ -198,19 +147,7 @@ func TestConverter_SupportedRawFormatsJS(t *testing.T) {
 	}
 }
 
-// ─── pure helpers: isPdfFile / isJpegOutput ────────────────────────────────────
-
-func TestIsPdfFile(t *testing.T) {
-	cases := map[string]bool{
-		"a.pdf": true, "a.PDF": true, "dir/b.Pdf": true,
-		"a.jpg": false, "a.arw": false, "noext": false, "": false,
-	}
-	for in, want := range cases {
-		if got := isPdfFile(in); got != want {
-			t.Errorf("isPdfFile(%q) = %v, want %v", in, got, want)
-		}
-	}
-}
+// ─── pure helper: isJpegOutput ─────────────────────────────────────────────────
 
 func TestIsJpegOutput(t *testing.T) {
 	cases := map[string]bool{
@@ -284,162 +221,5 @@ func TestRawFileToJpeg_NoEmbeddedJpeg(t *testing.T) {
 	err := rawFileToJpeg(fsh, src, fsh, filepath.Join(dir, "out.jpg"))
 	if err == nil {
 		t.Error("expected error when RAW file has no embedded JPEG")
-	}
-}
-
-// ─── pdfFileToJpeg ──────────────────────────────────────────────────────────────
-
-// When no host rasterizer is available (or when the host tool fails on our
-// synthetic, non-standard PDF) the pure-Go embedded-JPEG fallback should still
-// produce a valid JPEG for an image-based PDF.
-func TestPdfFileToJpeg_EmbeddedFallback(t *testing.T) {
-	fsh, dir := newConverterTestFSH(t)
-	src := filepath.Join(dir, "scan.pdf")
-	pdf := append([]byte("%PDF-1.4\n% image-based pdf\n"), makeJPEGBytes(t)...)
-	if err := os.WriteFile(src, pdf, 0644); err != nil {
-		t.Fatalf("write pdf: %v", err)
-	}
-	dest := filepath.Join(dir, "scan.jpg")
-
-	if err := pdfFileToJpeg(fsh, src, fsh, dest, 1, 150); err != nil {
-		t.Fatalf("pdfFileToJpeg failed: %v", err)
-	}
-	out, err := os.ReadFile(dest)
-	if err != nil {
-		t.Fatalf("output not written: %v", err)
-	}
-	assertValidJPEG(t, out)
-}
-
-func TestPdfFileToJpeg_NotPdfExtension(t *testing.T) {
-	fsh, dir := newConverterTestFSH(t)
-	src := filepath.Join(dir, "note.txt")
-	os.WriteFile(src, []byte("hello"), 0644)
-	err := pdfFileToJpeg(fsh, src, fsh, filepath.Join(dir, "out.jpg"), 1, 150)
-	if err == nil {
-		t.Error("expected error for non-PDF source extension")
-	}
-}
-
-func TestPdfFileToJpeg_BadDestExtension(t *testing.T) {
-	fsh, dir := newConverterTestFSH(t)
-	src := filepath.Join(dir, "scan.pdf")
-	os.WriteFile(src, append([]byte("%PDF-1.4\n"), makeJPEGBytes(t)...), 0644)
-	err := pdfFileToJpeg(fsh, src, fsh, filepath.Join(dir, "out.gif"), 1, 150)
-	if err == nil {
-		t.Error("expected error for non-jpeg destination extension")
-	}
-}
-
-func TestPdfFileToJpeg_NoImageNoEngine(t *testing.T) {
-	if findPdfRasterizer() != "" {
-		t.Skip("a host PDF rasterizer is installed; the no-engine fallback path cannot be exercised")
-	}
-	fsh, dir := newConverterTestFSH(t)
-	src := filepath.Join(dir, "text.pdf")
-	// Plain text, no embedded JPEG markers.
-	os.WriteFile(src, []byte("%PDF-1.4 text only document with no images"), 0644)
-	err := pdfFileToJpeg(fsh, src, fsh, filepath.Join(dir, "out.jpg"), 1, 150)
-	if err == nil {
-		t.Error("expected error when no engine and no embedded image are available")
-	}
-}
-
-// ─── findPdfRasterizer ────────────────────────────────────────────────────────
-
-func TestFindPdfRasterizer_ReturnsKnownOrEmpty(t *testing.T) {
-	got := findPdfRasterizer()
-	if got == "" {
-		return // none installed — valid
-	}
-	found := false
-	for _, tool := range pdfRasterizers {
-		if got == tool {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("findPdfRasterizer returned %q which is not in the known list %v", got, pdfRasterizers)
-	}
-}
-
-// ─── buildPdfRasterizeArgs ──────────────────────────────────────────────────────
-
-func TestBuildPdfRasterizeArgs_Poppler(t *testing.T) {
-	for _, tool := range []string{"pdftoppm", "pdftocairo"} {
-		cmd, args, out, err := buildPdfRasterizeArgs(tool, "/tmp/in.pdf", "/tmp", "stem", 3, 200)
-		if err != nil {
-			t.Fatalf("%s: unexpected error: %v", tool, err)
-		}
-		if cmd != tool {
-			t.Errorf("%s: cmd = %q", tool, cmd)
-		}
-		joined := strings.Join(args, " ")
-		for _, want := range []string{"-jpeg", "-r 200", "-f 3", "-l 3", "-singlefile", "/tmp/in.pdf"} {
-			if !strings.Contains(joined, want) {
-				t.Errorf("%s: args %q missing %q", tool, joined, want)
-			}
-		}
-		if !strings.HasSuffix(out, ".jpg") {
-			t.Errorf("%s: expected .jpg output path, got %q", tool, out)
-		}
-	}
-}
-
-func TestBuildPdfRasterizeArgs_Ghostscript(t *testing.T) {
-	cmd, args, out, err := buildPdfRasterizeArgs("gs", "/tmp/in.pdf", "/tmp", "stem", 2, 120)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cmd != "gs" {
-		t.Errorf("cmd = %q", cmd)
-	}
-	joined := strings.Join(args, " ")
-	for _, want := range []string{"-sDEVICE=jpeg", "-r120", "-dFirstPage=2", "-dLastPage=2", "-sOutputFile=" + out} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("gs args %q missing %q", joined, want)
-		}
-	}
-	if !strings.HasSuffix(out, ".jpg") {
-		t.Errorf("expected .jpg output path, got %q", out)
-	}
-}
-
-func TestBuildPdfRasterizeArgs_Mutool(t *testing.T) {
-	cmd, args, out, err := buildPdfRasterizeArgs("mutool", "/tmp/in.pdf", "/tmp", "stem", 5, 96)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cmd != "mutool" {
-		t.Errorf("cmd = %q", cmd)
-	}
-	joined := strings.Join(args, " ")
-	for _, want := range []string{"draw", "-o " + out, "-r 96", "/tmp/in.pdf", " 5"} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("mutool args %q missing %q", joined, want)
-		}
-	}
-}
-
-func TestBuildPdfRasterizeArgs_Defaults(t *testing.T) {
-	// page < 1 and dpi < 1 should be clamped to 1 and 150 respectively.
-	_, args, _, err := buildPdfRasterizeArgs("pdftoppm", "/tmp/in.pdf", "/tmp", "stem", 0, 0)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "-r 150") {
-		t.Errorf("expected default dpi 150, got args %q", joined)
-	}
-	if !strings.Contains(joined, "-f 1") || !strings.Contains(joined, "-l 1") {
-		t.Errorf("expected default page 1, got args %q", joined)
-	}
-}
-
-func TestBuildPdfRasterizeArgs_Unsupported(t *testing.T) {
-	_, _, _, err := buildPdfRasterizeArgs("notatool", "/tmp/in.pdf", "/tmp", "stem", 1, 150)
-	if err == nil {
-		t.Error("expected error for unsupported rasterizer tool")
 	}
 }

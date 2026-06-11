@@ -734,17 +734,12 @@ Load:
 requirelib("converter");
 ```
 
-Converts source files browsers cannot display directly (camera RAW photos and
-PDF documents) into JPEG images.
+Converts camera RAW photos that browsers cannot display directly into JPEG
+images.
 
 RAW conversion (`.arw`, `.cr2`, `.dng`, `.nef`, `.raf`, `.orf`) is performed
 purely in Go by extracting the embedded full-resolution preview, so it is
-always available.
-
-PDF conversion prefers a host PDF rasterizer (`pdftoppm`, `pdftocairo`,
-`mutool` or `gs`/ghostscript) for faithful rendering of vector and text pages.
-When none is installed it falls back to extracting the largest embedded JPEG
-image from the PDF, which works for scanned / image-based documents.
+always available with no external dependencies.
 
 All conversion functions return `true` on success and `false` on failure. The
 destination path must end in `.jpg` or `.jpeg`.
@@ -756,43 +751,11 @@ Converts a camera RAW file to JPEG.
 converter.rawToJpg("user:/Desktop/DSC02977.ARW", "user:/Desktop/photo.jpg");
 ```
 
-### `converter.pdfToJpg(src, dest, page, dpi)`
-Renders a single PDF page to JPEG. `page` defaults to `1`, `dpi` defaults to
-`150`. `page`/`dpi` are honoured when a host rasterizer is available; the
-pure-Go fallback ignores them.
-
-```javascript
-converter.pdfToJpg("user:/Desktop/report.pdf", "user:/Desktop/page1.jpg", 1, 150);
-```
-
-### `converter.toJpg(src, dest)`
-Auto-detects the source type by extension and routes to `rawToJpg` /
-`pdfToJpg`.
-
-```javascript
-converter.toJpg("user:/Desktop/scan.pdf", "user:/Desktop/scan.jpg");
-```
-
 ### `converter.isRawFile(path)`
 Returns `true` if the path has a supported RAW extension.
 
 ```javascript
 if (converter.isRawFile("user:/Desktop/a.arw")) sendOK();
-```
-
-### `converter.isPdfFile(path)`
-Returns `true` if the path has a `.pdf` extension.
-
-```javascript
-if (converter.isPdfFile("user:/Desktop/a.pdf")) sendOK();
-```
-
-### `converter.pdfEngineAvailable()`
-Returns `true` if a host PDF rasterizer is installed. When `false`, PDF
-conversion still works for image-based PDFs via the pure-Go fallback.
-
-```javascript
-var faithful = converter.pdfEngineAvailable();
 ```
 
 ### `converter.supportedRawFormats()`
