@@ -29,6 +29,7 @@ func AGIInit() {
 		FileSystemRender:     thumbRenderHandler,
 		ShareManager:         shareManager,
 		NightlyManager:       nightlyManager,
+		NotificationQueue:    notificationQueue,
 		TempFolderPath:       *tmp_directory,
 	})
 	if err != nil {

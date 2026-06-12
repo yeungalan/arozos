@@ -68,7 +68,7 @@ func GenerateEmptyConfigFile(configFilepath string) error {
 }
 
 func (a Agent) Name() string {
-	return "smtpn"
+	return notification.AgentSMTP
 }
 
 func (a Agent) Desc() string {

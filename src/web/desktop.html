@@ -1587,6 +1587,7 @@
             initStartupSounds();
             initUploadCuttoffValues();
             initFrameLoading();
+            initNotifications();
 
             //Login cookie expire check
             setInterval(function() {
@@ -6860,6 +6861,69 @@
                 $(this).remove();
                 $(".nonotification").show();
             });
+        }
+
+        /*
+            Real-time notification stream
+
+            Opens a WebSocket to the backend notification listener. Any notification
+            pushed to this user (by the system, an AGI script, etc.) is rendered into
+            the notification center via sendNotification(). The connection
+            auto-reconnects if it drops.
+        */
+        var notificationWebSocket = null;
+        var notificationReconnectTimer = null;
+
+        function initNotifications(){
+            //Avoid opening a duplicate connection
+            if (notificationWebSocket != null && (notificationWebSocket.readyState == WebSocket.OPEN || notificationWebSocket.readyState == WebSocket.CONNECTING)){
+                return;
+            }
+
+            let protocol = "wss://";
+            if (location.protocol !== 'https:') {
+                protocol = "ws://";
+            }
+
+            var port = window.location.port;
+            if (window.location.port == ""){
+                port = (location.protocol !== 'https:') ? "80" : "443";
+            }
+
+            let endpoint = protocol + window.location.hostname + ":" + port + "/system/notification/listen";
+            try {
+                notificationWebSocket = new WebSocket(endpoint);
+            } catch(err){
+                console.log("%c[Notification] Unable to open notification stream: " + err, 'color: #e64747');
+                return;
+            }
+
+            notificationWebSocket.onmessage = function(event){
+                try {
+                    let payload = JSON.parse(event.data);
+                    let icon = (payload.icon && payload.icon.length > 0) ? payload.icon : "info circle";
+                    let title = payload.title || "Notification";
+                    let message = payload.message || "";
+                    sendNotification(title, message, icon);
+                } catch(err){
+                    console.log("%c[Notification] Invalid notification payload received", 'color: #e64747');
+                }
+            };
+
+            notificationWebSocket.onerror = function(){
+                //onclose will fire right after; reconnection is handled there
+                if (notificationWebSocket != null){
+                    notificationWebSocket.close();
+                }
+            };
+
+            notificationWebSocket.onclose = function(){
+                //Schedule a reconnect attempt while the desktop is still open
+                if (notificationReconnectTimer != null){
+                    clearTimeout(notificationReconnectTimer);
+                }
+                notificationReconnectTimer = setTimeout(initNotifications, 15000);
+            };
         }
 
         function hideAllContextMenus() {

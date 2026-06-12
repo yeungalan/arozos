@@ -53,6 +53,7 @@ func (g *Gateway) LoadAllFunctionalModules() {
 	g.IoTLibRegister()
 	g.AppdataLibRegister()
 	g.SysinfoLibRegister()
+	g.NotificationLibRegister()
 	//g.AudioLibRegister() //work in progress
 	g.ZipLibRegister()
 	g.AIModelLibRegister()

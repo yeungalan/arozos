@@ -83,10 +83,11 @@ func RunStartup() {
 	//StorageDaemonInit() //Start File System handler daemon (for backup and other sync process)
 
 	//8 Start AGI and Subservice modules (Must start after module)
-	AGIInit()        //ArOZ Javascript Gateway Interface, must start after fs
-	SchedulerInit()  //Start System Scheudler
-	SubserviceInit() //Subservice Handler
-	ArozcastInit()   //Arozcast remote projection pub/sub relay
+	notificationInit() //Notification system init, must start before AGI so scripts can dispatch notifications
+	AGIInit()          //ArOZ Javascript Gateway Interface, must start after fs
+	SchedulerInit()    //Start System Scheudler
+	SubserviceInit()   //Subservice Handler
+	ArozcastInit()     //Arozcast remote projection pub/sub relay
 
 	//9. Initiate System Settings Handlers
 	SystemSettingInit()       //Start System Setting Core
@@ -98,7 +99,7 @@ func RunStartup() {
 	AuthSettingsInit()        //Authentication Settings Handler, must be start after user Handler
 	AdvanceSettingInit()      //System Advance Settings
 	AIModelSettingInit()      //AI Model (OpenAI / Anthropic) config, pricing, quota & usage metrics
-	AGIRuntimeManagerInit()  //AGI VM lifecycle monitor (Developer Options tab)
+	AGIRuntimeManagerInit()   //AGI VM lifecycle monitor (Developer Options tab)
 	StartupFlagsInit()        //System BootFlag settibg
 	HardwarePowerInit()       //Start host power manager
 	RegisterStorageSettings() //Storage Settings
@@ -116,9 +117,8 @@ func RunStartup() {
 	mediaServer_init()
 	security_init()
 	storageHeartbeatTickerInit()
-	OAuthInit()        //Oauth system init
-	ldapInit()         //LDAP system init
-	notificationInit() //Notification system init
+	OAuthInit() //Oauth system init
+	ldapInit()  //LDAP system init
 
 	//Start High Level Services that requires full arozos architectures
 	FileServerInit()

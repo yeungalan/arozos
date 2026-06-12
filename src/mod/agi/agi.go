@@ -19,9 +19,10 @@ import (
 	apt "imuslab.com/arozos/mod/apt"
 	"imuslab.com/arozos/mod/filesystem"
 	"imuslab.com/arozos/mod/filesystem/arozfs"
-	"imuslab.com/arozos/mod/info/logger"
 	metadata "imuslab.com/arozos/mod/filesystem/metadata"
+	"imuslab.com/arozos/mod/info/logger"
 	"imuslab.com/arozos/mod/iot"
+	notification "imuslab.com/arozos/mod/notification"
 	"imuslab.com/arozos/mod/share"
 	"imuslab.com/arozos/mod/time/nightly"
 	user "imuslab.com/arozos/mod/user"
@@ -69,6 +70,7 @@ type AgiSysInfo struct {
 	IotManager           *iot.Manager
 	ShareManager         *share.Manager
 	NightlyManager       *nightly.TaskManager
+	NotificationQueue    *notification.NotificationQueue //Notification dispatch queue (desktop + email)
 
 	//Scanning Roots
 	StartupRoot    string

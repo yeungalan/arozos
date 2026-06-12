@@ -13,10 +13,18 @@ import (
 	to all the devices or agent that can reach the user
 */
 
+// Built-in notification agent identifiers. Use these constants instead of the
+// raw strings so producers and agents stay in sync.
+const (
+	AgentWebSocket = "websocket" //Real-time delivery to connected desktop sessions
+	AgentSMTP      = "smtpn"     //Email delivery via SMTP
+)
+
 type NotificationPayload struct {
 	ID            string   //Notification ID, generate by producer
 	Title         string   //Title of the notification
 	Message       string   //Message of the notification
+	Icon          string   //Optional Semantic UI icon class for desktop notification (e.g. "info circle")
 	Receiver      []string //Receiver, username in arozos system
 	Sender        string   //Sender, the sender or module of the notification
 	ReciverAgents []string //Agent name that have access to this notification

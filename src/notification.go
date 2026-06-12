@@ -1,36 +1,58 @@
 package main
 
 import (
-	"strconv"
-	"time"
+	"net/http"
 
 	fs "imuslab.com/arozos/mod/filesystem"
 	notification "imuslab.com/arozos/mod/notification"
 	"imuslab.com/arozos/mod/notification/agents/smtpn"
+	"imuslab.com/arozos/mod/notification/agents/wsn"
+	prout "imuslab.com/arozos/mod/prouter"
+	"imuslab.com/arozos/mod/utils"
 )
 
-var notificationQueue *notification.NotificationQueue
+var (
+	notificationQueue   *notification.NotificationQueue
+	wsNotificationAgent *wsn.Agent
+)
 
 func notificationInit() {
-	//Create a new notification agent
+	//Create a new notification queue
 	notificationQueue = notification.NewNotificationQueue()
 
 	//Register the notification agents
 
 	/*
+		WebSocket Notification Agent
+		For real-time delivery to the user's connected desktop notification center
+	*/
+	wsNotificationAgent = wsn.NewWebSocketNotificationAgent()
+	notificationQueue.RegisterNotificationAgent(wsNotificationAgent)
+
+	//Register the desktop notification listener endpoint. Any logged-in user may
+	//open a stream and will only receive notifications addressed to them.
+	notificationRouter := prout.NewModuleRouter(prout.RouterOption{
+		AdminOnly:   false,
+		UserHandler: userHandler,
+		DeniedHandler: func(w http.ResponseWriter, r *http.Request) {
+			utils.SendErrorResponse(w, "Permission Denied")
+		},
+	})
+	notificationRouter.HandleFunc("/system/notification/listen", func(w http.ResponseWriter, r *http.Request) {
+		username, err := authAgent.GetUserName(w, r)
+		if err != nil {
+			utils.SendErrorResponse(w, "User not logged in")
+			return
+		}
+		if err := wsNotificationAgent.HandleNotificationWebSocket(username, w, r); err != nil {
+			systemWideLogger.PrintAndLog("Notification", "WebSocket notification listener error", err)
+		}
+	})
+
+	/*
 		SMTP Notification Agent
 		For handling notification sending via Mail
 	*/
-
-	//Load username and their email from authAgent
-	userEmailmap := map[string]string{}
-	allRecords := registerHandler.ListAllUserEmails()
-	for _, userRercord := range allRecords {
-		if userRercord[2].(bool) {
-			userEmailmap[userRercord[0].(string)] = userRercord[1].(string)
-		}
-	}
-
 	smtpnConfigPath := "./system/smtp_conf.json"
 	if !fs.FileExists(smtpnConfigPath) {
 		//Create an empty one
@@ -48,20 +70,4 @@ func notificationInit() {
 	} else {
 		notificationQueue.RegisterNotificationAgent(smtpAgent)
 	}
-
-	//Create and register other notification agents
-
-	go func() {
-		time.Sleep(10 * time.Second)
-		return
-		notificationQueue.BroadcastNotification(&notification.NotificationPayload{
-			ID:            strconv.Itoa(int(time.Now().Unix())),
-			Title:         "Email Test",
-			Message:       "This is a testing notification for showcasing a sample email when DISK SMART error was scanned and discovered.<br> Please visit <a href='https://blog.teacat.io'>here</a> for more information.",
-			Receiver:      []string{"TC"},
-			Sender:        "SMART Nightly Scanner",
-			ReciverAgents: []string{"smtpn"},
-		})
-	}()
-
 }
