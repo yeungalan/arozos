@@ -34,12 +34,17 @@ type AgentProducerFunction func(*NotificationPayload) error
 
 type Agent interface {
 	//Defination of the agent
-	Name() string                                    //The name of the notification agent, must be unique
-	Desc() string                                    //Basic description of the agent
-	IsConsumer() bool                                //Can receive notification can arozos core
-	IsProducer() bool                                //Can produce notification to arozos core
-	ConsumerNotification(*NotificationPayload) error //Endpoint for arozos -> this agent
-	ProduceNotification(*AgentProducerFunction)      //Endpoint for this agent -> arozos
+	Name() string     //The name of the notification agent, must be unique
+	Desc() string     //Basic description of the agent
+	IsConsumer() bool //Can receive notification can arozos core
+	IsProducer() bool //Can produce notification to arozos core
+	//ConsumerNotification is the endpoint for arozos -> this agent. It returns
+	//(delivered, error) where delivered reports whether the notification actually
+	//reached the intended recipient via this agent (e.g. the user was online for
+	//the desktop agent, or an email was sent). The queue uses this to decide
+	//whether to fall back to the next agent.
+	ConsumerNotification(*NotificationPayload) (bool, error)
+	ProduceNotification(*AgentProducerFunction) //Endpoint for this agent -> arozos
 }
 
 type NotificationQueue struct {
@@ -61,32 +66,59 @@ func (q *NotificationQueue) RegisterNotificationAgent(agent Agent) {
 	q.Agents = append(q.Agents, &agent)
 }
 
+// BroadcastNotification routes a notification to the registered consumer agents
+// in their registration order, which acts as the delivery priority. The first
+// agent that successfully delivers the message to the recipient stops the chain.
+// This means a notification is shown on the user's connected desktop when they
+// are online, and only falls back to email when they are not.
+//
+// message.ReciverAgents is an optional allow-list: when non-empty, only agents
+// whose name appears in it are considered (their relative order is preserved).
+// When empty, every registered consumer agent is eligible.
 func (q *NotificationQueue) BroadcastNotification(message *NotificationPayload) error {
-	//Send notification to consumer agents
+	delivered := false
 	for _, agent := range q.Agents {
 		thisAgent := *agent
-		inAgentList := false
-		for _, enabledAgent := range message.ReciverAgents {
-			if enabledAgent == thisAgent.Name() {
-				//This agent is activated
-				inAgentList = true
-				break
-			}
-		}
-
-		if !inAgentList {
-			//Skip this agent and continue
+		if !thisAgent.IsConsumer() {
+			//This agent cannot receive notifications
 			continue
 		}
 
-		//Send this notification via this agent
-		err := thisAgent.ConsumerNotification(message)
-		if err != nil {
-			logger.PrintAndLog("Notification", "[Notification] Unable to send message via notification agent: "+thisAgent.Name(), nil)
+		//Honor the optional agent allow-list
+		if len(message.ReciverAgents) > 0 && !stringInSlice(thisAgent.Name(), message.ReciverAgents) {
+			continue
 		}
 
+		//Attempt to deliver this notification via this agent
+		ok, err := thisAgent.ConsumerNotification(message)
+		if err != nil {
+			logger.PrintAndLog("Notification", "[Notification] Unable to send message via notification agent: "+thisAgent.Name(), err)
+			//Fall through to the next agent in order
+			continue
+		}
+
+		if ok {
+			//Delivered by the highest-priority available agent; stop here
+			delivered = true
+			break
+		}
+		//Not delivered (e.g. user offline) — fall through to the next agent
 	}
 
-	logger.PrintAndLog("Notification", "[Notification] Message titled: "+message.Title+" (ID: "+message.ID+") broadcasted", nil)
+	if delivered {
+		logger.PrintAndLog("Notification", "[Notification] Message titled: "+message.Title+" (ID: "+message.ID+") delivered", nil)
+	} else {
+		logger.PrintAndLog("Notification", "[Notification] Message titled: "+message.Title+" (ID: "+message.ID+") could not be delivered by any agent", nil)
+	}
 	return nil
+}
+
+// stringInSlice reports whether target is present in list.
+func stringInSlice(target string, list []string) bool {
+	for _, item := range list {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }

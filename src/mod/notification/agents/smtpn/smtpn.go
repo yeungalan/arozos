@@ -83,7 +83,10 @@ func (a Agent) IsProducer() bool {
 	return false
 }
 
-func (a Agent) ConsumerNotification(incomingNotification *notification.NotificationPayload) error {
+// ConsumerNotification sends the notification to each receiver's email address.
+// It returns delivered=true when at least one email was sent successfully, so
+// the notification queue can treat email as a fallback delivery channel.
+func (a Agent) ConsumerNotification(incomingNotification *notification.NotificationPayload) (bool, error) {
 	//Get a notification and send it out
 
 	//Analysis the notification, get the target user's email
@@ -100,6 +103,7 @@ func (a Agent) ConsumerNotification(incomingNotification *notification.Notificat
 	}
 
 	//For each user, send out the email
+	deliveredCount := 0
 	for _, thisEntry := range userEmails {
 		thisUser := thisEntry[0]
 		thisEmail := thisEntry[1]
@@ -127,11 +131,12 @@ func (a Agent) ConsumerNotification(incomingNotification *notification.Notificat
 		err = smtp.SendMail(a.SMTPDomain+":"+strconv.Itoa(a.SMTPPort), auth, a.SMTPSender, []string{thisEmail}, msg)
 		if err != nil {
 			logger.PrintAndLog("Smtpn", fmt.Sprint("[SMTPN] Email sent failed: ", err.Error()), nil)
-			return err
+			return deliveredCount > 0, err
 		}
+		deliveredCount++
 	}
 
-	return nil
+	return deliveredCount > 0, nil
 }
 
 func (a Agent) ProduceNotification(producerListeningEndpoint *notification.AgentProducerFunction) {

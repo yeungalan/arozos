@@ -121,8 +121,10 @@ func (a *Agent) removeClient(c *client) {
 
 // ConsumerNotification delivers an incoming notification to all matching
 // connected sessions. A notification with an empty Receiver list is delivered
-// to every connected session.
-func (a *Agent) ConsumerNotification(incomingNotification *notification.NotificationPayload) error {
+// to every connected session. It reports delivered=true when at least one
+// session actually received the message (i.e. the target user is online), so
+// the queue knows it does not need to fall back to email.
+func (a *Agent) ConsumerNotification(incomingNotification *notification.NotificationPayload) (bool, error) {
 	icon := incomingNotification.Icon
 	if icon == "" {
 		icon = defaultDesktopIcon
@@ -146,13 +148,16 @@ func (a *Agent) ConsumerNotification(incomingNotification *notification.Notifica
 	}
 	a.mu.RUnlock()
 
+	deliveredCount := 0
 	for _, c := range targets {
 		if err := c.writeJSON(payload); err != nil {
 			//Dead connection, drop it
 			a.removeClient(c)
+			continue
 		}
+		deliveredCount++
 	}
-	return nil
+	return deliveredCount > 0, nil
 }
 
 // ProduceNotification is unused; this agent is consumer-only.

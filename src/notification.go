@@ -20,7 +20,11 @@ func notificationInit() {
 	//Create a new notification queue
 	notificationQueue = notification.NewNotificationQueue()
 
-	//Register the notification agents
+	//Register the notification agents. Registration order defines the delivery
+	//priority: the queue tries each agent in turn and stops at the first that
+	//reaches the user. The desktop agent is registered first so notifications go
+	//to a connected desktop in real time, and only fall back to email when the
+	//user is offline.
 
 	/*
 		WebSocket Notification Agent

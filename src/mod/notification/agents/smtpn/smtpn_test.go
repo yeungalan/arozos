@@ -178,10 +178,13 @@ func TestAgent_ConsumerNotification_SkipIfNoSMTP(t *testing.T) {
 		Sender:   "unit-test",
 	}
 
-	err := a.ConsumerNotification(payload)
+	delivered, err := a.ConsumerNotification(payload)
 	// We expect an error because there's no real SMTP server at localhost:25.
 	// If (unexpectedly) no error is returned, the test still passes.
 	if err != nil {
 		t.Logf("ConsumerNotification returned expected error (no SMTP server): %v", err)
+	}
+	if delivered {
+		t.Error("expected delivered=false when no SMTP server is reachable")
 	}
 }

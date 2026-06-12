@@ -10,6 +10,7 @@ type mockAgent struct {
 	name         string
 	isConsumer   bool
 	isProducer   bool
+	delivered    bool //value returned as the "delivered" result
 	receivedMsgs []*NotificationPayload
 	returnErr    error
 }
@@ -19,12 +20,12 @@ func (m *mockAgent) Desc() string     { return "mock agent" }
 func (m *mockAgent) IsConsumer() bool { return m.isConsumer }
 func (m *mockAgent) IsProducer() bool { return m.isProducer }
 
-func (m *mockAgent) ConsumerNotification(p *NotificationPayload) error {
-	if m.returnErr != nil {
-		return m.returnErr
-	}
+func (m *mockAgent) ConsumerNotification(p *NotificationPayload) (bool, error) {
 	m.receivedMsgs = append(m.receivedMsgs, p)
-	return nil
+	if m.returnErr != nil {
+		return false, m.returnErr
+	}
+	return m.delivered, nil
 }
 
 func (m *mockAgent) ProduceNotification(fn *AgentProducerFunction) {}
@@ -72,7 +73,7 @@ func TestRegisterNotificationAgent_Multiple(t *testing.T) {
 // delivered to an agent that appears in the ReciverAgents list.
 func TestBroadcastNotification_DeliveredToEnabledAgent(t *testing.T) {
 	q := NewNotificationQueue()
-	agent := &mockAgent{name: "email-agent", isConsumer: true}
+	agent := &mockAgent{name: "email-agent", isConsumer: true, delivered: true}
 	q.RegisterNotificationAgent(agent)
 
 	payload := &NotificationPayload{
@@ -125,7 +126,7 @@ func TestBroadcastNotification_SkipsUnlistedAgent(t *testing.T) {
 func TestBroadcastNotification_AgentErrorContinues(t *testing.T) {
 	q := NewNotificationQueue()
 	failing := &mockAgent{name: "failing-agent", isConsumer: true, returnErr: errors.New("send failed")}
-	succeeding := &mockAgent{name: "ok-agent", isConsumer: true}
+	succeeding := &mockAgent{name: "ok-agent", isConsumer: true, delivered: true}
 	q.RegisterNotificationAgent(failing)
 	q.RegisterNotificationAgent(succeeding)
 
@@ -163,6 +164,45 @@ func TestBroadcastNotification_EmptyAgents(t *testing.T) {
 	err := q.BroadcastNotification(payload)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestBroadcastNotification_StopsAtFirstDelivered verifies that once an agent
+// reports successful delivery, lower-priority agents are not attempted.
+func TestBroadcastNotification_StopsAtFirstDelivered(t *testing.T) {
+	q := NewNotificationQueue()
+	first := &mockAgent{name: "desktop", isConsumer: true, delivered: true}
+	second := &mockAgent{name: "email", isConsumer: true, delivered: true}
+	q.RegisterNotificationAgent(first)
+	q.RegisterNotificationAgent(second)
+
+	_ = q.BroadcastNotification(&NotificationPayload{ID: "m1", Title: "Hi", Receiver: []string{"alice"}})
+
+	if len(first.receivedMsgs) != 1 {
+		t.Errorf("expected first agent to be attempted once, got %d", len(first.receivedMsgs))
+	}
+	if len(second.receivedMsgs) != 0 {
+		t.Errorf("expected second agent to be skipped after delivery, got %d", len(second.receivedMsgs))
+	}
+}
+
+// TestBroadcastNotification_FallsBackToNextAgent verifies that when the
+// highest-priority agent cannot deliver (e.g. user offline), the next agent in
+// order is attempted.
+func TestBroadcastNotification_FallsBackToNextAgent(t *testing.T) {
+	q := NewNotificationQueue()
+	desktop := &mockAgent{name: "desktop", isConsumer: true, delivered: false} // user offline
+	email := &mockAgent{name: "email", isConsumer: true, delivered: true}
+	q.RegisterNotificationAgent(desktop)
+	q.RegisterNotificationAgent(email)
+
+	_ = q.BroadcastNotification(&NotificationPayload{ID: "m2", Title: "Hi", Receiver: []string{"alice"}})
+
+	if len(desktop.receivedMsgs) != 1 {
+		t.Errorf("expected desktop agent to be attempted once, got %d", len(desktop.receivedMsgs))
+	}
+	if len(email.receivedMsgs) != 1 {
+		t.Errorf("expected fallback to email agent, got %d", len(email.receivedMsgs))
 	}
 }
 

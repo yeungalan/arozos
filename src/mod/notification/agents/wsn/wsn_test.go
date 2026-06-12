@@ -55,7 +55,7 @@ func TestStringInSlice(t *testing.T) {
 // connected clients is a no-op that does not error or panic.
 func TestConsumerNotification_NoClients(t *testing.T) {
 	a := NewWebSocketNotificationAgent()
-	err := a.ConsumerNotification(&notification.NotificationPayload{
+	delivered, err := a.ConsumerNotification(&notification.NotificationPayload{
 		ID:       "1",
 		Title:    "Hello",
 		Message:  "World",
@@ -63,6 +63,9 @@ func TestConsumerNotification_NoClients(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if delivered {
+		t.Error("expected delivered=false when no clients are connected")
 	}
 }
 
@@ -112,7 +115,7 @@ func TestConsumerNotification_DeliversToTargetUser(t *testing.T) {
 	defer server.Close()
 	defer conn.Close()
 
-	err := a.ConsumerNotification(&notification.NotificationPayload{
+	delivered, err := a.ConsumerNotification(&notification.NotificationPayload{
 		ID:       "n1",
 		Title:    "Hello",
 		Message:  "World",
@@ -121,6 +124,9 @@ func TestConsumerNotification_DeliversToTargetUser(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("ConsumerNotification failed: %v", err)
+	}
+	if !delivered {
+		t.Error("expected delivered=true when the target user is connected")
 	}
 
 	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
@@ -152,12 +158,12 @@ func TestConsumerNotification_RespectsReceiverFilter(t *testing.T) {
 	//broadcast (empty Receiver) must. Because alice never receives bob's
 	//message, the first (and only) frame she can read is the broadcast — which
 	//deterministically proves the receiver filter works.
-	_ = a.ConsumerNotification(&notification.NotificationPayload{
+	_, _ = a.ConsumerNotification(&notification.NotificationPayload{
 		ID:       "n2",
 		Title:    "Secret",
 		Receiver: []string{"bob"},
 	})
-	_ = a.ConsumerNotification(&notification.NotificationPayload{
+	_, _ = a.ConsumerNotification(&notification.NotificationPayload{
 		ID:       "n3",
 		Title:    "Announcement",
 		Icon:     "bullhorn",
