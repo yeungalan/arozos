@@ -1,0 +1,477 @@
+/*
+	Telegram Bot — cron.agi
+	=======================
+	Scheduled long-poll pipeline. This single script is the AGI port of the
+	whole n8n "Telegram Bot" workflow. The ArozOS Task Scheduler runs it on the
+	owning user's account at a fixed interval (recommended 60s — the scheduler's
+	minimum tick). Each run long-polls the Telegram Bot API, drains any pending
+	messages and answers the ones that should be answered.
+
+	n8n node  ->  section in this script
+	--------------------------------------------------------------------------
+	Telegram Trigger        ->  pollUpdates() (getUpdates long-poll + offset)
+	Insert row              ->  storeHistory(... isBot=false)
+	If / If1                ->  shouldRespond()
+	Code in JavaScript      ->  shouldRespond() random 1% branch
+	Guardrails              ->  passesGuardrails()
+	Message a model1        ->  generateSearchKeywords() (aimodel.chat)
+	DuckDuckGo + Aggregate  ->  webSearch()
+	Get row(s) + Aggregate1 ->  getHistory()
+	Code Tool (date)        ->  current UTC time injected into the context block
+	Message a model (main)  ->  generateReply() (aimodel.request)
+	Send a text message     ->  tgReply() (HTML, reply_to_message_id)
+	Insert row1             ->  storeHistory(... isBot=true)
+
+	Runtime: ECMAScript 5 (otto). No let/const/arrow/template-strings.
+
+	Config is read from the per-user system DB table written by backend.agi.
+	The Telegram token is never stored in the repo — it lives only in the DB.
+*/
+
+requirelib("http");
+requirelib("aimodel");
+requirelib("appdata");
+
+// ── Tuning constants ─────────────────────────────────────────────────────────
+var CFG_TABLE         = "TelegramBot/" + USERNAME; // per-user config + state
+var TICK_BUDGET_MS    = 45000;   // stop starting new getUpdates after this (keep tick < 60s)
+var HARD_DEADLINE_MS  = 250000;  // never start LLM work after this (stay under the 300s VM cap)
+var MAX_RESPONSES     = 8;       // cap LLM replies per tick so a flood can't blow the budget
+var LOCK_TTL_MS       = 280000;  // an abandoned lock is considered stale after this
+var TG_LIMIT          = 4000;    // Telegram hard limit is 4096 chars; keep a margin
+var START_MS          = Date.now();
+
+// Built-in fallbacks used only when both the DB override and prompts/*.txt are absent
+var FALLBACK_SYSTEM_PROMPT  = "你是一個助理，直接、完整、準確回應使用者剛剛送出的最新訊息。回覆一律使用繁體中文。";
+var FALLBACK_KEYWORD_PROMPT = "根據使用者輸入產生最適合網路搜尋的關鍵字，只輸出純文字關鍵字，不要任何說明。";
+
+// ── Small helpers ────────────────────────────────────────────────────────────
+
+// cfgGet reads a config value, treating the "missing" sentinels readDBItem can
+// return (boolean false, the string "false", null, undefined, "") as "use default".
+function cfgGet(key, dflt) {
+	var v = readDBItem(CFG_TABLE, key);
+	if (v === false || v === "false" || v === null || typeof v === "undefined" || v === "") {
+		return dflt;
+	}
+	return "" + v;
+}
+
+function truncate(s, max) {
+	s = "" + s;
+	if (s.length <= max) { return s; }
+	return s.substring(0, max - 1) + "…";
+}
+
+// splitCsvLower turns "a, B ,c" into ["a","b","c"] (lower-cased, trimmed, no blanks).
+function splitCsvLower(csv) {
+	var out = [];
+	var parts = ("" + (csv || "")).split(",");
+	for (var i = 0; i < parts.length; i++) {
+		var p = parts[i].trim().toLowerCase();
+		if (p !== "") { out.push(p); }
+	}
+	return out;
+}
+
+// loadPrompt resolves a system prompt: DB override -> prompts/*.txt -> fallback.
+function loadPrompt(dbKey, filePath, fallback) {
+	var dbVal = readDBItem(CFG_TABLE, dbKey);
+	if (dbVal && dbVal !== "false" && ("" + dbVal).trim() !== "") {
+		return "" + dbVal;
+	}
+	try {
+		var f = appdata.readFile(filePath);
+		if (f && f !== false && ("" + f).trim() !== "") { return "" + f; }
+	} catch (e) {}
+	return fallback;
+}
+
+function htmlEscape(s) {
+	return ("" + s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// mdToTelegramHTML does a best-effort Markdown -> Telegram-HTML conversion. Any
+// failure is caught by the plain-text fallback in tgReply(), so it can be loose.
+function mdToTelegramHTML(text) {
+	var s = htmlEscape(text);
+	s = s.replace(/```([\s\S]*?)```/g, function (m, p1) {
+		return "<pre>" + p1.replace(/^[\r\n]+|[\r\n]+$/g, "") + "</pre>";
+	});
+	s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+	s = s.replace(/\*\*([^\*\n]+)\*\*/g, "<b>$1</b>");
+	s = s.replace(/(^|[^\*])\*([^\*\n]+)\*([^\*]|$)/g, "$1<i>$2</i>$3");
+	s = s.replace(/(^|[^\w])_([^_\n]+)_([^\w]|$)/g, "$1<i>$2</i>$3");
+	return s;
+}
+
+// ── Telegram Bot API ─────────────────────────────────────────────────────────
+
+// tgApi calls a Telegram Bot API method with a JSON body and returns the parsed
+// response object ({ok:bool, result/description}), or null on transport error.
+function tgApi(token, method, params) {
+	var url = "https://api.telegram.org/bot" + token + "/" + method;
+	var raw = http.post(url, JSON.stringify(params || {}));
+	if (raw === null || typeof raw === "undefined") { return null; }
+	try { return JSON.parse(raw); } catch (e) { return null; }
+}
+
+// tgReply sends a message, falling back to plain text if a parse_mode error
+// (malformed entities in the model output) makes the formatted send fail.
+function tgReply(token, chatId, replyTo, formatted, plain, parseMode) {
+	var p1 = { chat_id: chatId, text: truncate(formatted, TG_LIMIT), disable_web_page_preview: true };
+	if (replyTo) { p1.reply_to_message_id = replyTo; }
+	if (parseMode && parseMode !== "none") { p1.parse_mode = parseMode; }
+
+	var r = tgApi(token, "sendMessage", p1);
+	if (r && r.ok) { return r; }
+
+	var p2 = { chat_id: chatId, text: truncate(plain, TG_LIMIT), disable_web_page_preview: true };
+	if (replyTo) { p2.reply_to_message_id = replyTo; }
+	return tgApi(token, "sendMessage", p2);
+}
+
+// ── Chat history (replaces the n8n data-table Insert row / Get row(s)) ─────────
+
+function histTable(chatId) {
+	return CFG_TABLE + "/hist/" + ("" + chatId).replace(/[^0-9-]/g, "");
+}
+
+function storeHistory(chatId, from, message, isBot) {
+	if (message === null || typeof message === "undefined") { return; }
+	var table = histTable(chatId);
+	newDBTableIfNotExists(table);
+	var now = new Date();
+	var key = String(now.getTime()) + "_" + Math.floor(Math.random() * 100000);
+	writeDBItem(table, key, JSON.stringify({
+		from: from, message: "" + message, createdAt: now.toISOString(), isBot: !!isBot
+	}));
+}
+
+// getHistory returns messages from the last `hours` for a chat, oldest first,
+// and opportunistically prunes anything older so the table stays bounded.
+function getHistory(chatId, hours) {
+	var table = histTable(chatId);
+	if (!DBTableExists(table)) { return []; }
+	var all = listDBTable(table);
+	if (!all) { return []; }
+	var cutoff = Date.now() - hours * 3600 * 1000;
+	var arr = [];
+	for (var k in all) {
+		if (!all.hasOwnProperty(k)) { continue; }
+		var e;
+		try { e = JSON.parse(all[k]); } catch (ex) { continue; }
+		var ts = new Date(e.createdAt).getTime();
+		if (isNaN(ts)) { continue; }
+		if (ts >= cutoff) { arr.push(e); }
+		else { deleteDBItem(table, k); }
+	}
+	arr.sort(function (a, b) {
+		return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+	});
+	return arr;
+}
+
+// ── Web search (replaces DuckDuckGo + Aggregate) ──────────────────────────────
+// Best-effort augmentation via the DuckDuckGo Instant Answer JSON API. Returns
+// an array of {title, description, url}. Never throws — search is optional.
+function webSearch(query) {
+	var results = [];
+	try {
+		var url = "https://api.duckduckgo.com/?q=" + encodeURIComponent(query) +
+			"&format=json&no_html=1&no_redirect=1&t=arozos";
+		var body = http.get(url);
+		if (!body) { return results; }
+		var data = JSON.parse(body);
+
+		if (data.AbstractText && data.AbstractText !== "") {
+			results.push({
+				title: data.Heading || query,
+				description: data.AbstractText,
+				url: data.AbstractURL || ""
+			});
+		}
+		var topics = data.RelatedTopics || [];
+		for (var i = 0; i < topics.length && results.length < 10; i++) {
+			var t = topics[i];
+			if (t.Text) {
+				results.push({ title: (t.Text.split(" - ")[0] || t.Text), description: t.Text, url: t.FirstURL || "" });
+			} else if (t.Topics) {
+				for (var j = 0; j < t.Topics.length && results.length < 10; j++) {
+					var st = t.Topics[j];
+					if (st.Text) {
+						results.push({ title: (st.Text.split(" - ")[0] || st.Text), description: st.Text, url: st.FirstURL || "" });
+					}
+				}
+			}
+		}
+	} catch (e) {}
+	return results;
+}
+
+// generateSearchKeywords mirrors n8n "Message a model1": turn the user message
+// into a compact search query. Falls back to the raw message on any failure.
+function generateSearchKeywords(userText, cfg) {
+	try {
+		var kw = aimodel.chat(userText, {
+			system: cfg.keywordPrompt,
+			model: cfg.searchModel,
+			max_tokens: 100
+		});
+		kw = ("" + (kw || "")).replace(/[\r\n]+/g, " ").trim();
+		if (kw !== "") { return kw; }
+	} catch (e) {}
+	return userText;
+}
+
+// ── Trigger + guardrails (replaces If / If1 / Code in JavaScript / Guardrails) ─
+
+function shouldRespond(msg, cfg) {
+	var text = ("" + (msg.text || "")).toLowerCase();
+
+	// /chat command prefix
+	if (cfg.commandPrefix && text.indexOf(cfg.commandPrefix.toLowerCase()) === 0) { return true; }
+
+	// mention keywords (arozosbot / arozbot / bot username ...)
+	var kws = splitCsvLower(cfg.triggerKeywords);
+	for (var i = 0; i < kws.length; i++) {
+		if (text.indexOf(kws[i]) !== -1) { return true; }
+	}
+
+	// reply directed at the bot
+	if (cfg.botUsername && msg.reply_to_message && msg.reply_to_message.from &&
+		msg.reply_to_message.from.username) {
+		var ru = ("" + msg.reply_to_message.from.username).toLowerCase();
+		if (ru.indexOf(cfg.botUsername.toLowerCase()) !== -1) { return true; }
+	}
+
+	// spontaneous random reply (n8n "Code in JavaScript": Math.random() <= 0.01)
+	if (cfg.randomReplyChance > 0 && Math.random() <= cfg.randomReplyChance) { return true; }
+
+	return false;
+}
+
+function passesGuardrails(text, cfg) {
+	var banned = splitCsvLower(cfg.bannedKeywords);
+	var t = ("" + (text || "")).toLowerCase();
+	for (var i = 0; i < banned.length; i++) {
+		if (t.indexOf(banned[i]) !== -1) { return false; }
+	}
+	return true;
+}
+
+// ── Main model call (replaces n8n "Message a model") ──────────────────────────
+
+function generateReply(msg, fromUser, searchResults, history, cfg) {
+	var replyToText = (msg.reply_to_message && msg.reply_to_message.text)
+		? msg.reply_to_message.text : "無回覆訊息";
+
+	// Strip a leading command prefix from the question shown to the model.
+	var question = "" + (msg.text || "");
+	if (cfg.commandPrefix && question.toLowerCase().indexOf(cfg.commandPrefix.toLowerCase()) === 0) {
+		question = question.substring(cfg.commandPrefix.length).trim();
+	}
+	if (question === "") { question = "" + (msg.text || ""); }
+
+	// Assemble the context block (mirrors the n8n message stack). The current UTC
+	// time replaces the n8n "Code Tool" that returned the date in ISO format.
+	var parts = [];
+	parts.push("目前 UTC 時間為: " + new Date().toISOString());
+	parts.push("此信息由 " + fromUser + " 所發送");
+	parts.push("上一個訊息為: " + replyToText);
+
+	if (searchResults.length > 0) {
+		var lines = [];
+		for (var i = 0; i < searchResults.length; i++) {
+			var r = searchResults[i];
+			lines.push(r.title + ": " + r.description + (r.url ? (" (" + r.url + ")") : ""));
+		}
+		parts.push("關連資料\n\n" + lines.join("\n\n"));
+	}
+	if (history.length > 0) {
+		var hl = [];
+		for (var j = 0; j < history.length; j++) {
+			var h = history[j];
+			if (h.message !== null && typeof h.message !== "undefined") {
+				hl.push(h.from + ": " + h.message + " (" + h.createdAt + ")");
+			}
+		}
+		if (hl.length > 0) { parts.push("過往此群組之對話\n\n" + hl.join("\n\n")); }
+	}
+
+	var userBlock = parts.join("\n\n") +
+		"\n\n---\n\n使用者剛剛送出的最新訊息（請直接回應此訊息）:\n" + question;
+
+	var messages = [
+		{ role: "system", content: cfg.systemPrompt },
+		{ role: "user", content: userBlock }
+	];
+
+	var res = aimodel.request(messages, { model: cfg.chatModel, max_tokens: cfg.maxTokens });
+	if (res && res.choices && res.choices.length > 0 && res.choices[0].message) {
+		return "" + res.choices[0].message.content;
+	}
+	return "";
+}
+
+// ── Per-message handler (the body of the workflow) ────────────────────────────
+
+function handleMessage(token, msg, cfg, ctx) {
+	if (!msg || typeof msg.text === "undefined" || !msg.chat) { return; } // ignore non-text
+	var chatId = msg.chat.id;
+	var fromUser = (msg.from && msg.from.username) ? msg.from.username
+		: ((msg.from && msg.from.first_name) ? msg.from.first_name : "unknown");
+
+	// 1. Insert row — record every incoming message
+	if (cfg.enableHistory) { storeHistory(chatId, fromUser, msg.text, false); }
+
+	// 2. If / If1 — decide whether this message warrants a reply
+	if (!shouldRespond(msg, cfg)) { return; }
+
+	// 3. Guardrails — drop messages containing banned keywords
+	if (!passesGuardrails(msg.text, cfg)) {
+		console.log("[TelegramBot] guardrail blocked a message in chat " + chatId);
+		return;
+	}
+
+	// Budget guards: store-only once we are out of time / over the reply cap.
+	if (ctx.responded >= MAX_RESPONSES || (Date.now() - START_MS) > HARD_DEADLINE_MS) {
+		console.log("[TelegramBot] reply budget reached; skipping reply in chat " + chatId);
+		return;
+	}
+	ctx.responded++;
+
+	// 4. Message a model1 + DuckDuckGo + Aggregate — web-search augmentation
+	var searchResults = [];
+	if (cfg.enableWebSearch) {
+		searchResults = webSearch(generateSearchKeywords(msg.text, cfg));
+	}
+
+	// 5. Get row(s) + Aggregate1 — recent chat history for this chat
+	var history = cfg.enableHistory ? getHistory(chatId, cfg.historyHours) : [];
+
+	// 6. Message a model (main) — produce the reply
+	var replyText = "";
+	try {
+		replyText = generateReply(msg, fromUser, searchResults, history, cfg);
+	} catch (e) {
+		console.log("[TelegramBot] model error in chat " + chatId + ": " + e);
+		writeDBItem(CFG_TABLE, "lastError", "model: " + e);
+		return;
+	}
+	if (!replyText || replyText.trim() === "") { return; }
+
+	// 7. Send a text message — reply in-thread
+	var formatted = (cfg.parseMode === "HTML") ? mdToTelegramHTML(replyText) : replyText;
+	tgReply(token, chatId, msg.message_id, formatted, replyText, cfg.parseMode);
+
+	// 8. Insert row1 — record the bot's own reply
+	if (cfg.enableHistory) { storeHistory(chatId, cfg.botUsername || "Bot", replyText, true); }
+}
+
+// ── Config loader ─────────────────────────────────────────────────────────────
+
+function loadConfig() {
+	var chance = parseFloat(cfgGet("randomReplyChance", "0.01"));
+	if (isNaN(chance) || chance < 0) { chance = 0; }
+	return {
+		botToken:          cfgGet("botToken", ""),
+		botUsername:       cfgGet("botUsername", "alanyeungcotestbot"),
+		triggerKeywords:   cfgGet("triggerKeywords", "arozosbot,arozbot,alanyeungcotestbot"),
+		commandPrefix:     cfgGet("commandPrefix", "/chat"),
+		bannedKeywords:    cfgGet("bannedKeywords", "gay,ayg"),
+		randomReplyChance: chance,
+		searchModel:       cfgGet("searchModel", "google/gemma-3-12b"),
+		chatModel:         cfgGet("chatModel", "google/gemma-3-12b"),
+		maxTokens:         parseInt(cfgGet("maxTokens", "500"), 10) || 500,
+		enableWebSearch:   cfgGet("enableWebSearch", "true") === "true",
+		enableHistory:     cfgGet("enableHistory", "true") === "true",
+		historyHours:      parseInt(cfgGet("historyHours", "24"), 10) || 24,
+		parseMode:         cfgGet("parseMode", "HTML"),
+		pollTimeout:       parseInt(cfgGet("pollTimeout", "25"), 10) || 25,
+		offset:            parseInt(cfgGet("offset", "0"), 10) || 0,
+		systemPrompt:      loadPrompt("systemPrompt", "TelegramBot/prompts/system_prompt.txt", FALLBACK_SYSTEM_PROMPT),
+		keywordPrompt:     loadPrompt("keywordPrompt", "TelegramBot/prompts/search_keywords.txt", FALLBACK_KEYWORD_PROMPT)
+	};
+}
+
+// ── Poll loop (replaces the Telegram Trigger) ─────────────────────────────────
+
+function runBot() {
+	newDBTableIfNotExists(CFG_TABLE);
+	var cfg = loadConfig();
+
+	if (!cfg.botToken) {
+		console.log("[TelegramBot] no bot token configured — open the app to set one. (execID=" + EXECUTION_ID + ")");
+		return;
+	}
+
+	// Prevent overlapping ticks (the 60s scheduler could otherwise start a new
+	// run while a long one is still polling, causing duplicate getUpdates).
+	var lockTs = parseInt(readDBItem(CFG_TABLE, "lockTs") || "0", 10) || 0;
+	if (lockTs && (Date.now() - lockTs) < LOCK_TTL_MS) {
+		console.log("[TelegramBot] previous poll still running — skipping this tick.");
+		return;
+	}
+	writeDBItem(CFG_TABLE, "lockTs", String(Date.now()));
+
+	// Run bookkeeping (shown on the settings page).
+	writeDBItem(CFG_TABLE, "lastRun", new Date().toISOString());
+	var runCount = parseInt(readDBItem(CFG_TABLE, "runCount") || "0", 10);
+	if (isNaN(runCount)) { runCount = 0; }
+	writeDBItem(CFG_TABLE, "runCount", String(runCount + 1));
+
+	var offset = cfg.offset;
+	var ctx = { responded: 0 };
+
+	try {
+		do {
+			var upd = tgApi(cfg.botToken, "getUpdates", {
+				offset: offset,
+				timeout: cfg.pollTimeout,
+				limit: 100,
+				allowed_updates: ["message"]
+			});
+
+			if (!upd) {
+				writeDBItem(CFG_TABLE, "lastError", "getUpdates transport error");
+				break;
+			}
+			if (!upd.ok) {
+				writeDBItem(CFG_TABLE, "lastError", "getUpdates: " + (upd.description || "not ok"));
+				break;
+			}
+			writeDBItem(CFG_TABLE, "lastError", "");
+
+			var results = upd.result || [];
+			if (results.length === 0) { break; } // long-poll timed out with nothing new
+
+			for (var i = 0; i < results.length; i++) {
+				var u = results[i];
+				if (u.update_id < offset) { continue; }
+				if (u.message) {
+					try {
+						handleMessage(cfg.botToken, u.message, cfg, ctx);
+					} catch (e) {
+						console.log("[TelegramBot] handler error: " + e);
+						writeDBItem(CFG_TABLE, "lastError", "handler: " + e);
+					}
+				}
+				// Persist progress per message so a crash re-processes at most one.
+				offset = u.update_id + 1;
+				writeDBItem(CFG_TABLE, "offset", String(offset));
+			}
+		} while ((Date.now() - START_MS) < TICK_BUDGET_MS);
+	} catch (e) {
+		console.log("[TelegramBot] poll loop error: " + e);
+		writeDBItem(CFG_TABLE, "lastError", "poll: " + e);
+	}
+
+	// Release the lock for the next tick.
+	writeDBItem(CFG_TABLE, "lockTs", "0");
+	console.log("[TelegramBot] tick done — replies=" + ctx.responded + " offset=" + offset +
+		" (execID=" + EXECUTION_ID + ")");
+}
+
+runBot();
+sendOK();

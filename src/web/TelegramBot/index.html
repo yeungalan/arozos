@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Telegram Bot</title>
+    <script src="../script/jquery.min.js"></script>
+    <script src="../script/ao_module.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            font-size: 14px; background: #f5f5f7; color: #1d1d1f;
+            -webkit-font-smoothing: antialiased;
+        }
+        body.dark { background: #1c1c1e; color: #f0f0f0; }
+        #app {
+            --accent: #229ED9; --danger: #ff3b30; --success: #34c759; --warning: #ff9f0a;
+            --divider: #d2d2d7; --card-bg: #fff; --card-border: #e5e5ea; --muted: #6e6e73;
+            --input-bg: #fff; --input-border: #d2d2d7;
+            max-width: 520px; margin: 0 auto; padding: 20px 16px 40px;
+        }
+        body.dark #app {
+            --accent: #37aee2; --danger: #ff453a; --success: #30d158; --warning: #ffd60a;
+            --divider: #3a3a3c; --card-bg: #2c2c2e; --card-border: #3a3a3c; --muted: #9a9a9f;
+            --input-bg: #1c1c1e; --input-border: #48484a;
+        }
+        .app-header { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+        .app-header img { width: 48px; height: 48px; border-radius: 11px; }
+        .app-header-text h1 { font-size: 18px; font-weight: 700; }
+        .app-header-text p { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+        .card { background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
+        .card-title { font-size: 11px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.04em; color: var(--muted); padding: 13px 14px 4px; }
+        .card-body { padding: 6px 14px 14px; }
+        .field { margin-top: 12px; }
+        .field label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 5px; }
+        .field .hint { font-size: 11.5px; color: var(--muted); font-weight: 400; margin-top: 4px; }
+        input[type=text], input[type=password], input[type=number], select, textarea {
+            width: 100%; padding: 8px 10px; font-family: inherit; font-size: 13.5px;
+            color: inherit; background: var(--input-bg); border: 1px solid var(--input-border);
+            border-radius: 8px; outline: none;
+        }
+        input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+        .row { display: flex; gap: 10px; }
+        .row .field { flex: 1; }
+        .switch-row { display: flex; align-items: center; justify-content: space-between;
+            padding: 9px 0; border-bottom: 1px solid var(--divider); }
+        .switch-row:last-child { border-bottom: none; }
+        .switch-row .label { font-size: 13.5px; }
+        .switch-row .label .sub { display: block; font-size: 11.5px; color: var(--muted); }
+
+        .card-row { display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 14px; border-bottom: 1px solid var(--divider); gap: 10px; }
+        .card-row:last-child { border-bottom: none; }
+        .card-row-label { font-size: 13.5px; }
+        .card-row-value { font-size: 13px; color: var(--muted); text-align: right;
+            flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px;
+            font-weight: 600; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+        .badge-green { background: rgba(52,199,89,0.13); color: var(--success); }
+        .badge-red { background: rgba(255,59,48,0.12); color: var(--danger); }
+        .badge-yellow { background: rgba(255,159,10,0.13); color: var(--warning); }
+        .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+        .dot-green { background: var(--success); } .dot-red { background: var(--danger); }
+
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            padding: 9px 18px; border-radius: 8px; border: none; font-family: inherit;
+            font-size: 13.5px; font-weight: 500; cursor: pointer; transition: opacity 0.12s; }
+        .btn:hover { opacity: 0.85; } .btn:disabled { opacity: 0.4; cursor: default; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-secondary { background: var(--card-bg); color: inherit; border: 1px solid var(--card-border); }
+        .action-row { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--divider); }
+        .action-row .btn { flex: 1; }
+
+        #toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(60px);
+            background: #1d1d1f; color: #fff; padding: 9px 16px; border-radius: 9px; font-size: 13px;
+            opacity: 0; transition: all 0.25s; pointer-events: none; max-width: 90%; }
+        #toast.show { transform: translateX(-50%) translateY(0); opacity: 0.96; }
+        .banner { border-radius: 10px; padding: 11px 13px; font-size: 12.5px; margin-bottom: 14px; }
+        .banner-warn { background: rgba(255,159,10,0.1); border: 1px solid rgba(255,159,10,0.3); color: var(--warning); }
+        #bot-identity { font-size: 12.5px; color: var(--success); margin-top: 8px; display: none; }
+    </style>
+</head>
+<body>
+<div id="app">
+
+    <div class="app-header">
+        <img src="img/icon.svg" alt="Telegram Bot">
+        <div class="app-header-text">
+            <h1>Telegram Bot</h1>
+            <p>Self-hosted group assistant · AGI port</p>
+        </div>
+    </div>
+
+    <div class="banner banner-warn">
+        Replies use the AI endpoint configured by an admin in
+        <b>System Settings &rsaquo; AI Integration &rsaquo; AI Model</b>. The bot polls Telegram
+        on a schedule, so enable the schedule below after saving your token.
+    </div>
+
+    <!-- Connection -->
+    <div class="card">
+        <div class="card-title">Telegram Connection</div>
+        <div class="card-body">
+            <div class="field">
+                <label>Bot Token <span class="hint">(from @BotFather)</span></label>
+                <input type="password" id="botToken" placeholder="Not set" autocomplete="off">
+                <div class="hint">Leave blank to keep the saved token. Stored only in the system DB, never in the repo.</div>
+            </div>
+            <div id="bot-identity"></div>
+        </div>
+        <div class="action-row">
+            <button class="btn btn-secondary" onclick="testConnection()">Test connection</button>
+        </div>
+    </div>
+
+    <!-- Scheduler -->
+    <div class="card">
+        <div class="card-title">Polling Schedule</div>
+        <div class="card-row">
+            <span class="card-row-label">Background Poll</span>
+            <span class="card-row-value" id="sched-badge">
+                <span class="badge badge-yellow"><span class="dot"></span> Checking…</span>
+            </span>
+        </div>
+        <div class="card-row">
+            <span class="card-row-label">Runs Every</span>
+            <span class="card-row-value">1 minute</span>
+        </div>
+        <div class="card-row">
+            <span class="card-row-label">Last Poll</span>
+            <span class="card-row-value" id="last-run">—</span>
+        </div>
+        <div class="card-row">
+            <span class="card-row-label">Poll Count</span>
+            <span class="card-row-value" id="run-count">—</span>
+        </div>
+        <div class="card-row">
+            <span class="card-row-label">Update Offset</span>
+            <span class="card-row-value" id="offset">—</span>
+        </div>
+        <div class="card-row" id="error-row" style="display:none;">
+            <span class="card-row-label" style="color:var(--danger)">Last Error</span>
+            <span class="card-row-value" id="last-error" style="color:var(--danger)"></span>
+        </div>
+        <div class="action-row">
+            <button class="btn btn-primary" id="btn-enable" onclick="enableSchedule()" disabled>Enable Schedule</button>
+            <button class="btn btn-danger" id="btn-disable" onclick="disableSchedule()" style="display:none;">Disable</button>
+            <button class="btn btn-secondary" onclick="resetOffset()">Skip backlog</button>
+        </div>
+    </div>
+
+    <!-- Behavior -->
+    <div class="card">
+        <div class="card-title">When to reply</div>
+        <div class="card-body">
+            <div class="field">
+                <label>Trigger keywords <span class="hint">(comma separated)</span></label>
+                <input type="text" id="triggerKeywords" placeholder="arozosbot,arozbot">
+            </div>
+            <div class="row">
+                <div class="field">
+                    <label>Command prefix</label>
+                    <input type="text" id="commandPrefix" placeholder="/chat">
+                </div>
+                <div class="field">
+                    <label>Bot @username</label>
+                    <input type="text" id="botUsername" placeholder="mybot">
+                </div>
+            </div>
+            <div class="field">
+                <label>Banned keywords <span class="hint">(guardrails — drop messages containing these)</span></label>
+                <input type="text" id="bannedKeywords" placeholder="">
+            </div>
+            <div class="field">
+                <label>Random reply chance <span class="hint">(0–1, e.g. 0.01 = 1%)</span></label>
+                <input type="number" id="randomReplyChance" min="0" max="1" step="0.01" placeholder="0.01">
+            </div>
+        </div>
+    </div>
+
+    <!-- AI -->
+    <div class="card">
+        <div class="card-title">AI & Context</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="field">
+                    <label>Chat model</label>
+                    <input type="text" id="chatModel" placeholder="google/gemma-3-12b">
+                </div>
+                <div class="field">
+                    <label>Max tokens</label>
+                    <input type="number" id="maxTokens" min="1" step="1" placeholder="500">
+                </div>
+            </div>
+            <div class="field">
+                <label>Search keyword model</label>
+                <input type="text" id="searchModel" placeholder="google/gemma-3-12b">
+            </div>
+            <div class="row">
+                <div class="field">
+                    <label>Reply format</label>
+                    <select id="parseMode">
+                        <option value="HTML">HTML</option>
+                        <option value="MarkdownV2">MarkdownV2</option>
+                        <option value="none">Plain text</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>History window (hrs)</label>
+                    <input type="number" id="historyHours" min="1" step="1" placeholder="24">
+                </div>
+            </div>
+            <div class="field">
+                <label>Poll timeout (s) <span class="hint">(Telegram long-poll, keep &lt; 50)</span></label>
+                <input type="number" id="pollTimeout" min="0" max="50" step="1" placeholder="25">
+            </div>
+            <div style="margin-top:8px;">
+                <div class="switch-row">
+                    <span class="label">Web search augmentation
+                        <span class="sub">DuckDuckGo results added to the prompt</span></span>
+                    <label class="switch"><input type="checkbox" id="enableWebSearch" checked></label>
+                </div>
+                <div class="switch-row">
+                    <span class="label">Chat history (RAG)
+                        <span class="sub">Recent group messages added to the prompt</span></span>
+                    <label class="switch"><input type="checkbox" id="enableHistory" checked></label>
+                </div>
+            </div>
+        </div>
+        <div class="action-row">
+            <button class="btn btn-primary" onclick="saveConfig()">Save settings</button>
+        </div>
+    </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+    var APP_NAME  = "TelegramBot";
+    var TASK_NAME = "TelegramBot_Poll";
+    var INTERVAL  = 60;
+
+    var canCreate = false, isRegistered = false;
+
+    ao_module_getSystemThemeColor(function (c) {
+        document.body.classList.toggle('dark', c !== 'whiteTheme');
+    });
+
+    function toast(msg) {
+        var t = document.getElementById('toast');
+        t.textContent = msg; t.classList.add('show');
+        setTimeout(function () { t.classList.remove('show'); }, 2200);
+    }
+
+    /* ── Config load / save ──────────────────────────────────────────── */
+    var TEXT_FIELDS = ["triggerKeywords", "commandPrefix", "botUsername", "bannedKeywords",
+        "randomReplyChance", "chatModel", "searchModel", "maxTokens", "historyHours",
+        "pollTimeout", "parseMode"];
+    var BOOL_FIELDS = ["enableWebSearch", "enableHistory"];
+
+    function loadStatus() {
+        ao_module_agirun("TelegramBot/backend.agi", { action: "status" }, function (data) {
+            if (!data || !data.ok) { return; }
+
+            for (var i = 0; i < TEXT_FIELDS.length; i++) {
+                var el = document.getElementById(TEXT_FIELDS[i]);
+                if (el && typeof data[TEXT_FIELDS[i]] !== "undefined") { el.value = data[TEXT_FIELDS[i]]; }
+            }
+            for (var j = 0; j < BOOL_FIELDS.length; j++) {
+                var cb = document.getElementById(BOOL_FIELDS[j]);
+                if (cb) { cb.checked = (data[BOOL_FIELDS[j]] === "true"); }
+            }
+            document.getElementById('botToken').placeholder = data.configured ? data.botTokenMask : "Not set";
+
+            document.getElementById('last-run').textContent =
+                data.lastRun ? new Date(data.lastRun).toLocaleString() : "Never";
+            document.getElementById('run-count').textContent = (data.runCount || 0) + "";
+            document.getElementById('offset').textContent = (data.offset || 0) + "";
+
+            var errRow = document.getElementById('error-row');
+            if (data.lastError && data.lastError !== "") {
+                errRow.style.display = '';
+                document.getElementById('last-error').textContent = data.lastError;
+            } else {
+                errRow.style.display = 'none';
+            }
+        });
+    }
+
+    function saveConfig() {
+        var payload = { action: "save" };
+        for (var i = 0; i < TEXT_FIELDS.length; i++) {
+            payload[TEXT_FIELDS[i]] = document.getElementById(TEXT_FIELDS[i]).value;
+        }
+        for (var j = 0; j < BOOL_FIELDS.length; j++) {
+            payload[BOOL_FIELDS[j]] = document.getElementById(BOOL_FIELDS[j]).checked ? "true" : "false";
+        }
+        var tok = document.getElementById('botToken').value;
+        if (tok && tok.trim() !== "") { payload.botToken = tok.trim(); }
+
+        ao_module_agirun("TelegramBot/backend.agi", payload, function (data) {
+            if (data && data.ok) {
+                document.getElementById('botToken').value = "";
+                toast("Settings saved");
+                loadStatus();
+            } else {
+                toast("Save failed");
+            }
+        }, function () { toast("Save failed"); });
+    }
+
+    function testConnection() {
+        var payload = { action: "test" };
+        var tok = document.getElementById('botToken').value;
+        if (tok && tok.trim() !== "") { payload.botToken = tok.trim(); }
+        toast("Testing…");
+        ao_module_agirun("TelegramBot/backend.agi", payload, function (data) {
+            var el = document.getElementById('bot-identity');
+            if (data && data.ok && data.bot) {
+                el.style.display = 'block';
+                el.textContent = "✓ Connected as @" + data.bot.username + " (" + data.bot.first_name + ")";
+                el.style.color = "var(--success)";
+            } else {
+                el.style.display = 'block';
+                el.style.color = "var(--danger)";
+                el.textContent = "✗ " + ((data && data.error) ? data.error : "Connection failed");
+            }
+        }, function () { toast("Test failed"); });
+    }
+
+    function resetOffset() {
+        if (!confirm("Skip all pending Telegram messages and only handle new ones from now?")) { return; }
+        ao_module_agirun("TelegramBot/backend.agi", { action: "resetOffset" }, function (data) {
+            if (data && data.ok) { toast("Backlog skipped"); loadStatus(); }
+            else { toast("Failed"); }
+        }, function () { toast("Failed"); });
+    }
+
+    /* ── Scheduler control (standard arsm endpoints) ─────────────────── */
+    function initScheduler() {
+        $.ajax({
+            url: "../system/arsm/aecron/permission",
+            success: function (data) { canCreate = data && data.CanCreate; checkRegistered(); },
+            error: function () { checkRegistered(); }
+        });
+    }
+    function checkRegistered() {
+        $.ajax({
+            url: "../system/arsm/aecron/app/check",
+            data: { appname: APP_NAME, taskname: TASK_NAME },
+            success: function (data) { isRegistered = data && data.Registered; renderSched(); },
+            error: function () { renderSched(); }
+        });
+    }
+    function renderSched() {
+        var badge = document.getElementById('sched-badge');
+        var en = document.getElementById('btn-enable');
+        var dis = document.getElementById('btn-disable');
+        if (isRegistered) {
+            badge.innerHTML = '<span class="badge badge-green"><span class="dot dot-green"></span> Active</span>';
+            en.style.display = 'none'; dis.style.display = '';
+        } else {
+            badge.innerHTML = '<span class="badge badge-red"><span class="dot dot-red"></span> Stopped</span>';
+            en.style.display = ''; en.disabled = !canCreate; dis.style.display = 'none';
+        }
+    }
+    function enableSchedule() {
+        ao_module_requestSchedulerPermission({
+            appName: APP_NAME, appIcon: APP_NAME + "/img/icon.svg",
+            taskName: TASK_NAME, scriptName: "cron.agi", interval: INTERVAL,
+            description: "Poll Telegram and answer messages."
+        }, function (result) {
+            if (result && result.allowed) { isRegistered = true; renderSched(); toast("Schedule enabled"); }
+        });
+    }
+    function disableSchedule() {
+        if (!confirm("Stop polling Telegram?")) { return; }
+        $.ajax({
+            url: "../system/arsm/aecron/app/unregister", method: "POST",
+            data: { appname: APP_NAME, taskname: TASK_NAME },
+            success: function () { isRegistered = false; renderSched(); toast("Schedule disabled"); },
+            error: function (xhr) { alert("Failed: " + (xhr.responseText || "unknown error")); }
+        });
+    }
+
+    /* ── Startup ─────────────────────────────────────────────────────── */
+    loadStatus();
+    initScheduler();
+    setInterval(loadStatus, 15000);
+</script>
+</body>
+</html>

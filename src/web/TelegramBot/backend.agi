@@ -1,0 +1,158 @@
+/*
+	Telegram Bot — backend.agi
+	==========================
+	Config + state API for the settings page (index.html). Invoked through
+	ao_module_agirun("TelegramBot/backend.agi", {action: ...}). POST parameters
+	are injected as JS globals by the AGI runtime, so each one is read with a
+	typeof guard (referencing an absent field would otherwise throw).
+
+	Actions:
+	    status        current config (token masked) + run state
+	    save          persist any provided config fields
+	    test          getMe using the provided (or stored) token
+	    resetOffset   skip the backlog: advance getUpdates offset past pending updates
+
+	Scheduler registration itself is done from the frontend via the standard
+	arsm endpoints + ao_module_requestSchedulerPermission (see index.html).
+*/
+
+requirelib("http");
+
+HTTP_HEADER = "application/json; charset=utf-8";
+
+var CFG_TABLE = "TelegramBot/" + USERNAME;
+newDBTableIfNotExists(CFG_TABLE);
+
+// The mask sentinel the UI sends back when the token field was left untouched.
+var TOKEN_MASK = "********";
+
+// Config fields that "save" understands: key -> default shown if never set.
+var FIELDS = {
+	botUsername:       "alanyeungcotestbot",
+	triggerKeywords:   "arozosbot,arozbot,alanyeungcotestbot",
+	commandPrefix:     "/chat",
+	bannedKeywords:    "gay,ayg",
+	randomReplyChance: "0.01",
+	searchModel:       "google/gemma-3-12b",
+	chatModel:         "google/gemma-3-12b",
+	maxTokens:         "500",
+	enableWebSearch:   "true",
+	enableHistory:     "true",
+	historyHours:      "24",
+	parseMode:         "HTML",
+	pollTimeout:       "25"
+};
+
+// Collect provided POST fields into P. typeof on an undeclared identifier is
+// safe (returns "undefined"), so absent fields are simply skipped.
+var P = {};
+if (typeof action            !== "undefined" && action            !== null) { P.action            = "" + action; }
+if (typeof botToken          !== "undefined" && botToken          !== null) { P.botToken          = "" + botToken; }
+if (typeof clearToken        !== "undefined" && clearToken        !== null) { P.clearToken        = "" + clearToken; }
+if (typeof botUsername       !== "undefined" && botUsername       !== null) { P.botUsername       = "" + botUsername; }
+if (typeof triggerKeywords   !== "undefined" && triggerKeywords   !== null) { P.triggerKeywords   = "" + triggerKeywords; }
+if (typeof commandPrefix     !== "undefined" && commandPrefix     !== null) { P.commandPrefix     = "" + commandPrefix; }
+if (typeof bannedKeywords    !== "undefined" && bannedKeywords    !== null) { P.bannedKeywords    = "" + bannedKeywords; }
+if (typeof randomReplyChance !== "undefined" && randomReplyChance !== null) { P.randomReplyChance = "" + randomReplyChance; }
+if (typeof searchModel       !== "undefined" && searchModel       !== null) { P.searchModel       = "" + searchModel; }
+if (typeof chatModel         !== "undefined" && chatModel         !== null) { P.chatModel         = "" + chatModel; }
+if (typeof maxTokens         !== "undefined" && maxTokens         !== null) { P.maxTokens         = "" + maxTokens; }
+if (typeof enableWebSearch   !== "undefined" && enableWebSearch   !== null) { P.enableWebSearch   = "" + enableWebSearch; }
+if (typeof enableHistory     !== "undefined" && enableHistory     !== null) { P.enableHistory     = "" + enableHistory; }
+if (typeof historyHours      !== "undefined" && historyHours      !== null) { P.historyHours      = "" + historyHours; }
+if (typeof parseMode         !== "undefined" && parseMode         !== null) { P.parseMode         = "" + parseMode; }
+if (typeof pollTimeout       !== "undefined" && pollTimeout       !== null) { P.pollTimeout       = "" + pollTimeout; }
+
+function respond(obj) { sendJSONResp(JSON.stringify(obj)); }
+
+function cfgGet(key, dflt) {
+	var v = readDBItem(CFG_TABLE, key);
+	if (v === false || v === "false" || v === null || typeof v === "undefined" || v === "") {
+		return dflt;
+	}
+	return "" + v;
+}
+
+function maskToken(t) {
+	t = "" + (t || "");
+	if (t === "") { return ""; }
+	if (t.length <= 10) { return "••••"; }
+	return t.substring(0, 6) + "…" + t.substring(t.length - 4);
+}
+
+function tgApi(token, method, params) {
+	var url = "https://api.telegram.org/bot" + token + "/" + method;
+	var raw = http.post(url, JSON.stringify(params || {}));
+	if (raw === null || typeof raw === "undefined") { return null; }
+	try { return JSON.parse(raw); } catch (e) { return null; }
+}
+
+var action = P.action || "status";
+
+if (action === "status") {
+	var token = cfgGet("botToken", "");
+	var out = {
+		ok: true,
+		configured: token !== "",
+		botTokenMask: maskToken(token),
+		offset: parseInt(cfgGet("offset", "0"), 10) || 0,
+		lastRun: cfgGet("lastRun", ""),
+		runCount: parseInt(cfgGet("runCount", "0"), 10) || 0,
+		lastError: cfgGet("lastError", "")
+	};
+	for (var k in FIELDS) {
+		if (FIELDS.hasOwnProperty(k)) { out[k] = cfgGet(k, FIELDS[k]); }
+	}
+	respond(out);
+
+} else if (action === "save") {
+	// Token: save only when a new, non-mask value is supplied; allow clearing.
+	if (P.clearToken === "true") {
+		writeDBItem(CFG_TABLE, "botToken", "");
+	} else if (typeof P.botToken !== "undefined" && P.botToken !== "" && P.botToken !== TOKEN_MASK) {
+		writeDBItem(CFG_TABLE, "botToken", P.botToken.trim());
+	}
+
+	// Persist any provided config field (skip ones the form did not send).
+	for (var f in FIELDS) {
+		if (!FIELDS.hasOwnProperty(f)) { continue; }
+		if (typeof P[f] !== "undefined") {
+			writeDBItem(CFG_TABLE, f, ("" + P[f]).trim());
+		}
+	}
+
+	respond({ ok: true });
+
+} else if (action === "test") {
+	// Prefer a freshly-typed token, else fall back to the stored one.
+	var typed = (typeof P.botToken !== "undefined") ? P.botToken : "";
+	var useToken = (typed !== "" && typed !== TOKEN_MASK) ? typed.trim() : cfgGet("botToken", "");
+	if (useToken === "") {
+		respond({ ok: false, error: "No bot token set. Paste your @BotFather token first." });
+	} else {
+		var me = tgApi(useToken, "getMe", {});
+		if (me && me.ok && me.result) {
+			respond({
+				ok: true,
+				bot: { id: me.result.id, username: me.result.username, first_name: me.result.first_name }
+			});
+		} else {
+			respond({ ok: false, error: (me && me.description) ? me.description : "Telegram getMe failed (check the token / network)." });
+		}
+	}
+
+} else if (action === "resetOffset") {
+	var t = cfgGet("botToken", "");
+	var newOffset = 0;
+	if (t !== "") {
+		var upd = tgApi(t, "getUpdates", { offset: -1, timeout: 0, limit: 1 });
+		if (upd && upd.ok && upd.result && upd.result.length > 0) {
+			newOffset = upd.result[upd.result.length - 1].update_id + 1;
+		}
+	}
+	writeDBItem(CFG_TABLE, "offset", String(newOffset));
+	respond({ ok: true, offset: newOffset });
+
+} else {
+	respond({ ok: false, error: "Unknown action: " + action });
+}

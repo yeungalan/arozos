@@ -1,0 +1,39 @@
+/*
+	Telegram Bot — AGI port of the n8n "Telegram Bot" workflow
+	==========================================================
+	A self-hosted Telegram group assistant that runs entirely inside ArozOS.
+
+	It replaces the n8n flow (Telegram Trigger -> store history -> trigger /
+	guardrails -> web search -> chat-history RAG -> LLM -> reply) with a single
+	scheduled AGI script (cron.agi) that long-polls the Telegram Bot API and
+	answers with any OpenAI-compatible model through the AGI "aimodel" library.
+
+	Files in this app folder:
+	    init.agi        this module registration
+	    cron.agi        the scheduled poll + answer pipeline (the converted flow)
+	    backend.agi     config get/set, status, connection test, offset reset
+	    index.html      configuration & scheduler control panel
+	    prompts/        editable system prompts (read at runtime via appdata)
+
+	Prerequisites:
+	    1. An admin must configure an OpenAI-compatible AI endpoint in
+	       System Settings > AI Integration > AI Model.
+	    2. The user enabling the bot needs Task Scheduler (cron) permission.
+	    3. A Telegram bot token from @BotFather, entered on the settings page.
+*/
+
+var moduleLaunchInfo = {
+	Name: "Telegram Bot",
+	Desc: "Self-hosted Telegram group assistant powered by the AGI aimodel library",
+	Group: "Internet",
+	IconPath: "TelegramBot/img/icon.svg",
+	Version: "1.0",
+	StartDir: "TelegramBot/index.html",
+	SupportFW: true,
+	LaunchFWDir: "TelegramBot/index.html",
+	SupportEmb: false,
+	InitFWSize: [520, 720],
+	SupportedExt: []
+}
+
+registerModule(JSON.stringify(moduleLaunchInfo));
