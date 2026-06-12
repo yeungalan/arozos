@@ -514,11 +514,10 @@ func (g *Gateway) injectImageLibFunctions(payload *static.AgiLibInjectionPayload
 			defer file.Close()
 			reader = file
 		}
-		_, err = exif.Decode(reader)
-		if err != nil {
-			return otto.FalseValue()
+		if readerHasExif(reader) {
+			return otto.TrueValue()
 		}
-		return otto.TrueValue()
+		return otto.FalseValue()
 	})
 
 	//Get EXIF data as JSON
@@ -574,28 +573,12 @@ func (g *Gateway) injectImageLibFunctions(payload *static.AgiLibInjectionPayload
 			defer file.Close()
 			reader = file
 		}
-		x, err := exif.Decode(reader)
+		jsonString, err := decodeExifAsJSON(reader)
 		if err != nil {
 			g.RaiseError(err)
 			return otto.FalseValue()
 		}
-		exifInfo := make(map[string]interface{})
-		exifString := x.String()
-		lines := strings.Split(exifString, "\n")
-		for _, line := range lines {
-			if strings.Contains(line, ": ") {
-				parts := strings.SplitN(line, ": ", 2)
-				if len(parts) == 2 {
-					exifInfo[parts[0]] = parts[1]
-				}
-			}
-		}
-		jsonBytes, err := json.Marshal(exifInfo)
-		if err != nil {
-			g.RaiseError(err)
-			return otto.FalseValue()
-		}
-		result, _ := vm.ToValue(string(jsonBytes))
+		result, _ := vm.ToValue(jsonString)
 		return result
 	})
 
@@ -610,4 +593,45 @@ func (g *Gateway) injectImageLibFunctions(payload *static.AgiLibInjectionPayload
 		imagelib.hasExif = _imagelib_hasExif;
 		imagelib.getExif = _imagelib_getExif;
 	`)
+}
+
+// readerHasExif reports whether r contains decodable EXIF metadata. It is the
+// shared core of imagelib.hasExif().
+func readerHasExif(r io.Reader) bool {
+	_, err := exif.Decode(r)
+	return err == nil
+}
+
+// parseExifString converts the multi-line text produced by exif.Exif.String()
+// into a map of EXIF field name -> raw value. goexif already renders each value
+// as a JSON fragment (strings stay double-quoted, rationals look like "45/10",
+// arrays like ["39/1","54/1"]); that exact shape is preserved here because
+// imagelib.getExif() consumers (e.g. the Photo web app) JSON.parse each value a
+// second time on the front-end.
+func parseExifString(exifString string) map[string]interface{} {
+	exifInfo := make(map[string]interface{})
+	for _, line := range strings.Split(exifString, "\n") {
+		if strings.Contains(line, ": ") {
+			parts := strings.SplitN(line, ": ", 2)
+			if len(parts) == 2 {
+				exifInfo[parts[0]] = parts[1]
+			}
+		}
+	}
+	return exifInfo
+}
+
+// decodeExifAsJSON reads EXIF metadata from r and serialises it into the JSON
+// string returned by imagelib.getExif(). It returns an error when r carries no
+// decodable EXIF, e.g. a non-photo file or an image stripped of metadata.
+func decodeExifAsJSON(r io.Reader) (string, error) {
+	x, err := exif.Decode(r)
+	if err != nil {
+		return "", err
+	}
+	jsonBytes, err := json.Marshal(parseExifString(x.String()))
+	if err != nil {
+		return "", err
+	}
+	return string(jsonBytes), nil
 }

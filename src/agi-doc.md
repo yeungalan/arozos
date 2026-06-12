@@ -599,9 +599,32 @@ imagelib.getImageDimension("user:/Desktop/test.jpg");                           
 imagelib.resizeImage("user:/Desktop/input.png", "user:/Desktop/output.png", 500, 300);     //Resize input.png to 500 x 300 pixal and write to output.png
 imagelib.loadThumbString("user:/Desktop/test.jpg"); //Load the given file's thumbnail as base64 string, return false if failed
 imagelib.cropImage("user:/Desktop/test.jpg", "user:/Desktop/out.jpg",100,100,200,200)); 
+imagelib.hasExif("user:/Desktop/test.jpg"); //return true if the image carries EXIF metadata, false otherwise
+imagelib.getExif("user:/Desktop/test.jpg"); //return the image's EXIF metadata as a JSON string, or false if it has none
 //Classify an image using neural network, since v1.119
 imagelib.classify("tmp:/classify.jpg", "yolo3"); 
 ```
+
+#### Reading EXIF Metadata
+
+`imagelib.getExif()` returns a JSON **string** keyed by EXIF field name. Each
+value is itself a JSON fragment (strings stay double-quoted, rationals look like
+`"45/10"`, arrays like `["39/1","54/1","56/1"]`), so parse the result once to get
+the field map and parse individual values again as needed:
+
+```
+if (imagelib.hasExif("user:/Desktop/test.jpg")) {
+    var exif = JSON.parse(imagelib.getExif("user:/Desktop/test.jpg"));
+    console.log(JSON.parse(exif.Make));        // e.g. "NIKON CORPORATION"
+    console.log(JSON.parse(exif.PixelXDimension)); // e.g. 500
+} else {
+    console.log("This image has no EXIF metadata");
+}
+```
+
+Both functions take a single virtual path argument. `getExif()` returns `false`
+(and raises an error) when the file cannot be opened or contains no decodable
+EXIF; guard with `hasExif()` first to handle metadata-free images cleanly.
 
 #### Crop Image Options
 
