@@ -96,6 +96,54 @@ func TestComputeDescriptorDeterministic(t *testing.T) {
 	}
 }
 
+// patternImage builds a 96x96 grayscale image with a fixed texture pattern
+// centred on a given base brightness. Two images with the same pattern but
+// different base brightness have identical LBP (LBP is brightness-invariant)
+// yet different skin-tone / luminance.
+func patternImage(base int) *image.Gray {
+	img := image.NewGray(image.Rect(0, 0, descriptorFaceSize, descriptorFaceSize))
+	for y := 0; y < descriptorFaceSize; y++ {
+		for x := 0; x < descriptorFaceSize; x++ {
+			//Same spatial pattern regardless of base, so the relative
+			//neighbour ordering (and thus LBP) is identical.
+			v := base + 30*((x/4+y/4)%2)
+			if v < 0 {
+				v = 0
+			}
+			if v > 255 {
+				v = 255
+			}
+			img.SetGray(x, y, color.Gray{Y: uint8(v)})
+		}
+	}
+	return img
+}
+
+// TestToneSeparatesBrightness is the regression test for the reported bug
+// where two people with clearly different skin tones were grouped together.
+// LBP alone cannot tell them apart; the tone part of the descriptor must.
+func TestToneSeparatesBrightness(t *testing.T) {
+	bright := ComputeDescriptor(patternImage(180))
+	dark := ComputeDescriptor(patternImage(80))
+
+	//Same texture, same brightness -> essentially identical
+	sameDistance := DescriptorDistance(bright, ComputeDescriptor(patternImage(180)))
+	if sameDistance > 0.05 {
+		t.Errorf("identical faces distance = %f, want ~0", sameDistance)
+	}
+
+	//Same texture, very different brightness (skin tone) -> must be far apart,
+	//well beyond the default balanced grouping threshold.
+	toneDistance := DescriptorDistance(bright, dark)
+	if toneDistance <= DefaultConfig().MatchThreshold {
+		t.Errorf("different-tone faces distance = %f, must exceed match threshold %f",
+			toneDistance, DefaultConfig().MatchThreshold)
+	}
+	if toneDistance <= sameDistance {
+		t.Errorf("different-tone distance %f should exceed same-tone distance %f", toneDistance, sameDistance)
+	}
+}
+
 func TestDescriptorDistance(t *testing.T) {
 	flat := make([]float32, DescriptorLength)
 	for i := range flat {

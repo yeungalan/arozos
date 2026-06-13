@@ -29,7 +29,8 @@ const (
 	facesTable  = "facerecog_faces"  //Table for per-photo face entries, key: username/sha256(vpath)
 	peopleTable = "facerecog_people" //Table for per-user people clusters, key: username/personID
 
-	configKey = "config"
+	configKey            = "config"
+	descriptorVersionKey = "descriptorVersion" //Stores the descriptorVersion of the data on disk
 
 	//Hard limits to keep a single request bounded
 	maxPathsPerScan  = 32       //Maximum number of photos per scan request
@@ -64,7 +65,7 @@ func DefaultConfig() Config {
 	return Config{
 		Enabled:        false,
 		MinFaceSize:    60,
-		MatchThreshold: 0.34,
+		MatchThreshold: 0.42,
 	}
 }
 
@@ -82,10 +83,32 @@ func NewManager(options *Options) (*Manager, error) {
 		}
 	}
 
-	return &Manager{
+	manager := &Manager{
 		options:  options,
 		detector: newDetector(),
-	}, nil
+	}
+
+	//Clear stored face data left over from an older, incompatible descriptor
+	//format so it is re-scanned with the current one.
+	manager.migrateDescriptorVersion()
+
+	return manager, nil
+}
+
+// migrateDescriptorVersion wipes stored faces and people when the descriptor
+// format on disk predates the current descriptorVersion. The Photo app then
+// re-scans automatically on next use, regrouping people with the new
+// descriptor. Configuration (the on/off switch and tuning) is preserved.
+func (m *Manager) migrateDescriptorVersion() {
+	stored := 0
+	if m.options.Database.KeyExists(configTable, descriptorVersionKey) {
+		m.options.Database.Read(configTable, descriptorVersionKey, &stored)
+	}
+	if stored == descriptorVersion {
+		return
+	}
+	m.ClearAllData()
+	m.options.Database.Write(configTable, descriptorVersionKey, descriptorVersion)
 }
 
 // GetConfig returns the stored configuration, falling back to defaults for

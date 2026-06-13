@@ -167,9 +167,9 @@ body.dark #fr-root {
             <div class="fr-field">
                 <label>Grouping Strictness</label>
                 <select id="fr-strictness">
-                    <option value="0.25">Strict — fewer mixed-up people, more duplicates</option>
-                    <option value="0.34">Balanced (recommended)</option>
-                    <option value="0.45">Relaxed — fewer duplicates, may mix people</option>
+                    <option value="0.30">Strict — fewer mixed-up people, more duplicates</option>
+                    <option value="0.42">Balanced (recommended)</option>
+                    <option value="0.58">Relaxed — fewer duplicates, may mix people</option>
                 </select>
                 <div class="hint">How similar two faces must be to count as the same person.</div>
             </div>
@@ -237,7 +237,7 @@ body.dark #fr-root {
 
     // Snap a stored threshold onto the closest strictness preset
     function pickStrictness(threshold){
-        var options = [0.25, 0.34, 0.45];
+        var options = [0.30, 0.42, 0.58];
         var best = options[1];
         var bestDiff = Infinity;
         options.forEach(function(o){
@@ -252,7 +252,7 @@ body.dark #fr-root {
             if (d && d.error){ setState(false); toast("Error: " + d.error, false); return; }
             el("fr-enabled").checked = !!d.enabled;
             el("fr-minface").value = d.minFaceSize || 60;
-            el("fr-strictness").value = pickStrictness(parseFloat(d.matchThreshold) || 0.34);
+            el("fr-strictness").value = pickStrictness(parseFloat(d.matchThreshold) || 0.42);
             setState(!!d.enabled);
         }).fail(function(){ setState(false); toast("Failed to load configuration (admin only).", false); });
     }

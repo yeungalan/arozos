@@ -348,6 +348,59 @@ func TestUserStatsAndClear(t *testing.T) {
 	}
 }
 
+func TestDescriptorVersionMigration(t *testing.T) {
+	dbfile := filepath.Join(t.TempDir(), "migrate.db")
+	database, err := db.NewDatabase(dbfile, false)
+	if err != nil {
+		t.Fatalf("unable to create test database: %v", err)
+	}
+
+	//First manager: store some face data, then force an older descriptor
+	//version onto disk to simulate an upgrade from an incompatible format.
+	manager, err := NewManager(&Options{Database: database})
+	if err != nil {
+		t.Fatalf("NewManager failed: %v", err)
+	}
+	entry := &PhotoFaces{VPath: "user:/Photo/a.jpg", FileSize: 100, ModTime: 1000}
+	if err := manager.StorePhotoFaces("alice", entry, []*DetectedFace{makeFace(makeDescriptor(3))}, DefaultConfig().MatchThreshold); err != nil {
+		t.Fatalf("StorePhotoFaces failed: %v", err)
+	}
+	if len(manager.ListPeople("alice")) != 1 {
+		t.Fatalf("expected 1 person before migration")
+	}
+	database.Write(configTable, descriptorVersionKey, descriptorVersion-1)
+	database.Close()
+
+	//Second manager on the same database must detect the stale version and
+	//wipe the incompatible face data.
+	reopened, err := db.NewDatabase(dbfile, false)
+	if err != nil {
+		t.Fatalf("unable to reopen test database: %v", err)
+	}
+	defer reopened.Close()
+	manager2, err := NewManager(&Options{Database: reopened})
+	if err != nil {
+		t.Fatalf("NewManager (reopen) failed: %v", err)
+	}
+
+	if got := len(manager2.ListPeople("alice")); got != 0 {
+		t.Errorf("got %d people after version migration, want 0 (data should be cleared)", got)
+	}
+	if manager2.GetPhotoFaces("alice", "user:/Photo/a.jpg") != nil {
+		t.Errorf("stale photo entry survived version migration")
+	}
+
+	//A third manager (version now current) must leave fresh data untouched.
+	freshEntry := &PhotoFaces{VPath: "user:/Photo/b.jpg", FileSize: 200, ModTime: 2000}
+	if err := manager2.StorePhotoFaces("alice", freshEntry, []*DetectedFace{makeFace(makeDescriptor(5))}, DefaultConfig().MatchThreshold); err != nil {
+		t.Fatalf("StorePhotoFaces failed: %v", err)
+	}
+	manager2.migrateDescriptorVersion() //same version -> no-op
+	if got := len(manager2.ListPeople("alice")); got != 1 {
+		t.Errorf("fresh data was wiped by a no-op migration, got %d people want 1", got)
+	}
+}
+
 func TestPersonIsolationBetweenUsers(t *testing.T) {
 	manager := newTestManager(t)
 	threshold := DefaultConfig().MatchThreshold
