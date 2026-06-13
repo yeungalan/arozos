@@ -417,6 +417,13 @@ function getPhotoRoots() {
     return roots;
 }
 
+// Folders always skipped while indexing, on top of the user's configured
+// excludes. The Manga module stores comic page images under <root>:/Photo/Manga;
+// indexing those would flood the photo library, so that subtree is excluded by
+// default. Entries are path fragments matched by isExcluded(), so "Photo/Manga"
+// skips <any-root>:/Photo/Manga across every storage.
+var DEFAULT_EXCLUDE_FOLDERS = ["Photo/Manga"];
+
 // Exclude list is stored as a JSON array string in index_meta. Each entry is a
 // path fragment; any file whose path contains "/<fragment>/" is skipped.
 function getExcludeFolders() {
@@ -459,6 +466,14 @@ function parseExcludeList(raw) {
         /* ignore */
     }
     return [];
+}
+
+// Effective exclude list used by the indexer: the always-on defaults plus the
+// user-configured folders. Kept separate from get/setExcludeFolders so the
+// built-in skips stay applied even when the user has configured none of their
+// own (and are not exposed as user-removable entries).
+function getEffectiveExcludeList(raw) {
+    return DEFAULT_EXCLUDE_FOLDERS.concat(parseExcludeList(raw));
 }
 
 function isExcluded(filepath, excludeList) {

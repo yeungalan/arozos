@@ -53,7 +53,7 @@ function main() {
         return;
     }
 
-    var excludeList = parseExcludeList(metaGet(db, "exclude_folders", "[]"));
+    var excludeList = getEffectiveExcludeList(metaGet(db, "exclude_folders", "[]"));
     var roots = rootParam ? [rootParam] : getPhotoRoots();
 
     // Full rebuild is a one-shot reset: wipe the index, then index incrementally

@@ -606,8 +606,8 @@
 
         .cast-photo-btn {
             position: absolute;
-            top: 1.3em;
-            right: 6.5em;
+            top: 1em;
+            right: 3em;
             background: #222222;
             color: white;
             border: none;
@@ -699,6 +699,12 @@
 
             .show-info-btn {
                 display: block;
+            }
+
+            /* The info button is visible here (right: 3em), so the cast button
+               shifts out to keep the even spacing: close 1em, info 3em, cast 5em. */
+            .cast-photo-btn {
+                right: 5em;
             }
         }
 
