@@ -51,17 +51,24 @@ const (
 // administrators from the AI Integration tab in System Settings.
 type Config struct {
 	Enabled bool   `json:"enabled"` //Master switch for the whole feature
-	Engine  string `json:"engine"`  //"classical" (built-in) or "onnx" (deep model)
+	Engine  string `json:"engine"`  //"classical", "onnx" or "service"
 
 	//Classical engine tuning
 	MinFaceSize    int     `json:"minFaceSize"`    //Minimum face size in px (in the detection-scaled image)
 	MatchThreshold float64 `json:"matchThreshold"` //Max classical descriptor distance for the same person
 
 	//Deep (ONNX) engine settings. The model is supplied by the administrator;
-	//ArozOS never bundles model weights.
-	OnnxLibPath        string  `json:"onnxLibPath"`        //Path to the ONNX Runtime shared library (blank = auto-discover)
-	ModelPath          string  `json:"modelPath"`          //Path to the face-embedding .onnx model
-	InputSize          int     `json:"inputSize"`          //Model input size (square), default 112
+	//ArozOS never bundles model weights. ONNX runs in-process (Linux/macOS).
+	OnnxLibPath string `json:"onnxLibPath"` //Path to the ONNX Runtime shared library (blank = auto-discover)
+	ModelPath   string `json:"modelPath"`   //Path to the face-embedding .onnx model
+	InputSize   int    `json:"inputSize"`   //Model input size (square), default 112
+
+	//Deep (service) engine settings. Calls an external HTTP embedding service;
+	//works on every platform including Windows.
+	ServiceURL   string `json:"serviceUrl"`   //Base URL of the embedding service
+	ServiceToken string `json:"serviceToken"` //Optional bearer token
+
+	//Shared cosine-distance threshold for any embedding engine (onnx/service)
 	OnnxMatchThreshold float64 `json:"onnxMatchThreshold"` //Max cosine distance for the same person
 }
 
@@ -78,8 +85,8 @@ type Manager struct {
 	userlocks sync.Map //username -> *sync.Mutex, serializes scans per user
 
 	engineMu   sync.Mutex //guards the deep engine lifecycle
-	onnxEngine faceEngine //active deep engine, nil when classical/unavailable
-	onnxKey    string     //config fingerprint the deep engine was built for
+	deepEngine faceEngine //active deep engine (onnx/service), nil when classical/unavailable
+	deepKey    string     //config fingerprint the deep engine was built for
 
 	signatureMu sync.Mutex //serializes signature migration (global data wipe)
 }
@@ -124,7 +131,7 @@ func classicalSignature() string {
 	return "classical-v" + strconv.Itoa(descriptorVersion)
 }
 
-// onnxFingerprint is a fingerprint of the deep-engine configuration, including
+// onnxFingerprint is a fingerprint of the ONNX-engine configuration, including
 // the model file's size and modification time, so swapping the model or
 // changing the input size rebuilds the engine and re-scans the library.
 func onnxFingerprint(cfg Config) string {
@@ -135,59 +142,96 @@ func onnxFingerprint(cfg Config) string {
 	return fp
 }
 
-// getONNXEngine returns the deep engine for the given config, (re)building it
-// when the configuration fingerprint changes. Returns nil when the deep engine
-// is not selected or cannot be loaded (the caller then uses the classical
-// engine). Loading failures are logged once per configuration change.
-func (m *Manager) getONNXEngine(cfg Config) faceEngine {
-	if cfg.Engine != EngineONNX {
+// deepFingerprint identifies the deep-engine configuration so the cached engine
+// is rebuilt when anything relevant changes.
+func deepFingerprint(cfg Config) string {
+	switch cfg.Engine {
+	case EngineONNX:
+		return "onnx|" + onnxFingerprint(cfg)
+	case EngineService:
+		return "service|" + strings.TrimRight(cfg.ServiceURL, "/") + "|" + cfg.ServiceToken
+	}
+	return ""
+}
+
+// buildDeepEngine constructs the deep engine selected by the configuration.
+func buildDeepEngine(cfg Config) (faceEngine, error) {
+	switch cfg.Engine {
+	case EngineONNX:
+		if cfg.ModelPath == "" {
+			return nil, errors.New("no model path configured")
+		}
+		return newONNXEngine(cfg.OnnxLibPath, cfg.ModelPath, cfg.InputSize)
+	case EngineService:
+		return newServiceEngine(cfg.ServiceURL, cfg.ServiceToken)
+	}
+	return nil, nil
+}
+
+// getDeepEngine returns the deep engine (onnx or service) for the given config,
+// (re)building it when the configuration fingerprint changes. Returns nil when
+// no deep engine is selected or it cannot be loaded (the caller then uses the
+// classical engine). Loading failures are logged once per configuration change.
+func (m *Manager) getDeepEngine(cfg Config) faceEngine {
+	if cfg.Engine != EngineONNX && cfg.Engine != EngineService {
 		return nil
 	}
-	fingerprint := onnxFingerprint(cfg)
+	fingerprint := deepFingerprint(cfg)
 
 	m.engineMu.Lock()
 	defer m.engineMu.Unlock()
 
-	if m.onnxEngine != nil && m.onnxKey == fingerprint {
-		return m.onnxEngine
+	if m.deepEngine != nil && m.deepKey == fingerprint {
+		return m.deepEngine
 	}
 	//Configuration changed (or first use) — tear down any previous engine.
-	if m.onnxEngine != nil {
-		m.onnxEngine.Close()
-		m.onnxEngine = nil
+	if m.deepEngine != nil {
+		m.deepEngine.Close()
+		m.deepEngine = nil
 	}
-	m.onnxKey = fingerprint
+	m.deepKey = fingerprint
 
-	if cfg.ModelPath == "" {
-		return nil
-	}
-	engine, err := newONNXEngine(cfg.OnnxLibPath, cfg.ModelPath, cfg.InputSize)
+	engine, err := buildDeepEngine(cfg)
 	if err != nil {
 		logger.PrintAndLog("FaceRecognition", "deep engine unavailable, falling back to classical", err)
 		return nil
 	}
-	m.onnxEngine = engine
+	m.deepEngine = engine
 	return engine
+}
+
+// deepSignature identifies the stored data produced by a deep engine
+func deepSignature(cfg Config, engine faceEngine) string {
+	if cfg.Engine == EngineService {
+		return fmt.Sprintf("service-d%d-%s", engine.Dimension(), strings.TrimRight(cfg.ServiceURL, "/"))
+	}
+	return fmt.Sprintf("onnx-d%d-%s", engine.Dimension(), onnxFingerprint(cfg))
 }
 
 // currentMatcher returns the comparison strategy and data signature for the
 // engine that is actually usable under the given configuration.
 func (m *Manager) currentMatcher(cfg Config) matcher {
-	if engine := m.getONNXEngine(cfg); engine != nil {
+	if engine := m.getDeepEngine(cfg); engine != nil {
+		margin := faceCropMargin
+		if cfg.Engine == EngineService {
+			margin = serviceCropMargin
+		}
 		return matcher{
-			distance:  cosineDistance,
-			threshold: cfg.OnnxMatchThreshold,
-			cosine:    true,
-			signature: fmt.Sprintf("onnx-d%d-%s", engine.Dimension(), onnxFingerprint(cfg)),
-			engine:    engine,
+			distance:   cosineDistance,
+			threshold:  cfg.OnnxMatchThreshold,
+			cosine:     true,
+			signature:  deepSignature(cfg, engine),
+			engine:     engine,
+			cropMargin: margin,
 		}
 	}
 	return matcher{
-		distance:  DescriptorDistance,
-		threshold: cfg.MatchThreshold,
-		cosine:    false,
-		signature: classicalSignature(),
-		engine:    nil,
+		distance:   DescriptorDistance,
+		threshold:  cfg.MatchThreshold,
+		cosine:     false,
+		signature:  classicalSignature(),
+		engine:     nil,
+		cropMargin: faceCropMargin,
 	}
 }
 
@@ -233,7 +277,7 @@ func (m *Manager) Enabled() bool {
 // sanitizeConfig clamps every tunable into its supported range so a corrupt
 // or hand-edited database entry can never break the scanner.
 func sanitizeConfig(cfg Config) Config {
-	if cfg.Engine != EngineONNX {
+	if cfg.Engine != EngineONNX && cfg.Engine != EngineService {
 		cfg.Engine = EngineClassical
 	}
 	if cfg.MinFaceSize < 20 {

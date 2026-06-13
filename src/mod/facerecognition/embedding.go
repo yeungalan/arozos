@@ -27,7 +27,8 @@ import (
 const (
 	//Face recognition engines
 	EngineClassical = "classical" //Built-in LBP + tone descriptor (always available)
-	EngineONNX      = "onnx"      //Deep embedding model loaded via onnxruntime-purego
+	EngineONNX      = "onnx"      //Deep embedding model loaded in-process via onnxruntime-purego
+	EngineService   = "service"   //Deep embedding via an external HTTP service (all platforms)
 
 	//Fraction of the detected face box added as margin before embedding, so
 	//the crop includes a little context (forehead / chin) like ArcFace expects.
@@ -52,11 +53,12 @@ type faceEngine interface {
 // matcher carries everything the clustering layer needs to compare and group
 // faces for the currently-active engine.
 type matcher struct {
-	distance  func(a []float32, b []float32) float64 //Lower = more similar
-	threshold float64                                //Max distance for "same person"
-	cosine    bool                                   //Centroids are L2-normalized when true
-	signature string                                 //Identifies the engine+model of stored data
-	engine    faceEngine                             //nil => classical descriptors
+	distance   func(a []float32, b []float32) float64 //Lower = more similar
+	threshold  float64                                //Max distance for "same person"
+	cosine     bool                                   //Centroids are L2-normalized when true
+	signature  string                                 //Identifies the engine+model of stored data
+	engine     faceEngine                             //nil => classical descriptors
+	cropMargin float64                                //Face-box margin used when cropping for the engine
 }
 
 // cosineDistance returns 1 - cosine similarity of two vectors, so identical

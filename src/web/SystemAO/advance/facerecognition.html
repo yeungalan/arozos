@@ -159,29 +159,30 @@ body.dark #fr-root {
         <div class="fr-card-title">Recognition Engine</div>
         <div class="fr-card-desc">
             <b>Classical</b> is built in, fast and works on every platform, but grouping is approximate.
-            <b>Deep (ONNX)</b> uses a neural face-embedding model you supply for much more accurate
-            grouping. The deep engine runs in-process with no extra service, but requires the ONNX Runtime
-            library and is available on <b>Linux and macOS (amd64/arm64) only</b> — on Windows and other
-            platforms ArozOS automatically uses the classical engine.
+            The two <b>Deep</b> options use a neural face-embedding model for much more accurate grouping:
+            <b>ONNX (in-process)</b> runs the model inside ArozOS but is available on Linux/macOS
+            (amd64/arm64) only, while <b>External service</b> calls a separate embedding service over HTTP
+            and works everywhere, including Windows. If a deep engine cannot be loaded, ArozOS falls back
+            to classical automatically.
         </div>
         <div class="fr-field">
             <label>Engine</label>
             <select id="fr-engine">
                 <option value="classical">Classical (built-in, all platforms)</option>
-                <option value="onnx">Deep — ONNX model (Linux/macOS, more accurate)</option>
+                <option value="onnx">Deep — ONNX in-process (Linux/macOS)</option>
+                <option value="service">Deep — External service (all platforms, incl. Windows)</option>
             </select>
             <div class="hint" id="fr-engine-active"></div>
         </div>
     </div>
 
-    <!-- Deep model settings (shown only when the deep engine is selected) -->
-    <div class="fr-card" id="fr-deep-card" style="display:none;">
-        <div class="fr-card-title">Deep Model (ONNX)</div>
+    <!-- ONNX model settings (engine == onnx) -->
+    <div class="fr-card" id="fr-onnx-card" style="display:none;">
+        <div class="fr-card-title">Deep Model (ONNX, in-process)</div>
         <div class="fr-card-desc">
-            Supply an ArcFace-style face-embedding model (input an aligned RGB face, output an embedding
-            vector). ArozOS does not ship model weights. Point the two paths below at the ONNX Runtime
-            shared library and your <code>.onnx</code> model file on the server, then use <b>Test Model</b>
-            to validate before enabling scanning.
+            Supply an ArcFace-style face-embedding model. ArozOS does not ship model weights. Point the
+            two paths below at the ONNX Runtime shared library and your <code>.onnx</code> model file on
+            the server, then use <b>Test</b> to validate. Available on Linux/macOS (amd64/arm64).
         </div>
         <div class="fr-field">
             <label>ONNX Runtime Library Path</label>
@@ -193,24 +194,49 @@ body.dark #fr-root {
             <input type="text" id="fr-modelpath" placeholder="/path/to/face_embedding.onnx">
             <div class="hint">Server-side path to the face-embedding model.</div>
         </div>
-        <div class="fr-row">
-            <div class="fr-field">
-                <label>Model Input Size (px)</label>
-                <input type="number" id="fr-inputsize" min="16" max="1024" step="16">
-                <div class="hint">Square input the model expects. ArcFace uses 112.</div>
-            </div>
-            <div class="fr-field">
-                <label>Grouping Strictness (deep)</label>
-                <select id="fr-onnx-strictness">
-                    <option value="0.50">Strict — fewer mixed-up people</option>
-                    <option value="0.65">Balanced (recommended)</option>
-                    <option value="0.85">Relaxed — fewer duplicates</option>
-                </select>
-                <div class="hint">Maximum cosine distance for two faces to be the same person.</div>
-            </div>
+        <div class="fr-field">
+            <label>Model Input Size (px)</label>
+            <input type="number" id="fr-inputsize" min="16" max="1024" step="16">
+            <div class="hint">Square input the model expects. ArcFace uses 112.</div>
+        </div>
+    </div>
+
+    <!-- Embedding service settings (engine == service) -->
+    <div class="fr-card" id="fr-service-card" style="display:none;">
+        <div class="fr-card-title">Embedding Service</div>
+        <div class="fr-card-desc">
+            ArozOS detects faces locally and sends each face crop to your embedding service, which returns
+            a vector. A ready-to-run reference service is provided under
+            <code>tools/face-embedding-service/</code>. Works on every platform — run the service with
+            Docker and point ArozOS at it.
+        </div>
+        <div class="fr-field">
+            <label>Service URL</label>
+            <input type="text" id="fr-serviceurl" placeholder="http://localhost:8090">
+            <div class="hint">Base URL. ArozOS calls <code>{url}/info</code> and <code>{url}/embed</code>.</div>
+        </div>
+        <div class="fr-field">
+            <label>Access Token (optional)</label>
+            <input type="password" id="fr-servicetoken" placeholder="leave blank if the service is unauthenticated">
+            <div class="hint">Sent as <code>Authorization: Bearer &lt;token&gt;</code>.</div>
+        </div>
+    </div>
+
+    <!-- Deep grouping strictness (engine == onnx || service) -->
+    <div class="fr-card" id="fr-deep-grouping-card" style="display:none;">
+        <div class="fr-card-title">Deep Grouping</div>
+        <div class="fr-card-desc">How similar two face embeddings must be to count as the same person.</div>
+        <div class="fr-field">
+            <label>Grouping Strictness (deep)</label>
+            <select id="fr-onnx-strictness">
+                <option value="0.50">Strict — fewer mixed-up people</option>
+                <option value="0.65">Balanced (recommended)</option>
+                <option value="0.85">Relaxed — fewer duplicates</option>
+            </select>
+            <div class="hint">Maximum cosine distance for two faces to be the same person.</div>
         </div>
         <div class="fr-actions">
-            <button class="fr-btn" id="fr-testmodel">Test Model</button>
+            <button class="fr-btn" id="fr-testmodel">Test</button>
             <span class="fr-result" id="fr-test-result"></span>
         </div>
     </div>
@@ -307,22 +333,27 @@ body.dark #fr-root {
         return best.toFixed(2);
     }
 
-    // Show/hide the deep model card based on the selected engine
+    // Show/hide the engine-specific cards based on the selected engine
     function syncEngineUI(){
-        var deep = el("fr-engine").value === "onnx";
-        el("fr-deep-card").style.display = deep ? "" : "none";
+        var engine = el("fr-engine").value;
+        var deep = (engine === "onnx" || engine === "service");
+        el("fr-onnx-card").style.display = (engine === "onnx") ? "" : "none";
+        el("fr-service-card").style.display = (engine === "service") ? "" : "none";
+        el("fr-deep-grouping-card").style.display = deep ? "" : "none";
     }
 
     function loadConfig(){
         $.get(API + "config", function(d){
             if (d && d.error){ setState(false); toast("Error: " + d.error, false); return; }
             el("fr-enabled").checked = !!d.enabled;
-            el("fr-engine").value = (d.engine === "onnx") ? "onnx" : "classical";
+            el("fr-engine").value = (d.engine === "onnx" || d.engine === "service") ? d.engine : "classical";
             el("fr-minface").value = d.minFaceSize || 60;
             el("fr-strictness").value = pickClosest([0.30,0.42,0.58], parseFloat(d.matchThreshold) || 0.42);
             el("fr-onnxlib").value = d.onnxLibPath || "";
             el("fr-modelpath").value = d.modelPath || "";
             el("fr-inputsize").value = d.inputSize || 112;
+            el("fr-serviceurl").value = d.serviceUrl || "";
+            el("fr-servicetoken").value = d.serviceToken || "";
             el("fr-onnx-strictness").value = pickClosest([0.50,0.65,0.85], parseFloat(d.onnxMatchThreshold) || 0.65);
             setState(!!d.enabled);
             syncEngineUI();
@@ -338,6 +369,8 @@ body.dark #fr-root {
             onnxLibPath: el("fr-onnxlib").value.trim(),
             modelPath: el("fr-modelpath").value.trim(),
             inputSize: el("fr-inputsize").value || "112",
+            serviceUrl: el("fr-serviceurl").value.trim(),
+            serviceToken: el("fr-servicetoken").value,
             onnxMatchThreshold: el("fr-onnx-strictness").value
         };
     }
@@ -353,14 +386,19 @@ body.dark #fr-root {
     }
 
     function testModel(){
-        el("fr-test-result").textContent = "Loading model…";
+        var engine = el("fr-engine").value;
+        if (engine !== "onnx" && engine !== "service"){ return; }
+        el("fr-test-result").textContent = (engine === "service") ? "Contacting service…" : "Loading model…";
         $.post(API + "modeltest", {
+            engine: engine,
             onnxLibPath: el("fr-onnxlib").value.trim(),
             modelPath: el("fr-modelpath").value.trim(),
-            inputSize: el("fr-inputsize").value || "112"
+            inputSize: el("fr-inputsize").value || "112",
+            serviceUrl: el("fr-serviceurl").value.trim(),
+            serviceToken: el("fr-servicetoken").value
         }, function(r){
             if (r && r.error){ el("fr-test-result").textContent = "✗ " + r.error; return; }
-            el("fr-test-result").textContent = "✓ Model loaded — embedding dimension " + (r.dimension || "?");
+            el("fr-test-result").textContent = "✓ Ready — embedding dimension " + (r.dimension || "?");
         }).fail(function(){ el("fr-test-result").textContent = "✗ Request failed"; });
     }
 

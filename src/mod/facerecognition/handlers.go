@@ -81,33 +81,43 @@ func (m *Manager) HandleConfig(w http.ResponseWriter, r *http.Request) {
 	utils.SendOK(w)
 }
 
-// HandleModelTest validates the deep-engine configuration by loading the ONNX
-// Runtime library and the model and reporting the embedding dimension. Admin
-// only; this is the "Test model" button in System Settings.
+// HandleModelTest validates the selected deep engine — loading the ONNX model
+// or contacting the embedding service — and reports the embedding dimension.
+// Admin only; this is the "Test" button in System Settings.
 func (m *Manager) HandleModelTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		utils.SendErrorResponse(w, "invalid request method")
 		return
 	}
-	libPath, _ := utils.PostPara(r, "onnxLibPath")
-	modelPath, _ := utils.PostPara(r, "modelPath")
-	inputSize, err := utils.PostInt(r, "inputSize")
-	if err != nil {
-		inputSize = defaultModelInputSize
-	}
-	modelPath = strings.TrimSpace(modelPath)
-	if modelPath == "" {
-		utils.SendErrorResponse(w, "model path is required")
-		return
+	engine, _ := utils.PostPara(r, "engine")
+
+	var faceEng faceEngine
+	var err error
+	switch engine {
+	case EngineService:
+		serviceURL, _ := utils.PostPara(r, "serviceUrl")
+		serviceToken, _ := utils.PostPara(r, "serviceToken")
+		faceEng, err = newServiceEngine(serviceURL, serviceToken)
+	default:
+		libPath, _ := utils.PostPara(r, "onnxLibPath")
+		modelPath, _ := utils.PostPara(r, "modelPath")
+		inputSize, perr := utils.PostInt(r, "inputSize")
+		if perr != nil {
+			inputSize = defaultModelInputSize
+		}
+		if strings.TrimSpace(modelPath) == "" {
+			utils.SendErrorResponse(w, "model path is required")
+			return
+		}
+		faceEng, err = newONNXEngine(strings.TrimSpace(libPath), strings.TrimSpace(modelPath), inputSize)
 	}
 
-	engine, err := newONNXEngine(strings.TrimSpace(libPath), modelPath, inputSize)
 	if err != nil {
 		utils.SendErrorResponse(w, err.Error())
 		return
 	}
-	dimension := engine.Dimension()
-	engine.Close()
+	dimension := faceEng.Dimension()
+	faceEng.Close()
 
 	js, _ := json.Marshal(map[string]interface{}{
 		"ok":        true,
@@ -146,8 +156,8 @@ func (m *Manager) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if cfg.Enabled {
 		//Report which engine is actually active (deep falls back to classical
-		//when the model/library cannot be loaded).
-		response["deepActive"] = cfg.Engine == EngineONNX && m.getONNXEngine(cfg) != nil
+		//when the model/library/service cannot be loaded).
+		response["deepActive"] = (cfg.Engine == EngineONNX || cfg.Engine == EngineService) && m.getDeepEngine(cfg) != nil
 		stats := m.GetUserStats(userinfo.Username)
 		response["scannedPhotos"] = stats.ScannedPhotos
 		response["totalFaces"] = stats.TotalFaces
@@ -311,7 +321,7 @@ func (m *Manager) scanSinglePhoto(userinfo *user.User, vpath string, cfg Config,
 	if mt.engine != nil {
 		embedded := faces[:0]
 		for _, face := range faces {
-			crop := cropFace(img, face.X, face.Y, face.W, face.H, faceCropMargin)
+			crop := cropFace(img, face.X, face.Y, face.W, face.H, mt.cropMargin)
 			embedding, err := mt.engine.Embed(crop)
 			if err != nil {
 				continue
