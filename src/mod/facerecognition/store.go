@@ -51,6 +51,7 @@ type PhotoFaces struct {
 	FileSize  int64        `json:"filesize"`
 	ModTime   int64        `json:"modtime"`
 	ScannedAt int64        `json:"scannedAt"`
+	Signature string       `json:"signature"` //Engine+model the descriptors were built with
 	Faces     []StoredFace `json:"faces"`
 }
 
@@ -59,7 +60,8 @@ type Person struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	FaceCount int       `json:"faceCount"`
-	Thumb     string    `json:"thumb"` //Avatar, base64 JPEG of the first face
+	Thumb     string    `json:"thumb"`     //Avatar, base64 JPEG of the first face
+	Signature string    `json:"signature"` //Engine+model the centroid was built with
 	Centroid  []float32 `json:"centroid"`
 }
 
@@ -99,18 +101,20 @@ func (m *Manager) NeedsScan(username string, vpath string, filesize int64, modti
 }
 
 // StorePhotoFaces persists the scan result of one photo, assigning each face
-// to a person cluster. A previous entry for the same photo is replaced and
-// its people counters are rebalanced. Caller must hold the user scan lock.
-func (m *Manager) StorePhotoFaces(username string, entry *PhotoFaces, faces []*DetectedFace, threshold float64) error {
+// to a person cluster using the given matcher. A previous entry for the same
+// photo is replaced and its people counters are rebalanced. Caller must hold
+// the user scan lock.
+func (m *Manager) StorePhotoFaces(username string, entry *PhotoFaces, faces []*DetectedFace, mt matcher) error {
 	//Drop the faces of a previous scan of this photo from the clusters
 	if previous := m.GetPhotoFaces(username, entry.VPath); previous != nil {
 		m.detachFaces(username, previous)
 	}
 
+	entry.Signature = mt.signature
 	people := m.ListPeople(username)
 	entry.Faces = []StoredFace{}
 	for _, face := range faces {
-		person := m.assignToPerson(username, people, face.descriptor, threshold)
+		person := m.assignToPerson(username, people, face.descriptor, mt)
 		//Re-read the (possibly updated) people list reference for next faces
 		people = m.ListPeople(username)
 
@@ -168,12 +172,17 @@ func (m *Manager) detachFaces(username string, entry *PhotoFaces) {
 }
 
 // assignToPerson finds the best matching person for a descriptor or creates
-// a new one, updating the matched person's centroid and counter.
-func (m *Manager) assignToPerson(username string, people []*Person, descriptor []float32, threshold float64) *Person {
+// a new one, updating the matched person's centroid and counter. People built
+// with a different engine signature are ignored so descriptors are never
+// compared across engines.
+func (m *Manager) assignToPerson(username string, people []*Person, descriptor []float32, mt matcher) *Person {
 	var best *Person
-	bestDistance := threshold
+	bestDistance := mt.threshold
 	for _, person := range people {
-		distance := DescriptorDistance(person.Centroid, descriptor)
+		if person.Signature != mt.signature {
+			continue
+		}
+		distance := mt.distance(person.Centroid, descriptor)
 		if distance <= bestDistance {
 			bestDistance = distance
 			best = person
@@ -185,6 +194,7 @@ func (m *Manager) assignToPerson(username string, people []*Person, descriptor [
 			ID:        m.nextPersonID(username, people),
 			Name:      "",
 			FaceCount: 1,
+			Signature: mt.signature,
 			Centroid:  append([]float32{}, descriptor...),
 		}
 	} else {
@@ -194,6 +204,10 @@ func (m *Manager) assignToPerson(username string, people []*Person, descriptor [
 			best.Centroid[i] = (best.Centroid[i]*count + descriptor[i]) / (count + 1)
 		}
 		best.FaceCount++
+		//Deep embeddings are compared by cosine, so keep the centroid unit-length
+		if mt.cosine {
+			l2normalize(best.Centroid)
+		}
 	}
 
 	m.options.Database.Write(peopleTable, personKey(username, best.ID), best)

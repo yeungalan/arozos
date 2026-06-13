@@ -36,6 +36,7 @@ require (
 	github.com/robertkrimen/otto v0.5.1
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/satori/go.uuid v1.2.0
+	github.com/shota3506/onnxruntime-purego v0.0.0-20260315223538-8db8bd7424b2
 	github.com/spf13/afero v1.15.0
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
@@ -73,6 +74,7 @@ require (
 	github.com/cyphar/filepath-securejoin v0.5.0 // indirect
 	github.com/dsnet/compress v0.0.2-0.20210315054119-f66993602bf5 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/ebitengine/purego v0.9.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/fclairamb/go-log v0.6.0 // indirect
 	github.com/fogleman/simplify v0.0.0-20170216171241-d32f302d5046 // indirect

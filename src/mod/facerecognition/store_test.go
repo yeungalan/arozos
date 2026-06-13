@@ -39,6 +39,17 @@ func makeFace(descriptor []float32) *DetectedFace {
 	return &DetectedFace{X: 1, Y: 2, W: 30, H: 30, Quality: 9.5, descriptor: descriptor}
 }
 
+// classicalMatcher is the matcher used by the classical engine, for tests.
+func classicalMatcher() matcher {
+	return matcher{
+		distance:  DescriptorDistance,
+		threshold: DefaultConfig().MatchThreshold,
+		cosine:    false,
+		signature: classicalSignature(),
+		engine:    nil,
+	}
+}
+
 func TestNewManagerRequiresDatabase(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -84,31 +95,38 @@ func TestConfigDefaultsAndPersistence(t *testing.T) {
 }
 
 func TestSanitizeConfig(t *testing.T) {
+	//base is a fully-valid config; each case overrides one field and expects
+	//exactly that field to be corrected.
+	base := func() Config {
+		return Config{
+			Engine:             EngineClassical,
+			MinFaceSize:        60,
+			MatchThreshold:     0.3,
+			InputSize:          defaultModelInputSize,
+			OnnxMatchThreshold: 0.65,
+		}
+	}
+	withFaceSize := func(v int) Config { c := base(); c.MinFaceSize = v; return c }
+	withThreshold := func(v float64) Config { c := base(); c.MatchThreshold = v; return c }
+	withEngine := func(v string) Config { c := base(); c.Engine = v; return c }
+	withInputSize := func(v int) Config { c := base(); c.InputSize = v; return c }
+	withOnnxThreshold := func(v float64) Config { c := base(); c.OnnxMatchThreshold = v; return c }
+
 	tests := []struct {
 		name string
 		in   Config
 		want Config
 	}{
-		{
-			"too small face size clamps up",
-			Config{MinFaceSize: 1, MatchThreshold: 0.3},
-			Config{MinFaceSize: 20, MatchThreshold: 0.3},
-		},
-		{
-			"too large face size clamps down",
-			Config{MinFaceSize: 10000, MatchThreshold: 0.3},
-			Config{MinFaceSize: 500, MatchThreshold: 0.3},
-		},
-		{
-			"zero threshold resets to default",
-			Config{MinFaceSize: 60, MatchThreshold: 0},
-			Config{MinFaceSize: 60, MatchThreshold: DefaultConfig().MatchThreshold},
-		},
-		{
-			"oversized threshold clamps to one",
-			Config{MinFaceSize: 60, MatchThreshold: 42},
-			Config{MinFaceSize: 60, MatchThreshold: 1},
-		},
+		{"too small face size clamps up", withFaceSize(1), withFaceSize(20)},
+		{"too large face size clamps down", withFaceSize(10000), withFaceSize(500)},
+		{"zero threshold resets to default", withThreshold(0), withThreshold(DefaultConfig().MatchThreshold)},
+		{"oversized threshold clamps to one", withThreshold(42), withThreshold(1)},
+		{"unknown engine resets to classical", withEngine("magic"), withEngine(EngineClassical)},
+		{"engine onnx is preserved", withEngine(EngineONNX), withEngine(EngineONNX)},
+		{"bad input size resets to default", withInputSize(0), withInputSize(defaultModelInputSize)},
+		{"huge input size resets to default", withInputSize(99999), withInputSize(defaultModelInputSize)},
+		{"zero onnx threshold resets to default", withOnnxThreshold(0), withOnnxThreshold(DefaultConfig().OnnxMatchThreshold)},
+		{"oversized onnx threshold clamps to two", withOnnxThreshold(42), withOnnxThreshold(2)},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -121,15 +139,15 @@ func TestSanitizeConfig(t *testing.T) {
 
 func TestStoreAndClusterFaces(t *testing.T) {
 	manager := newTestManager(t)
-	threshold := DefaultConfig().MatchThreshold
+	mt := classicalMatcher()
 
 	//Two photos with the same face descriptor: must become ONE person
 	entry1 := &PhotoFaces{VPath: "user:/Photo/a.jpg", FileSize: 100, ModTime: 1000}
-	if err := manager.StorePhotoFaces("alice", entry1, []*DetectedFace{makeFace(makeDescriptor(3))}, threshold); err != nil {
+	if err := manager.StorePhotoFaces("alice", entry1, []*DetectedFace{makeFace(makeDescriptor(3))}, mt); err != nil {
 		t.Fatalf("StorePhotoFaces failed: %v", err)
 	}
 	entry2 := &PhotoFaces{VPath: "user:/Photo/b.jpg", FileSize: 200, ModTime: 2000}
-	if err := manager.StorePhotoFaces("alice", entry2, []*DetectedFace{makeFace(makeDescriptor(3))}, threshold); err != nil {
+	if err := manager.StorePhotoFaces("alice", entry2, []*DetectedFace{makeFace(makeDescriptor(3))}, mt); err != nil {
 		t.Fatalf("StorePhotoFaces failed: %v", err)
 	}
 
@@ -143,7 +161,7 @@ func TestStoreAndClusterFaces(t *testing.T) {
 
 	//A very different descriptor must open a second person
 	entry3 := &PhotoFaces{VPath: "user:/Photo/c.jpg", FileSize: 300, ModTime: 3000}
-	if err := manager.StorePhotoFaces("alice", entry3, []*DetectedFace{makeFace(makeDescriptor(40))}, threshold); err != nil {
+	if err := manager.StorePhotoFaces("alice", entry3, []*DetectedFace{makeFace(makeDescriptor(40))}, mt); err != nil {
 		t.Fatalf("StorePhotoFaces failed: %v", err)
 	}
 	people = manager.ListPeople("alice")
@@ -159,10 +177,10 @@ func TestStoreAndClusterFaces(t *testing.T) {
 
 func TestRescanRebalancesPeople(t *testing.T) {
 	manager := newTestManager(t)
-	threshold := DefaultConfig().MatchThreshold
+	mt := classicalMatcher()
 
 	entry := &PhotoFaces{VPath: "user:/Photo/a.jpg", FileSize: 100, ModTime: 1000}
-	if err := manager.StorePhotoFaces("alice", entry, []*DetectedFace{makeFace(makeDescriptor(3))}, threshold); err != nil {
+	if err := manager.StorePhotoFaces("alice", entry, []*DetectedFace{makeFace(makeDescriptor(3))}, mt); err != nil {
 		t.Fatalf("StorePhotoFaces failed: %v", err)
 	}
 	if len(manager.ListPeople("alice")) != 1 {
@@ -171,7 +189,7 @@ func TestRescanRebalancesPeople(t *testing.T) {
 
 	//Rescan of the same photo now finds no face: the person must disappear
 	rescan := &PhotoFaces{VPath: "user:/Photo/a.jpg", FileSize: 150, ModTime: 1500}
-	if err := manager.StorePhotoFaces("alice", rescan, []*DetectedFace{}, threshold); err != nil {
+	if err := manager.StorePhotoFaces("alice", rescan, []*DetectedFace{}, mt); err != nil {
 		t.Fatalf("StorePhotoFaces failed: %v", err)
 	}
 	if got := len(manager.ListPeople("alice")); got != 0 {
@@ -181,10 +199,10 @@ func TestRescanRebalancesPeople(t *testing.T) {
 
 func TestNeedsScan(t *testing.T) {
 	manager := newTestManager(t)
-	threshold := DefaultConfig().MatchThreshold
+	mt := classicalMatcher()
 
 	entry := &PhotoFaces{VPath: "user:/Photo/a.jpg", FileSize: 100, ModTime: 1000}
-	if err := manager.StorePhotoFaces("alice", entry, []*DetectedFace{}, threshold); err != nil {
+	if err := manager.StorePhotoFaces("alice", entry, []*DetectedFace{}, mt); err != nil {
 		t.Fatalf("StorePhotoFaces failed: %v", err)
 	}
 
@@ -213,10 +231,10 @@ func TestNeedsScan(t *testing.T) {
 
 func TestRemovePhoto(t *testing.T) {
 	manager := newTestManager(t)
-	threshold := DefaultConfig().MatchThreshold
+	mt := classicalMatcher()
 
 	entry := &PhotoFaces{VPath: "user:/Photo/a.jpg", FileSize: 100, ModTime: 1000}
-	if err := manager.StorePhotoFaces("alice", entry, []*DetectedFace{makeFace(makeDescriptor(3))}, threshold); err != nil {
+	if err := manager.StorePhotoFaces("alice", entry, []*DetectedFace{makeFace(makeDescriptor(3))}, mt); err != nil {
 		t.Fatalf("StorePhotoFaces failed: %v", err)
 	}
 
@@ -231,10 +249,10 @@ func TestRemovePhoto(t *testing.T) {
 
 func TestRenamePerson(t *testing.T) {
 	manager := newTestManager(t)
-	threshold := DefaultConfig().MatchThreshold
+	mt := classicalMatcher()
 
 	entry := &PhotoFaces{VPath: "user:/Photo/a.jpg", FileSize: 100, ModTime: 1000}
-	if err := manager.StorePhotoFaces("alice", entry, []*DetectedFace{makeFace(makeDescriptor(3))}, threshold); err != nil {
+	if err := manager.StorePhotoFaces("alice", entry, []*DetectedFace{makeFace(makeDescriptor(3))}, mt); err != nil {
 		t.Fatalf("StorePhotoFaces failed: %v", err)
 	}
 	personID := manager.ListPeople("alice")[0].ID
@@ -277,17 +295,17 @@ func TestRenamePerson(t *testing.T) {
 
 func TestListPersonPhotos(t *testing.T) {
 	manager := newTestManager(t)
-	threshold := DefaultConfig().MatchThreshold
+	mt := classicalMatcher()
 
 	//Same person in two photos, second person in one photo
 	for i, vpath := range []string{"user:/Photo/a.jpg", "user:/Photo/b.jpg"} {
 		entry := &PhotoFaces{VPath: vpath, FileSize: int64(100 + i), ModTime: int64(1000 + i)}
-		if err := manager.StorePhotoFaces("alice", entry, []*DetectedFace{makeFace(makeDescriptor(3))}, threshold); err != nil {
+		if err := manager.StorePhotoFaces("alice", entry, []*DetectedFace{makeFace(makeDescriptor(3))}, mt); err != nil {
 			t.Fatalf("StorePhotoFaces failed: %v", err)
 		}
 	}
 	other := &PhotoFaces{VPath: "user:/Photo/c.jpg", FileSize: 300, ModTime: 3000}
-	if err := manager.StorePhotoFaces("alice", other, []*DetectedFace{makeFace(makeDescriptor(40))}, threshold); err != nil {
+	if err := manager.StorePhotoFaces("alice", other, []*DetectedFace{makeFace(makeDescriptor(40))}, mt); err != nil {
 		t.Fatalf("StorePhotoFaces failed: %v", err)
 	}
 
@@ -312,14 +330,14 @@ func TestListPersonPhotos(t *testing.T) {
 
 func TestUserStatsAndClear(t *testing.T) {
 	manager := newTestManager(t)
-	threshold := DefaultConfig().MatchThreshold
+	mt := classicalMatcher()
 
 	aliceEntry := &PhotoFaces{VPath: "user:/Photo/a.jpg", FileSize: 100, ModTime: 1000}
-	if err := manager.StorePhotoFaces("alice", aliceEntry, []*DetectedFace{makeFace(makeDescriptor(3)), makeFace(makeDescriptor(40))}, threshold); err != nil {
+	if err := manager.StorePhotoFaces("alice", aliceEntry, []*DetectedFace{makeFace(makeDescriptor(3)), makeFace(makeDescriptor(40))}, mt); err != nil {
 		t.Fatalf("StorePhotoFaces failed: %v", err)
 	}
 	bobEntry := &PhotoFaces{VPath: "user:/Photo/b.jpg", FileSize: 200, ModTime: 2000}
-	if err := manager.StorePhotoFaces("bob", bobEntry, []*DetectedFace{makeFace(makeDescriptor(7))}, threshold); err != nil {
+	if err := manager.StorePhotoFaces("bob", bobEntry, []*DetectedFace{makeFace(makeDescriptor(7))}, mt); err != nil {
 		t.Fatalf("StorePhotoFaces failed: %v", err)
 	}
 
@@ -348,68 +366,52 @@ func TestUserStatsAndClear(t *testing.T) {
 	}
 }
 
-func TestDescriptorVersionMigration(t *testing.T) {
-	dbfile := filepath.Join(t.TempDir(), "migrate.db")
-	database, err := db.NewDatabase(dbfile, false)
-	if err != nil {
-		t.Fatalf("unable to create test database: %v", err)
-	}
+func TestEnsureSignatureMigration(t *testing.T) {
+	manager := newTestManager(t)
 
-	//First manager: store some face data, then force an older descriptor
-	//version onto disk to simulate an upgrade from an incompatible format.
-	manager, err := NewManager(&Options{Database: database})
-	if err != nil {
-		t.Fatalf("NewManager failed: %v", err)
-	}
+	//Establish the current signature first (as HandleScan does), then store
+	//data under it.
+	manager.ensureSignature(classicalSignature())
 	entry := &PhotoFaces{VPath: "user:/Photo/a.jpg", FileSize: 100, ModTime: 1000}
-	if err := manager.StorePhotoFaces("alice", entry, []*DetectedFace{makeFace(makeDescriptor(3))}, DefaultConfig().MatchThreshold); err != nil {
+	if err := manager.StorePhotoFaces("alice", entry, []*DetectedFace{makeFace(makeDescriptor(3))}, classicalMatcher()); err != nil {
 		t.Fatalf("StorePhotoFaces failed: %v", err)
 	}
 	if len(manager.ListPeople("alice")) != 1 {
 		t.Fatalf("expected 1 person before migration")
 	}
-	database.Write(configTable, descriptorVersionKey, descriptorVersion-1)
-	database.Close()
 
-	//Second manager on the same database must detect the stale version and
-	//wipe the incompatible face data.
-	reopened, err := db.NewDatabase(dbfile, false)
-	if err != nil {
-		t.Fatalf("unable to reopen test database: %v", err)
+	//Switching to a different signature (e.g. a deep model) must wipe the
+	//incompatible data so it is re-scanned.
+	manager.ensureSignature("onnx-d512-somemodel")
+	if got := len(manager.ListPeople("alice")); got != 0 {
+		t.Errorf("got %d people after signature change, want 0 (data should be cleared)", got)
 	}
-	defer reopened.Close()
-	manager2, err := NewManager(&Options{Database: reopened})
-	if err != nil {
-		t.Fatalf("NewManager (reopen) failed: %v", err)
+	if manager.GetPhotoFaces("alice", "user:/Photo/a.jpg") != nil {
+		t.Errorf("stale photo entry survived the signature change")
 	}
 
-	if got := len(manager2.ListPeople("alice")); got != 0 {
-		t.Errorf("got %d people after version migration, want 0 (data should be cleared)", got)
-	}
-	if manager2.GetPhotoFaces("alice", "user:/Photo/a.jpg") != nil {
-		t.Errorf("stale photo entry survived version migration")
-	}
-
-	//A third manager (version now current) must leave fresh data untouched.
+	//Fresh data under the new signature, then a no-op ensureSignature with the
+	//same signature must leave it untouched.
 	freshEntry := &PhotoFaces{VPath: "user:/Photo/b.jpg", FileSize: 200, ModTime: 2000}
-	if err := manager2.StorePhotoFaces("alice", freshEntry, []*DetectedFace{makeFace(makeDescriptor(5))}, DefaultConfig().MatchThreshold); err != nil {
+	deepMatcher := matcher{distance: cosineDistance, threshold: 0.65, cosine: true, signature: "onnx-d512-somemodel"}
+	if err := manager.StorePhotoFaces("alice", freshEntry, []*DetectedFace{makeFace(makeDescriptor(5))}, deepMatcher); err != nil {
 		t.Fatalf("StorePhotoFaces failed: %v", err)
 	}
-	manager2.migrateDescriptorVersion() //same version -> no-op
-	if got := len(manager2.ListPeople("alice")); got != 1 {
+	manager.ensureSignature("onnx-d512-somemodel") //same signature -> no-op
+	if got := len(manager.ListPeople("alice")); got != 1 {
 		t.Errorf("fresh data was wiped by a no-op migration, got %d people want 1", got)
 	}
 }
 
 func TestPersonIsolationBetweenUsers(t *testing.T) {
 	manager := newTestManager(t)
-	threshold := DefaultConfig().MatchThreshold
+	mt := classicalMatcher()
 
 	//The same face descriptor for two different users must create two
 	//separate people: face data is strictly per user.
 	for _, username := range []string{"alice", "bob"} {
 		entry := &PhotoFaces{VPath: "user:/Photo/a.jpg", FileSize: 100, ModTime: 1000}
-		if err := manager.StorePhotoFaces(username, entry, []*DetectedFace{makeFace(makeDescriptor(3))}, threshold); err != nil {
+		if err := manager.StorePhotoFaces(username, entry, []*DetectedFace{makeFace(makeDescriptor(3))}, mt); err != nil {
 			t.Fatalf("StorePhotoFaces failed: %v", err)
 		}
 	}

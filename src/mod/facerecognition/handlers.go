@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	fs "imuslab.com/arozos/mod/filesystem"
@@ -47,6 +48,9 @@ func (m *Manager) HandleConfig(w http.ResponseWriter, r *http.Request) {
 	if enabled, err := utils.PostBool(r, "enabled"); err == nil {
 		cfg.Enabled = enabled
 	}
+	if engine, err := utils.PostPara(r, "engine"); err == nil {
+		cfg.Engine = engine
+	}
 	if minFaceSize, err := utils.PostInt(r, "minFaceSize"); err == nil {
 		cfg.MinFaceSize = minFaceSize
 	}
@@ -55,12 +59,61 @@ func (m *Manager) HandleConfig(w http.ResponseWriter, r *http.Request) {
 			cfg.MatchThreshold = threshold
 		}
 	}
+	if onnxLibPath, err := utils.PostPara(r, "onnxLibPath"); err == nil {
+		cfg.OnnxLibPath = strings.TrimSpace(onnxLibPath)
+	}
+	if modelPath, err := utils.PostPara(r, "modelPath"); err == nil {
+		cfg.ModelPath = strings.TrimSpace(modelPath)
+	}
+	if inputSize, err := utils.PostInt(r, "inputSize"); err == nil {
+		cfg.InputSize = inputSize
+	}
+	if thresholdString, err := utils.PostPara(r, "onnxMatchThreshold"); err == nil {
+		if threshold, err := strconv.ParseFloat(thresholdString, 64); err == nil {
+			cfg.OnnxMatchThreshold = threshold
+		}
+	}
 
 	if err := m.SetConfig(cfg); err != nil {
 		utils.SendErrorResponse(w, "unable to save configuration: "+err.Error())
 		return
 	}
 	utils.SendOK(w)
+}
+
+// HandleModelTest validates the deep-engine configuration by loading the ONNX
+// Runtime library and the model and reporting the embedding dimension. Admin
+// only; this is the "Test model" button in System Settings.
+func (m *Manager) HandleModelTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		utils.SendErrorResponse(w, "invalid request method")
+		return
+	}
+	libPath, _ := utils.PostPara(r, "onnxLibPath")
+	modelPath, _ := utils.PostPara(r, "modelPath")
+	inputSize, err := utils.PostInt(r, "inputSize")
+	if err != nil {
+		inputSize = defaultModelInputSize
+	}
+	modelPath = strings.TrimSpace(modelPath)
+	if modelPath == "" {
+		utils.SendErrorResponse(w, "model path is required")
+		return
+	}
+
+	engine, err := newONNXEngine(strings.TrimSpace(libPath), modelPath, inputSize)
+	if err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+	dimension := engine.Dimension()
+	engine.Close()
+
+	js, _ := json.Marshal(map[string]interface{}{
+		"ok":        true,
+		"dimension": dimension,
+	})
+	utils.SendJSONResponse(w, string(js))
 }
 
 // HandleClearAll removes the stored face data of every user. Admin only.
@@ -89,8 +142,12 @@ func (m *Manager) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	cfg := m.GetConfig()
 	response := map[string]interface{}{
 		"enabled": cfg.Enabled,
+		"engine":  cfg.Engine,
 	}
 	if cfg.Enabled {
+		//Report which engine is actually active (deep falls back to classical
+		//when the model/library cannot be loaded).
+		response["deepActive"] = cfg.Engine == EngineONNX && m.getONNXEngine(cfg) != nil
 		stats := m.GetUserStats(userinfo.Username)
 		response["scannedPhotos"] = stats.ScannedPhotos
 		response["totalFaces"] = stats.TotalFaces
@@ -139,6 +196,11 @@ func (m *Manager) HandleScan(w http.ResponseWriter, r *http.Request) {
 		request.Paths = request.Paths[:maxPathsPerScan]
 	}
 
+	//Resolve the active engine and wipe stored data if the engine/model
+	//changed since the last scan, so descriptors are never mixed.
+	mt := m.currentMatcher(cfg)
+	m.ensureSignature(mt.signature)
+
 	//Serialize scans of the same user so people clusters stay consistent
 	lock := m.userLock(userinfo.Username)
 	lock.Lock()
@@ -150,7 +212,7 @@ func (m *Manager) HandleScan(w http.ResponseWriter, r *http.Request) {
 	failed := 0
 	facesFound := 0
 	for _, vpath := range request.Paths {
-		result, err := m.scanSinglePhoto(userinfo, vpath, cfg)
+		result, err := m.scanSinglePhoto(userinfo, vpath, cfg, mt)
 		if err != nil {
 			failed++
 			continue
@@ -188,9 +250,10 @@ type scanResult struct {
 	faces   int
 }
 
-// scanSinglePhoto resolves, loads and scans one photo of a user. Caller must
-// hold the user scan lock.
-func (m *Manager) scanSinglePhoto(userinfo *user.User, vpath string, cfg Config) (*scanResult, error) {
+// scanSinglePhoto resolves, loads and scans one photo of a user using the
+// given matcher (which carries the active engine). Caller must hold the user
+// scan lock.
+func (m *Manager) scanSinglePhoto(userinfo *user.User, vpath string, cfg Config, mt matcher) (*scanResult, error) {
 	if vpath == "" || !userinfo.CanRead(vpath) {
 		return nil, errors.New("access denied")
 	}
@@ -242,13 +305,30 @@ func (m *Manager) scanSinglePhoto(userinfo *user.User, vpath string, cfg Config)
 		return nil, err
 	}
 
+	//When the deep engine is active, replace the classical descriptor of each
+	//face with a model embedding computed from a higher-resolution crop of the
+	//original image. Faces whose embedding fails are dropped rather than mixed.
+	if mt.engine != nil {
+		embedded := faces[:0]
+		for _, face := range faces {
+			crop := cropFace(img, face.X, face.Y, face.W, face.H, faceCropMargin)
+			embedding, err := mt.engine.Embed(crop)
+			if err != nil {
+				continue
+			}
+			face.descriptor = embedding
+			embedded = append(embedded, face)
+		}
+		faces = embedded
+	}
+
 	entry := &PhotoFaces{
 		VPath:     vpath,
 		FileSize:  filesize,
 		ModTime:   modtime,
 		ScannedAt: time.Now().Unix(),
 	}
-	if err := m.StorePhotoFaces(userinfo.Username, entry, faces, cfg.MatchThreshold); err != nil {
+	if err := m.StorePhotoFaces(userinfo.Username, entry, faces, mt); err != nil {
 		return nil, err
 	}
 	return &scanResult{outcome: scanOutcomeProcessed, faces: len(faces)}, nil

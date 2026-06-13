@@ -20,9 +20,10 @@ import (
 	the requesting user.
 
 	Admin endpoints (System Settings > AI Integration > Face Recognition):
-	  GET  /system/facerecognition/config    – current configuration
-	  POST /system/facerecognition/config    – save configuration (on/off etc.)
-	  POST /system/facerecognition/clearall  – wipe stored face data of all users
+	  GET  /system/facerecognition/config     – current configuration
+	  POST /system/facerecognition/config     – save configuration (on/off, engine, model)
+	  POST /system/facerecognition/clearall   – wipe stored face data of all users
+	  POST /system/facerecognition/modeltest  – validate the deep (ONNX) model
 
 	User endpoints (used by the Photo web app, Photo module access required):
 	  GET  /system/facerecognition/status         – feature switch + own statistics
@@ -68,6 +69,7 @@ func FaceRecognitionInit() {
 	})
 	adminRouter.HandleFunc("/system/facerecognition/config", faceRecognitionManager.HandleConfig)
 	adminRouter.HandleFunc("/system/facerecognition/clearall", faceRecognitionManager.HandleClearAll)
+	adminRouter.HandleFunc("/system/facerecognition/modeltest", faceRecognitionManager.HandleModelTest)
 
 	//User router: scanning and people browsing for the Photo app. Scoped to
 	//the Photo module so only users that can use Photo can scan their files.
