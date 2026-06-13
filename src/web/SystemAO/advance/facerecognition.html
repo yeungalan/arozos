@@ -1,0 +1,291 @@
+<style>
+#fr-root {
+    --fr-bg: #ffffff;
+    --fr-border: #e5e5e5;
+    --fr-text: #1f1f1f;
+    --fr-dim: #676767;
+    --fr-soft: #f5f5f5;
+    --fr-soft2: #efefef;
+    --fr-accent: #4d6bff;
+    --fr-accent-text: #ffffff;
+    --fr-ok: #107c10;
+    --fr-danger: #c42b1c;
+    --fr-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    background: var(--fr-bg);
+    border: 1px solid var(--fr-border);
+    border-radius: 12px;
+    box-shadow: var(--fr-shadow);
+    color: var(--fr-text);
+    padding: 16px;
+    margin-bottom: 4px;
+    font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+}
+body.dark #fr-root {
+    --fr-bg: #2b2b2b;
+    --fr-border: #3b3b3b;
+    --fr-text: #ececec;
+    --fr-dim: #aaaaaa;
+    --fr-soft: #343434;
+    --fr-soft2: #3c3c3c;
+    --fr-accent: #5a78ff;
+    --fr-ok: #2ecc71;
+    --fr-danger: #ff6b5e;
+    --fr-shadow: 0 8px 22px rgba(0,0,0,0.3);
+}
+
+#fr-root * { box-sizing: border-box; }
+.fr-head { display:flex; align-items:center; gap:10px; margin-bottom: 14px; }
+.fr-head .fr-title { font-size: 17px; font-weight: 600; }
+.fr-head .fr-sub { font-size: 12px; color: var(--fr-dim); margin-top: 2px; }
+.fr-head .fr-badge { margin-left:auto; font-size:11px; color:var(--fr-dim); display:inline-flex; align-items:center; gap:6px; }
+.fr-dot { width:8px; height:8px; border-radius:50%; background: var(--fr-dim); }
+.fr-dot.ok { background: var(--fr-ok); }
+.fr-dot.off { background: var(--fr-danger); }
+
+.fr-card {
+    border: 1px solid var(--fr-border);
+    border-radius: 10px;
+    background: var(--fr-soft);
+    padding: 14px;
+    margin-bottom: 12px;
+}
+.fr-card-title { font-size: 13.5px; font-weight: 600; margin-bottom: 4px; display:flex; align-items:center; gap:8px; }
+.fr-card-desc { font-size: 11.5px; color: var(--fr-dim); margin-bottom: 12px; line-height: 1.5; }
+
+.fr-field { margin-bottom: 12px; }
+.fr-field:last-child { margin-bottom: 0; }
+.fr-field > label { display:block; font-size:12px; font-weight:600; color: var(--fr-dim); margin-bottom: 5px; }
+.fr-field .hint { font-size: 11px; color: var(--fr-dim); margin-top: 5px; line-height: 1.5; }
+.fr-row { display:flex; gap:10px; }
+.fr-row > .fr-field { flex:1; }
+
+#fr-root input[type=number], #fr-root select {
+    width: 100%;
+    background: var(--fr-bg);
+    border: 1px solid var(--fr-border);
+    color: var(--fr-text);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+}
+#fr-root input:focus, #fr-root select:focus { border-color: var(--fr-accent); }
+
+.fr-btn {
+    border: 1px solid var(--fr-border);
+    background: var(--fr-bg);
+    color: var(--fr-text);
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: .12s;
+}
+.fr-btn:hover { background: var(--fr-soft2); }
+.fr-btn.primary { background: var(--fr-accent); color: var(--fr-accent-text); border-color: var(--fr-accent); }
+.fr-btn.primary:hover { filter: brightness(1.06); }
+.fr-btn.danger { color: var(--fr-danger); border-color: var(--fr-danger); }
+.fr-btn.danger:hover { background: rgba(196,43,28,0.08); }
+.fr-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top: 4px; }
+.fr-result { font-size: 12px; color: var(--fr-dim); }
+
+/* Master switch */
+.fr-switch-row { display:flex; align-items:center; gap:12px; padding: 4px 0 8px 0; }
+.fr-switch { position:relative; width:42px; height:24px; flex-shrink:0; cursor:pointer; }
+.fr-switch input { opacity:0; width:0; height:0; }
+.fr-slider { position:absolute; inset:0; background: var(--fr-soft2); border:1px solid var(--fr-border); border-radius:24px; transition:.18s; }
+.fr-slider:before { content:""; position:absolute; width:18px; height:18px; left:2px; top:2px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.3); transition:.18s; }
+.fr-switch input:checked + .fr-slider { background: var(--fr-ok); border-color: var(--fr-ok); }
+.fr-switch input:checked + .fr-slider:before { transform: translateX(18px); }
+.fr-switch-label { font-size: 13px; font-weight: 600; }
+.fr-switch-state { font-size: 11.5px; color: var(--fr-dim); }
+
+.fr-note {
+    border-left: 3px solid var(--fr-accent);
+    background: var(--fr-soft2);
+    border-radius: 0 8px 8px 0;
+    padding: 8px 12px;
+    font-size: 11.5px;
+    color: var(--fr-dim);
+    line-height: 1.6;
+}
+
+#fr-toast {
+    display:none; position:fixed; bottom:24px; right:24px; z-index:99999;
+    padding:11px 16px; border-radius:9px; font-size:12.5px; font-weight:600;
+    color:#fff; box-shadow:var(--fr-shadow);
+}
+</style>
+
+<div id="fr-root">
+    <div class="fr-head">
+        <div>
+            <div class="fr-title">Face Recognition</div>
+            <div class="fr-sub">Optional on-device face detection and people grouping for the Photo app.</div>
+        </div>
+        <div class="fr-badge"><span class="fr-dot" id="fr-state-dot"></span><span id="fr-state-text">Checking…</span></div>
+    </div>
+
+    <!-- Master switch -->
+    <div class="fr-card">
+        <div class="fr-card-title">Feature Switch</div>
+        <div class="fr-card-desc">
+            When enabled, the Photo app scans each user's indexed photos for faces in the background
+            and groups similar faces into "People". Everything runs locally on this server using a
+            built-in lightweight model — no photo, face or biometric data ever leaves this host.
+        </div>
+        <div class="fr-switch-row">
+            <label class="fr-switch">
+                <input type="checkbox" id="fr-enabled">
+                <span class="fr-slider"></span>
+            </label>
+            <div>
+                <div class="fr-switch-label">Enable face recognition</div>
+                <div class="fr-switch-state" id="fr-switch-state">Disabled — the Photo app shows no face features.</div>
+            </div>
+        </div>
+        <div class="fr-note">
+            This is an optional feature and is turned <b>off</b> by default. Scanning only happens for
+            users who open the Photo app while the feature is on. Each user only ever sees faces found
+            in photos they can access themselves.
+        </div>
+    </div>
+
+    <!-- Detection settings -->
+    <div class="fr-card">
+        <div class="fr-card-title">Detection &amp; Grouping</div>
+        <div class="fr-card-desc">Tuning for the on-device detector. Defaults work well for typical photo libraries.</div>
+        <div class="fr-row">
+            <div class="fr-field">
+                <label>Minimum Face Size (px)</label>
+                <input type="number" id="fr-minface" min="20" max="500" step="5">
+                <div class="hint">Faces smaller than this are ignored. Lower values find smaller faces but scan slower and produce more false matches.</div>
+            </div>
+            <div class="fr-field">
+                <label>Grouping Strictness</label>
+                <select id="fr-strictness">
+                    <option value="0.25">Strict — fewer mixed-up people, more duplicates</option>
+                    <option value="0.34">Balanced (recommended)</option>
+                    <option value="0.45">Relaxed — fewer duplicates, may mix people</option>
+                </select>
+                <div class="hint">How similar two faces must be to count as the same person.</div>
+            </div>
+        </div>
+        <div class="fr-actions">
+            <button class="fr-btn primary" id="fr-save">Save Settings</button>
+            <span class="fr-result" id="fr-save-result"></span>
+        </div>
+    </div>
+
+    <!-- Privacy -->
+    <div class="fr-card">
+        <div class="fr-card-title">Privacy &amp; Data</div>
+        <div class="fr-card-desc">
+            Detected faces (position, a small thumbnail and a numeric texture signature) are stored per
+            user in the system database. Users can clear their own data from the Photo app at any time;
+            the button below wipes the stored face data of <b>every</b> user on this server. Photos
+            themselves are never modified. Grouping uses a classic, lightweight algorithm — expect it to
+            be helpful rather than perfect, especially compared to cloud services.
+        </div>
+        <div class="fr-actions">
+            <button class="fr-btn danger" id="fr-clearall">Clear All Face Data</button>
+            <span class="fr-result" id="fr-clear-result"></span>
+        </div>
+    </div>
+
+    <div class="fr-note" style="margin-top:4px;">
+        Supported formats: JPEG, PNG and WebP. RAW photos (ARW / CR2 / DNG / NEF / RAF / ORF) are skipped —
+        their embedded previews are not scanned. Maximum image size per scan: 25&nbsp;MB.
+    </div>
+</div>
+<div id="fr-toast"></div>
+
+<script>
+(function () {
+    var API = "../../system/facerecognition/";
+
+    /* ── theme (match overview.html) ── */
+    (function applyTheme() {
+        try {
+            if (typeof preferredTheme !== 'undefined') {
+                document.body.classList.toggle('dark', (preferredTheme === 'dark' || preferredTheme === 'darkTheme'));
+                return;
+            }
+        } catch (e) {}
+        if (typeof ao_module_getSystemThemeColor === 'function') {
+            ao_module_getSystemThemeColor(function (c) { document.body.classList.toggle('dark', c !== 'whiteTheme'); });
+        }
+    })();
+
+    function el(id){ return document.getElementById(id); }
+    function toast(msg, ok){
+        var t = el("fr-toast"); t.textContent = msg;
+        t.style.background = ok === false ? "#c42b1c" : (ok === true ? "#107c10" : "#4d6bff");
+        t.style.display = "block"; setTimeout(function(){ t.style.display = "none"; }, 3200);
+    }
+    function setState(enabled){
+        var d = el("fr-state-dot");
+        d.className = "fr-dot" + (enabled ? " ok" : " off");
+        el("fr-state-text").textContent = enabled ? "Enabled" : "Disabled";
+        el("fr-switch-state").textContent = enabled
+            ? "Enabled — Photo app users get background face scanning and a People section."
+            : "Disabled — the Photo app shows no face features.";
+    }
+
+    // Snap a stored threshold onto the closest strictness preset
+    function pickStrictness(threshold){
+        var options = [0.25, 0.34, 0.45];
+        var best = options[1];
+        var bestDiff = Infinity;
+        options.forEach(function(o){
+            var diff = Math.abs(o - threshold);
+            if (diff < bestDiff){ bestDiff = diff; best = o; }
+        });
+        return best.toFixed(2);
+    }
+
+    function loadConfig(){
+        $.get(API + "config", function(d){
+            if (d && d.error){ setState(false); toast("Error: " + d.error, false); return; }
+            el("fr-enabled").checked = !!d.enabled;
+            el("fr-minface").value = d.minFaceSize || 60;
+            el("fr-strictness").value = pickStrictness(parseFloat(d.matchThreshold) || 0.34);
+            setState(!!d.enabled);
+        }).fail(function(){ setState(false); toast("Failed to load configuration (admin only).", false); });
+    }
+
+    function saveConfig(){
+        el("fr-save-result").textContent = "Saving…";
+        $.post(API + "config", {
+            enabled: el("fr-enabled").checked ? "true" : "false",
+            minFaceSize: el("fr-minface").value || "60",
+            matchThreshold: el("fr-strictness").value
+        }, function(r){
+            if (r && r.error){ el("fr-save-result").textContent = ""; toast("Error: " + r.error, false); return; }
+            el("fr-save-result").textContent = "";
+            toast("Face recognition settings saved.", true);
+            loadConfig();
+        }).fail(function(){ el("fr-save-result").textContent = ""; toast("Failed to save settings.", false); });
+    }
+
+    function clearAll(){
+        if (!confirm("Delete the stored face data (people, face thumbnails and signatures) of EVERY user on this server? Photos are not affected. This cannot be undone.")) return;
+        el("fr-clear-result").textContent = "Clearing…";
+        $.post(API + "clearall", {}, function(r){
+            el("fr-clear-result").textContent = "";
+            if (r && r.error){ toast("Error: " + r.error, false); return; }
+            toast("All face data cleared.", true);
+        }).fail(function(){ el("fr-clear-result").textContent = ""; toast("Failed to clear face data.", false); });
+    }
+
+    // Toggling the switch saves immediately so on/off works in one click
+    el("fr-enabled").addEventListener("change", saveConfig);
+    el("fr-save").addEventListener("click", saveConfig);
+    el("fr-clearall").addEventListener("click", clearAll);
+
+    loadConfig();
+})();
+</script>

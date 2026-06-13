@@ -12,6 +12,7 @@ require (
 	github.com/boltdb/bolt v1.3.1
 	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8
 	github.com/disintegration/imaging v1.6.2
+	github.com/esimov/pigo v1.4.6
 	github.com/fclairamb/ftpserverlib v0.27.0
 	github.com/fogleman/fauxgl v0.0.0-20250110135958-abf826acbbbd
 	github.com/gabriel-vasile/mimetype v1.4.10

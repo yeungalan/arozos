@@ -170,6 +170,69 @@
             color: #bbb;
         }
 
+        /* ── People (face recognition, optional) ────────────────────────── */
+        .person-item {
+            position: relative;
+        }
+
+        .person-avatar {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-right: 0.6em;
+            flex-shrink: 0;
+            border: 1px solid #3a3a3a;
+        }
+
+        .person-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+
+        .person-count {
+            color: #666;
+            font-size: 0.85em;
+            margin-left: 0.45em;
+            flex-shrink: 0;
+        }
+
+        .person-edit {
+            display: none !important;
+            color: #888;
+            margin-left: 0.4em;
+            flex-shrink: 0;
+        }
+
+        .person-item:hover .person-edit {
+            display: inline-block !important;
+        }
+
+        .person-edit:hover {
+            color: #f76c5d;
+        }
+
+        .people-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45em;
+            background: rgba(247, 108, 93, 0.12);
+            border: 1px solid rgba(247, 108, 93, 0.35);
+            color: #f7b3aa;
+            border-radius: 16px;
+            padding: 0.15em 0.7em 0.15em 0.2em;
+            margin: 0 0.35em 0.35em 0;
+            font-size: 0.88em;
+        }
+
+        .people-chip img {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
         #sidebar-overlay {
             display: none;
         }
@@ -872,6 +935,28 @@
                     </template>
                 </div>
 
+                <!-- People (face recognition) — only rendered when the optional
+                     feature is enabled in System Settings > AI Integration -->
+                <div x-show="faceRecEnabled && people.length > 0">
+                    <div class="sidebar-divider"></div>
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">People</div>
+                        <template x-for="person in people" :key="person.id">
+                            <a class="sidebar-item person-item"
+                               :class="{ 'active': activePerson && activePerson.id === person.id }"
+                               x-on:click="filterByPerson(person)">
+                                <img class="person-avatar" x-show="person.thumb"
+                                     :src="person.thumb ? 'data:image/jpeg;base64,' + person.thumb : ''" alt="">
+                                <i class="ui user circle icon" x-show="!person.thumb"></i>
+                                <span class="person-name" x-text="person.name"></span>
+                                <span class="person-count" x-text="person.count"></span>
+                                <i class="ui pencil alternate icon person-edit"
+                                   x-on:click.stop="renamePerson(person)" title="Rename this person"></i>
+                            </a>
+                        </template>
+                    </div>
+                </div>
+
                 <div class="sidebar-divider"></div>
 
                 <div class="sidebar-section">
@@ -950,14 +1035,19 @@
                     </div>
 
                     <!-- Result count / indexing status -->
-                    <div id="search-meta" x-show="searchMode || indexStatusText.length > 0">
+                    <div id="search-meta" x-show="searchMode || activePerson || indexStatusText.length > 0 || faceStatusText.length > 0">
                         <span x-show="searchMode"
                             x-text="searchTotal + ' result' + (searchTotal === 1 ? '' : 's')"></span>
                         <a class="search-clear-link" x-show="searchMode" x-on:click="clearSearch()">Clear search</a>
-                        <span id="index-chip" x-show="indexStatusText.length > 0">
-                            <i class="loading spinner icon" x-show="indexing"></i>
-                            <span x-text="indexStatusText"></span>
-                            <a class="reindex-link" x-show="!indexing" x-on:click="rebuildIndex()"
+                        <span x-show="activePerson">
+                            <i class="user circle icon"></i>
+                            <span x-text="activePerson ? (allImages.length + ' photo' + (allImages.length === 1 ? '' : 's') + ' of ' + activePerson.name) : ''"></span>
+                        </span>
+                        <a class="search-clear-link" x-show="activePerson" x-on:click="clearPersonFilter()">Show all photos</a>
+                        <span id="index-chip" x-show="indexStatusText.length > 0 || faceStatusText.length > 0">
+                            <i class="loading spinner icon" x-show="indexing || faceScanning"></i>
+                            <span x-text="indexStatusText.length > 0 ? indexStatusText : faceStatusText"></span>
+                            <a class="reindex-link" x-show="!indexing && indexStatusText.length > 0" x-on:click="rebuildIndex()"
                                 title="Rebuild the search index">Rebuild</a>
                         </span>
                     </div>
@@ -1045,6 +1135,11 @@
                             </tr>
                         </tbody>
                     </table>
+                    <!-- People found in this photo (face recognition, optional) -->
+                    <div id="people-section" style="display: none;">
+                        <h4>People</h4>
+                        <div id="people-chips"></div>
+                    </div>
                     <h4>EXIF Data</h4>
                     <div id="exif-data">
                         <!-- Basic Information -->

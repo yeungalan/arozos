@@ -98,7 +98,8 @@ func RunStartup() {
 	AuthSettingsInit()        //Authentication Settings Handler, must be start after user Handler
 	AdvanceSettingInit()      //System Advance Settings
 	AIModelSettingInit()      //AI Model (OpenAI / Anthropic) config, pricing, quota & usage metrics
-	AGIRuntimeManagerInit()  //AGI VM lifecycle monitor (Developer Options tab)
+	FaceRecognitionInit()     //Optional face recognition for the Photo app (AI Integration tab)
+	AGIRuntimeManagerInit()   //AGI VM lifecycle monitor (Developer Options tab)
 	StartupFlagsInit()        //System BootFlag settibg
 	HardwarePowerInit()       //Start host power manager
 	RegisterStorageSettings() //Storage Settings

@@ -121,6 +121,14 @@ function photoListObject() {
         _suggestTimer: null,
         _searchTimer: null,
 
+        // face recognition state (optional feature, off unless the admin
+        // enabled it in System Settings > AI Integration)
+        faceRecEnabled: false,
+        people: [],             // people clusters of this user: {id, name, named, count, thumb}
+        activePerson: null,     // {id, name} while browsing the photos of one person
+        faceScanning: false,
+        faceStatusText: '',
+
         // init
         init() {
             this.getFolderInfo();
@@ -133,6 +141,10 @@ function photoListObject() {
             // Kick off background (auto) indexing shortly after the first paint so
             // it doesn't compete with the initial folder load.
             setTimeout(() => { this.startAutoIndex(); }, 1200);
+
+            // Face recognition bootstraps after indexing has had a head start;
+            // it silently stays off when the feature is disabled server-side.
+            setTimeout(() => { this.initFaceRecognition(); }, 1800);
 
             const MOBILE_BP = 768;
             let _prevMobile = window.innerWidth <= MOBILE_BP;
@@ -162,6 +174,7 @@ function photoListObject() {
             this.currentPath = JSON.parse(JSON.stringify(newPath));
             this.pathWildcard = newPath + '/*';
             this.restored = false;
+            this.activePerson = null;
             if (isMobile) this.sidebarOpen = false;
             this.getFolderInfo(callback);
         },
@@ -354,6 +367,7 @@ function photoListObject() {
                 return;
             }
             this.searchMode = true;
+            this.activePerson = null;
             aoPhotoBackend("Photo/backend/searchPhotos.js", {
                 q: q,
                 sort: 'taken_desc',
@@ -467,6 +481,129 @@ function photoListObject() {
                 }).catch(() => { this.indexing = false; this.indexStatusText = ''; });
             };
             step('full');
+        },
+
+        // ── Face recognition (optional) ──────────────────────────────────────
+        // All face features stay hidden unless the server reports the feature
+        // as enabled (System Settings > AI Integration > Face Recognition).
+
+        initFaceRecognition() {
+            fetch(ao_root + "system/facerecognition/status").then(resp => resp.json()).then(data => {
+                if (!data || data.error || !data.enabled) return;
+                this.faceRecEnabled = true;
+                window._faceRecEnabled = true;
+                this.loadPeople();
+                // Give the photo index time to settle before scanning faces
+                setTimeout(() => { this.startFaceScan(); }, 2500);
+            }).catch(() => { /* feature unavailable — keep everything hidden */ });
+        },
+
+        loadPeople() {
+            fetch(ao_root + "system/facerecognition/people").then(resp => resp.json()).then(data => {
+                if (Array.isArray(data)) this.people = data;
+            }).catch(() => {});
+        },
+
+        // Walks the user's photo index (via the existing search backend) and
+        // submits the paths to the backend face scanner in small batches. The
+        // backend skips unchanged photos, so steady-state passes are cheap.
+        startFaceScan() {
+            if (!this.faceRecEnabled || this.faceScanning) return;
+            if (this.indexing) {
+                // Photo indexing is still running — try again shortly
+                setTimeout(() => { this.startFaceScan(); }, 3000);
+                return;
+            }
+            this.faceScanning = true;
+            const FACE_PAGE = 80;   // photos listed from the index per round
+            const SCAN_BATCH = 16;  // photos submitted to the scanner per request
+            let offset = 0;
+            const step = () => {
+                aoPhotoBackend("Photo/backend/searchPhotos.js", {
+                    q: '', sort: 'modified_desc', limit: FACE_PAGE, offset: offset
+                }).then(data => {
+                    const results = (data && data.results) ? data.results : [];
+                    const lastPage = results.length < FACE_PAGE;
+                    offset += results.length;
+                    // The backend scanner only understands JPEG / PNG / WebP
+                    const paths = results.map(r => r.filepath)
+                        .filter(fp => /\.(jpe?g|png|webp)$/i.test(fp));
+
+                    let chain = Promise.resolve();
+                    for (let i = 0; i < paths.length; i += SCAN_BATCH) {
+                        const batch = paths.slice(i, i + SCAN_BATCH);
+                        chain = chain.then(() => fetch(ao_root + "system/facerecognition/scan", {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ paths: batch })
+                        }).then(resp => resp.json())).then(res => {
+                            if (res && res.error) throw new Error(res.error);
+                            if (res && res.processed > 0) this.loadPeople();
+                        });
+                    }
+                    chain.then(() => {
+                        if (lastPage || results.length === 0) {
+                            this.faceScanning = false;
+                            this.faceStatusText = '';
+                            this.loadPeople();
+                        } else {
+                            this.faceStatusText = 'Scanning faces… ' + offset + ' photos checked';
+                            setTimeout(step, 80);
+                        }
+                    }).catch(() => { this.faceScanning = false; this.faceStatusText = ''; });
+                }).catch(() => { this.faceScanning = false; this.faceStatusText = ''; });
+            };
+            this.faceStatusText = 'Scanning faces…';
+            step();
+        },
+
+        // Show only the photos containing the given person (toggles off when
+        // the active person is clicked again)
+        filterByPerson(person) {
+            if (this.activePerson && this.activePerson.id === person.id) {
+                this.clearPersonFilter();
+                return;
+            }
+            fetch(ao_root + "system/facerecognition/people/photos?id=" + encodeURIComponent(person.id))
+                .then(resp => resp.json()).then(data => {
+                    if (!data || data.error) return;
+                    // Person browsing replaces any running search
+                    this.searchTags = [];
+                    this.searchInput = '';
+                    this.searchMode = false;
+                    this.searchTotal = 0;
+                    this.suggestions = [];
+                    this.showSuggestions = false;
+                    this.activePerson = { id: person.id, name: data.name || person.name };
+                    this.allImages = (data.results || []).map(r => ({ filepath: r.filepath, filesize: r.filesize }));
+                    this.images = this.allImages.slice(0, PAGE_SIZE);
+                    this.hasMoreImages = this.allImages.length > PAGE_SIZE;
+                    this.isLoadingMore = false;
+                    this.folders = [];
+                    if (this.allImages.length == 0) { $("#noimg").show(); } else { $("#noimg").hide(); }
+                    if (isMobile) this.sidebarOpen = false;
+                    this.$nextTick(() => { updateImageSizes(); });
+                }).catch(() => {});
+        },
+
+        clearPersonFilter() {
+            this.activePerson = null;
+            this.getFolderInfo();
+        },
+
+        renamePerson(person) {
+            const suggested = person.named ? person.name : '';
+            const newName = prompt('Name this person', suggested);
+            if (newName === null) return; // cancelled
+            $.post(ao_root + "system/facerecognition/people/rename", {
+                id: person.id,
+                name: newName
+            }, () => {
+                this.loadPeople();
+                if (this.activePerson && this.activePerson.id === person.id) {
+                    this.activePerson.name = newName.trim() !== '' ? newName.trim() : ('Person ' + person.id);
+                }
+            });
         }
     }
 }
@@ -507,6 +644,7 @@ function closeViewer(){
         $('#shooting-mode-section').hide();
         $('#technical-params-section').hide();
         $('#no-exif-message').hide();
+        $('#people-section').hide();
         $('.ui.divider').hide();
 
         // Clear histogram canvas
@@ -663,6 +801,15 @@ function showImage(object){
             window.location.hash = encodeURIComponent(JSON.stringify({filename: fd.filename, filepath: fd.filepath}));
         }
         
+        // Face recognition: show the people in this photo (optional feature)
+        renderPhotoPeople([]);
+        if (window._faceRecEnabled) {
+            fetch(ao_root + "system/facerecognition/photofaces?path=" + encodeURIComponent(fd.filepath))
+                .then(resp => resp.json())
+                .then(data => { renderPhotoPeople((data && data.faces) ? data.faces : []); })
+                .catch(() => { renderPhotoPeople([]); });
+        }
+
         // Check for EXIF data
         fetch(ao_root + "system/ajgi/interface?script=Photo/backend/getExif.js", {
             method: 'POST',
@@ -690,6 +837,34 @@ function loadFullSizeImageInBackground(fullSizeUrl, fileData) {
     console.log('Starting background download of full-size image...');
     const fullImage = document.getElementById('fullImage');
     fullImage.src = fullSizeUrl;
+}
+
+// Render the "People" section of the viewer info panel. Hidden when the
+// face recognition feature is off or the photo has no stored faces.
+function renderPhotoPeople(faces) {
+    const section = document.getElementById('people-section');
+    const chips = document.getElementById('people-chips');
+    if (!section || !chips) return;
+    chips.innerHTML = '';
+    if (!faces || faces.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+    faces.forEach(face => {
+        const chip = document.createElement('span');
+        chip.className = 'people-chip';
+        if (face.thumb) {
+            const avatar = document.createElement('img');
+            avatar.src = 'data:image/jpeg;base64,' + face.thumb;
+            avatar.alt = '';
+            chip.appendChild(avatar);
+        }
+        const label = document.createElement('span');
+        label.textContent = face.name || ('Person ' + face.personId);
+        chip.appendChild(label);
+        chips.appendChild(chip);
+    });
+    section.style.display = 'block';
 }
 
 $(document).on("keydown", function(e){
