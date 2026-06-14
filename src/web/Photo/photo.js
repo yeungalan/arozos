@@ -799,6 +799,11 @@ function showImage(object){
         $("#info-filename").text(fd.filename);
         $("#info-filepath").text(fd.filepath);
 
+        // Notify Photo AI integration that a new photo was opened.
+        if (typeof window.onPhotoViewerOpen === "function") {
+            window.onPhotoViewerOpen(fd.filepath, document.getElementById("fullImage"));
+        }
+
         var nextCard = $(object).next();
         var prevCard = $(object).prev();
         if (nextCard.length > 0){
@@ -1558,3 +1563,14 @@ document.addEventListener('visibilitychange', function() {
         _attemptPhotoCastReconnect();
     }
 });
+
+// Expose a global function so photoai.js (and index.html scripts) can push a
+// search chip into the Alpine search bar without needing direct app access.
+window.pushSearchTag = function (tag) {
+    if (!tag || !tag.query) { return; }
+    const appEl = document.querySelector('[x-data*="photoListObject"]');
+    if (!appEl) { return; }
+    const app = appEl._x_dataStack && appEl._x_dataStack[0];
+    if (!app || typeof app.addTag !== "function") { return; }
+    app.addTag({ label: tag.label || tag.query, value: tag.query, type: tag.type || "tag" });
+};

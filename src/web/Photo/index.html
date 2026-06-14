@@ -17,6 +17,7 @@
     <script src="histogram.js"></script>
     <script src="search.js"></script>
     <script src="photo.js"></script>
+    <script src="photoai.js"></script>
     <style>
         #main {
             display: flex;
@@ -1096,6 +1097,24 @@
                     </div>
                 </div>
 
+                <!-- Photo AI: People and Tags sections (hidden until subservice confirmed running) -->
+                <div id="photoai-sidebar-sections" style="display:none">
+                    <div class="sidebar-divider"></div>
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">People</div>
+                        <div id="photoai-people-list">
+                            <a class="sidebar-item" style="color:#aaa;font-size:12px;cursor:default">
+                                <i class="user icon"></i><span>Loading…</span>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="sidebar-divider"></div>
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">Tags</div>
+                        <div id="photoai-tag-list" style="padding:4px 0"></div>
+                    </div>
+                </div>
+
                 <!-- Banner pinned to bottom of sidebar -->
                 <div class="sidebar-banner">
                     <img src="img/banner.png" alt="Photo">
@@ -1217,6 +1236,9 @@
                     </button>
                     <button class="download-photo-btn" id="download-photo-btn" onclick="downloadCurrentPhoto()" title="Download photo">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="#F3F3F3"><path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>
+                    </button>
+                    <button id="photoai-analyse-btn" class="download-photo-btn" onclick="photoAIAnalyse()" title="AI Analyse" style="display:none">
+                        ✨
                     </button>
                 </div>
                 
@@ -1386,6 +1408,17 @@
                         <div id="no-exif-message" style="display: none;">
                             <p>No EXIF data available</p>
                         </div>
+                    </div>
+
+                    <!-- Photo AI section (shown when photoai subservice is running) -->
+                    <div id="photoai-info-section" style="display:none;margin-top:12px">
+                        <h4>AI Tags &amp; Faces</h4>
+                        <div id="photoai-tag-bar" style="min-height:28px;margin-bottom:6px"></div>
+                        <div id="photoai-face-info" style="font-size:12px;color:#aaa;margin-bottom:4px"></div>
+                        <button onclick="photoAIAnalyse()"
+                            style="font-size:11px;padding:3px 10px;border:none;background:#4F8EF7;color:#fff;border-radius:5px;cursor:pointer;margin-top:4px">
+                            ✨ Analyse
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1674,7 +1707,177 @@
         // Wait a bit for the image to load, then initialize zoom/pan
         setTimeout(initZoomPan, 100);
     };
-    
+
+</script>
+
+<!-- Photo AI integration -->
+<script>
+(function () {
+    // Track which vpath is currently open in the viewer.
+    var _currentAIVpath = "";
+
+    // After the Photo app loads, check if the photoai subservice is available.
+    window.addEventListener("load", function () {
+        if (typeof PhotoAI === "undefined") { return; }
+
+        PhotoAI.checkAvailable().then(function (ok) {
+            if (!ok) { return; }
+
+            // Show the AI toolbar button and sidebar sections.
+            var btn = document.getElementById("photoai-analyse-btn");
+            if (btn) { btn.style.display = ""; }
+
+            var sections = document.getElementById("photoai-sidebar-sections");
+            if (sections) { sections.style.display = ""; }
+
+            // Populate People panel.
+            var peopleList = document.getElementById("photoai-people-list");
+            if (peopleList) {
+                PhotoAI.renderPeoplePanel(peopleList, function (name) {
+                    // Trigger a person: search via the existing search system.
+                    if (window.pushSearchTag) {
+                        window.pushSearchTag({ type: "person", label: "person:" + name, query: "person:\"" + name + "\"" });
+                    }
+                });
+            }
+
+            // Populate Tags panel.
+            var tagList = document.getElementById("photoai-tag-list");
+            if (tagList) {
+                PhotoAI.renderTagPanel(tagList, function (tag) {
+                    if (window.pushSearchTag) {
+                        window.pushSearchTag({ type: "tag", label: "tag:" + tag, query: "tag:" + tag });
+                    }
+                });
+            }
+        });
+    });
+
+    // Called when the viewer opens a new photo (hook into the Photo app lifecycle).
+    // photo.js calls window.onPhotoViewerOpen(vpath, imgEl) if defined.
+    window.onPhotoViewerOpen = function (vpath, imgEl) {
+        _currentAIVpath = vpath || "";
+
+        var infoSection = document.getElementById("photoai-info-section");
+        var tagBar      = document.getElementById("photoai-tag-bar");
+        var faceInfo    = document.getElementById("photoai-face-info");
+
+        if (!infoSection || typeof PhotoAI === "undefined") { return; }
+
+        PhotoAI.checkAvailable().then(function (ok) {
+            if (!ok) { return; }
+            infoSection.style.display = "";
+
+            // Fetch existing tags & faces from the index (no re-analysis needed).
+            tagBar.innerHTML = '<span style="color:#aaa;font-size:12px">Loading tags…</span>';
+            faceInfo.textContent = "";
+
+            fetch("/system/ajgi/interface", {
+                method: "POST",
+                body: (function () {
+                    var fd = new FormData();
+                    fd.append("script", "Photo/backend/getTags.js");
+                    fd.append("POST_data", JSON.stringify({ filepath: vpath }));
+                    return fd;
+                }())
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.tags && d.tags.length) {
+                    PhotoAI.renderTagBar(tagBar, d.tags, function (tag) {
+                        if (window.pushSearchTag) {
+                            window.pushSearchTag({ type: "tag", label: "tag:" + tag, query: "tag:" + tag });
+                        }
+                    });
+                } else {
+                    tagBar.innerHTML = '<span style="color:#aaa;font-size:12px">No tags — click Analyse</span>';
+                }
+            });
+
+            fetch("/system/ajgi/interface", {
+                method: "POST",
+                body: (function () {
+                    var fd = new FormData();
+                    fd.append("script", "Photo/backend/getFaces.js");
+                    fd.append("POST_data", JSON.stringify({ filepath: vpath }));
+                    return fd;
+                }())
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.faces && d.faces.length) {
+                    var names = {};
+                    d.faces.forEach(function (f) { if (f.person_name) { names[f.person_name] = true; } });
+                    var nameList = Object.keys(names);
+                    faceInfo.textContent = nameList.length
+                        ? "People: " + nameList.join(", ")
+                        : d.faces.length + " face(s) detected";
+                }
+            });
+        });
+    };
+
+    // The ✨ Analyse button in the toolbar and info panel.
+    window.photoAIAnalyse = function () {
+        if (!_currentAIVpath || typeof PhotoAI === "undefined") { return; }
+
+        var img     = document.getElementById("fullImage");
+        var tagBar  = document.getElementById("photoai-tag-bar");
+        var faceInfo = document.getElementById("photoai-face-info");
+
+        if (!img) { return; }
+
+        if (tagBar) {
+            tagBar.innerHTML = '<span style="color:#4F8EF7;font-size:12px">Analysing…</span>';
+        }
+
+        PhotoAI.analyzePhoto(_currentAIVpath, img)
+            .then(function (result) {
+                if (tagBar) {
+                    PhotoAI.renderTagBar(tagBar, (result.tags || []).map(function (t) {
+                        return { tag: t, source: "ai" };
+                    }), function (tag) {
+                        if (window.pushSearchTag) {
+                            window.pushSearchTag({ type: "tag", label: "tag:" + tag, query: "tag:" + tag });
+                        }
+                    });
+                }
+
+                if (faceInfo) {
+                    var faces = result.faces || [];
+                    var names = {};
+                    faces.forEach(function (f) { if (f.person_name) { names[f.person_name] = true; } });
+                    var nameList = Object.keys(names);
+                    faceInfo.textContent = nameList.length
+                        ? "People: " + nameList.join(", ")
+                        : (faces.length ? faces.length + " face(s) detected" : "No faces detected");
+                }
+
+                // Refresh sidebar People and Tags panels.
+                var peopleList = document.getElementById("photoai-people-list");
+                if (peopleList) {
+                    PhotoAI.renderPeoplePanel(peopleList, function (name) {
+                        if (window.pushSearchTag) {
+                            window.pushSearchTag({ type: "person", label: "person:" + name, query: "person:\"" + name + "\"" });
+                        }
+                    });
+                }
+                var tagList = document.getElementById("photoai-tag-list");
+                if (tagList) {
+                    PhotoAI.renderTagPanel(tagList, function (tag) {
+                        if (window.pushSearchTag) {
+                            window.pushSearchTag({ type: "tag", label: "tag:" + tag, query: "tag:" + tag });
+                        }
+                    });
+                }
+            })
+            .catch(function (err) {
+                if (tagBar) {
+                    tagBar.innerHTML = '<span style="color:#c00;font-size:12px">Analysis failed: ' + err.message + '</span>';
+                }
+            });
+    };
+}());
 </script>
 
 </html>

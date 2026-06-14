@@ -138,6 +138,38 @@ function ensureSchema(db) {
         "updated_at INTEGER" +                // unix sec the rating was last set
         ")"
     );
+
+    // AI-generated and user-applied tags.  source is 'ai' or 'user'.
+    db.exec(
+        "CREATE TABLE IF NOT EXISTS photo_tags (" +
+        "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+        "filepath TEXT NOT NULL," +
+        "tag TEXT NOT NULL," +
+        "source TEXT NOT NULL DEFAULT 'user'," +
+        "created_at INTEGER," +
+        "UNIQUE(filepath, tag)" +
+        ")"
+    );
+    db.exec("CREATE INDEX IF NOT EXISTS idx_tags_filepath ON photo_tags(filepath)");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_tags_tag      ON photo_tags(tag)");
+
+    // Face detections stored by the Photo AI subservice, duplicated here so the
+    // Photo app can search by person name without calling the subservice.
+    db.exec(
+        "CREATE TABLE IF NOT EXISTS photo_faces (" +
+        "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+        "filepath TEXT NOT NULL," +
+        "cluster_id TEXT NOT NULL," +          // UUID from photoai subservice
+        "person_name TEXT NOT NULL DEFAULT ''," +
+        "bbox_x REAL, bbox_y REAL, bbox_w REAL, bbox_h REAL," +
+        "confidence REAL," +
+        "created_at INTEGER," +
+        "UNIQUE(filepath, cluster_id)" +
+        ")"
+    );
+    db.exec("CREATE INDEX IF NOT EXISTS idx_faces_filepath ON photo_faces(filepath)");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_faces_person   ON photo_faces(person_name)");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_faces_cluster  ON photo_faces(cluster_id)");
 }
 
 /* ------------------------------------------------------------------ *
@@ -717,7 +749,8 @@ function newFilter() {
         text: [], filename: [], ext: [], raw: false,
         model: [], make: [], lens: [], orientation: [], month: [],
         iso: [], aperture: [], focal: [], mp: [], width: [], height: [],
-        taken: [], modified: [], rating: []
+        taken: [], modified: [], rating: [],
+        tag: [], person: []
     };
 }
 
@@ -861,6 +894,15 @@ function classifyToken(filter, token) {
             case "after":
                 pushDate(filter, "taken", { min: parseDateToUnix(val, false), max: null });
                 return;
+            case "tag":
+            case "label":
+                if (val) { filter.tag.push(val.toLowerCase()); }
+                return;
+            case "person":
+            case "people":
+            case "face":
+                if (val) { filter.person.push(val); }
+                return;
             default:
                 filter.text.push(token);
                 return;
@@ -945,6 +987,8 @@ function applyExplicitFilters(filter, f) {
             pushMonth(filter, monthNameToNum(fmonths[fmi]));
         }
     }
+    pushStrings("tag", f.tag);
+    pushStrings("person", f.person);
 }
 
 // Wrap a list of OR-ed fragments as a single AND clause (parenthesised if >1).
@@ -1077,6 +1121,27 @@ function buildWhere(filter) {
     addRangeGroup(clauses, args, "height", filter.height);
     addRangeGroup(clauses, args, "taken_date", filter.taken);
     addRangeGroup(clauses, args, "modified_date", filter.modified);
+
+    // Tags: each tag token requires the photo to have a matching row in photo_tags.
+    if (filter.tag && filter.tag.length) {
+        for (var ti = 0; ti < filter.tag.length; ti++) {
+            clauses.push(
+                "EXISTS (SELECT 1 FROM photo_tags WHERE photo_tags.filepath = photos.filepath AND LOWER(photo_tags.tag) = LOWER(?))"
+            );
+            args.push(filter.tag[ti]);
+        }
+    }
+
+    // Person: each person token requires a matching face row.
+    if (filter.person && filter.person.length) {
+        for (var pi = 0; pi < filter.person.length; pi++) {
+            clauses.push(
+                "EXISTS (SELECT 1 FROM photo_faces WHERE photo_faces.filepath = photos.filepath AND LOWER(photo_faces.person_name) = LOWER(?))"
+            );
+            args.push(filter.person[pi]);
+        }
+    }
+
     // Rating lives in the joined photo_ratings table; unrated photos count as 0.
     addRangeGroup(clauses, args, "IFNULL(photo_ratings.rating, 0)", filter.rating);
 
