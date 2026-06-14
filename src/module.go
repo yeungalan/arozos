@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 	"os"
 
@@ -84,6 +84,20 @@ func ModuleServiceInit() {
 
 	})
 
+	// Handle direct zip file upload for module installation (admin only)
+	http.HandleFunc("/system/modules/uploadAndInstall", func(w http.ResponseWriter, r *http.Request) {
+		userinfo, err := userHandler.GetUserInfoFromRequest(w, r)
+		if err != nil {
+			utils.SendErrorResponse(w, "User not logged in")
+			return
+		}
+		if !userinfo.IsAdmin() {
+			utils.SendErrorResponse(w, "Permission Denied")
+			return
+		}
+		moduleHandler.HandleUploadAndInstall(w, r, AGIGateway)
+	})
+
 	//Register setting interface for module configuration
 	registerSetting(settingModule{
 		Name:     "Module List",
@@ -114,15 +128,14 @@ func ModuleServiceInit() {
 
 	err := sysdb.NewTable("module")
 	if err != nil {
-		log.Fatal(err)
+		systemWideLogger.PrintAndLog("System", fmt.Sprint(err), nil)
 		os.Exit(1)
 	}
 
 }
 
 /*
-	Handle endpoint registry for Module installer
-
+Handle endpoint registry for Module installer
 */
 func ModuleInstallerInit() {
 	//Register module installation setting
@@ -149,7 +162,7 @@ func ModuleInstallerInit() {
 
 }
 
-//Handle module installation request
+// Handle module installation request
 func HandleModuleInstall(w http.ResponseWriter, r *http.Request) {
 	opr, _ := utils.PostPara(r, "opr")
 
