@@ -23,7 +23,28 @@ try {
 New-Item -ItemType Directory -Force -Path $ModelDir | Out-Null
 Write-Host "Models directory: $ModelDir"
 
-# ---- ONNX Runtime DLL ---------------------------------------------------
+# ---- helper: download with size check -----------------------------------
+function Download-File {
+    param([string]$Url, [string]$Dest, [string]$Name)
+    Write-Host "Downloading $Name..."
+    try {
+        Invoke-WebRequest -Uri $Url -OutFile $Dest -UseBasicParsing -ErrorAction Stop
+    } catch {
+        Write-Warning "  Download failed: $_"
+        if (Test-Path $Dest) { Remove-Item $Dest -Force }
+        return $false
+    }
+    $size = (Get-Item $Dest).Length
+    if ($size -lt 100000) {
+        Write-Warning "  File too small ($size bytes) — download may have failed"
+        Remove-Item $Dest -Force
+        return $false
+    }
+    Write-Host "  -> $Dest ($([math]::Round($size/1MB,1)) MB)"
+    return $true
+}
+
+
 $OrtDll = Join-Path $ModelDir "onnxruntime.dll"
 if (Test-Path $OrtDll) {
     Write-Host "ONNX Runtime DLL already present"
@@ -47,11 +68,18 @@ $YoloPath = Join-Path $ModelDir "yolov5n.onnx"
 if (Test-Path $YoloPath) {
     Write-Host "YOLOv5n already present"
 } else {
-    Write-Host "Downloading YOLOv5n ONNX..."
-    Invoke-WebRequest `
-        -Uri "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov5nu.onnx" `
-        -OutFile $YoloPath -UseBasicParsing
-    Write-Host "  -> $YoloPath"
+    $ok = Download-File `
+        "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov5nu.onnx" `
+        $YoloPath "YOLOv5n ONNX"
+    if (-not $ok) {
+        # fallback: older release tag
+        $ok = Download-File `
+            "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov5nu.onnx" `
+            $YoloPath "YOLOv5n ONNX (fallback)"
+    }
+    if (-not $ok) {
+        Write-Warning "Could not download YOLOv5n. Object tagging will use colour heuristics."
+    }
 }
 
 # ---- ultraface-slim-320 (face detection) --------------------------------
@@ -59,11 +87,19 @@ $FaceDetPath = Join-Path $ModelDir "face_detect.onnx"
 if (Test-Path $FaceDetPath) {
     Write-Host "ultraface already present"
 } else {
-    Write-Host "Downloading ultraface-slim-320 ONNX..."
-    Invoke-WebRequest `
-        -Uri "https://github.com/onnx/models/raw/main/validated/vision/body_analysis/ultraface/models/version-slim-320.onnx" `
-        -OutFile $FaceDetPath -UseBasicParsing
-    Write-Host "  -> $FaceDetPath"
+    # Try ONNX Model Zoo at a pinned commit (the /main/ URL is often redirected)
+    $ok = Download-File `
+        "https://github.com/onnx/models/raw/bec48b6a70e5e9042c0badbaafefe4454e072d08/validated/vision/body_analysis/ultraface/models/version-slim-320.onnx" `
+        $FaceDetPath "ultraface-slim-320 ONNX"
+    if (-not $ok) {
+        # fallback: /main/ URL
+        $ok = Download-File `
+            "https://github.com/onnx/models/raw/main/validated/vision/body_analysis/ultraface/models/version-slim-320.onnx" `
+            $FaceDetPath "ultraface-slim-320 ONNX (fallback)"
+    }
+    if (-not $ok) {
+        Write-Warning "Could not download ultraface. Face detection will use skin-colour heuristics."
+    }
 }
 
 # ---- MobileFaceNet / w600k_mbf (face embedding) -------------------------

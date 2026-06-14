@@ -57,14 +57,35 @@ else
     echo "ONNX Runtime library already present in $MODEL_DIR"
 fi
 
+# download_model <url> <dest> <name> — curl with size check; returns 0 on success
+download_model() {
+    _url="$1" _dest="$2" _name="$3"
+    echo "Downloading ${_name}..."
+    if curl -fsSL -o "$_dest" "$_url"; then
+        _size=$(wc -c < "$_dest")
+        if [ "$_size" -lt 100000 ]; then
+            echo "  [warn] file too small ($_size bytes); download may have failed"
+            rm -f "$_dest"
+            return 1
+        fi
+        echo "  → $_dest"
+        return 0
+    fi
+    rm -f "$_dest"
+    return 1
+}
+
 # ---- YOLOv5n (object detection → photo tags) ----------------------------
 YOLO_PATH="$MODEL_DIR/yolov5n.onnx"
 if [ ! -f "$YOLO_PATH" ]; then
-    echo "Downloading YOLOv5n ONNX..."
-    # Official ultralytics assets release (input: images [1,3,640,640], output: output0 [1,25200,85])
-    curl -fsSL -o "$YOLO_PATH" \
-        "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov5nu.onnx"
-    echo "  → $YOLO_PATH"
+    # input: images [1,3,640,640]  output: output0 [1,25200,85]
+    download_model \
+        "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov5nu.onnx" \
+        "$YOLO_PATH" "YOLOv5n ONNX" || \
+    download_model \
+        "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov5nu.onnx" \
+        "$YOLO_PATH" "YOLOv5n ONNX (fallback)" || \
+    echo "[warn] Could not download YOLOv5n; object tagging will use colour heuristics"
 else
     echo "YOLOv5n already present"
 fi
@@ -72,11 +93,14 @@ fi
 # ---- ultraface-slim-320 (face detection) --------------------------------
 FACE_DET_PATH="$MODEL_DIR/face_detect.onnx"
 if [ ! -f "$FACE_DET_PATH" ]; then
-    echo "Downloading ultraface-slim-320 ONNX..."
-    # ONNX Model Zoo: input=input [1,3,240,320], outputs=scores [1,4420,2] + boxes [1,4420,4]
-    curl -fsSL -o "$FACE_DET_PATH" \
-        "https://github.com/onnx/models/raw/main/validated/vision/body_analysis/ultraface/models/version-slim-320.onnx"
-    echo "  → $FACE_DET_PATH"
+    # input: input [1,3,240,320]  outputs: scores [1,4420,2], boxes [1,4420,4]
+    download_model \
+        "https://github.com/onnx/models/raw/bec48b6a70e5e9042c0badbaafefe4454e072d08/validated/vision/body_analysis/ultraface/models/version-slim-320.onnx" \
+        "$FACE_DET_PATH" "ultraface-slim-320 ONNX" || \
+    download_model \
+        "https://github.com/onnx/models/raw/main/validated/vision/body_analysis/ultraface/models/version-slim-320.onnx" \
+        "$FACE_DET_PATH" "ultraface-slim-320 ONNX (fallback)" || \
+    echo "[warn] Could not download ultraface; face detection will use skin-colour heuristics"
 else
     echo "ultraface already present"
 fi
