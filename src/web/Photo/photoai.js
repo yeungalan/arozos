@@ -123,9 +123,8 @@
 
     function callAGI(scriptPath, payload) {
         var fd = new FormData();
-        fd.append("script", scriptPath);
         fd.append("POST_data", JSON.stringify(payload || {}));
-        return fetch(AGI_BASE, { method: "POST", body: fd })
+        return fetch(AGI_BASE + "?script=" + encodeURIComponent(scriptPath), { method: "POST", body: fd })
             .then(function (r) { return r.json(); });
     }
 
