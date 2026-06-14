@@ -521,6 +521,25 @@ function closeViewer(){
 let compressedImageLoaded = false;
 let fullsizeImageLoaded = false;
 
+// Filepath of the photo currently open in the viewer (set by showImage).
+// Used by the download button to fetch the original file.
+let _currentViewerFilepath = null;
+
+// Download the photo currently shown in the viewer to the user's device.
+// Uses the media endpoint's download flag so the server serves the original
+// file with a Content-Disposition attachment header.
+function downloadCurrentPhoto(){
+    if (!_currentViewerFilepath){
+        return;
+    }
+    const a = document.createElement('a');
+    a.href = "../media?download=true&file=" + encodeURIComponent(_currentViewerFilepath);
+    a.download = _currentViewerFilepath.split("/").pop();
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
 function showImage(object){
     // Reset zoom level when switching photos
     if (typeof resetZoom === 'function') {
@@ -537,6 +556,7 @@ function showImage(object){
     fullsizeImageLoaded = false;
     
     var fd = JSON.parse(decodeURIComponent($(object).attr("filedata")));
+    _currentViewerFilepath = fd.filepath;
     _currentCastFilepath = fd.filepath;
     if (_photoCastConnected()) _photoCastSendPhoto(fd.filepath);
     $("#info-dimensions").text("Calculating...");
