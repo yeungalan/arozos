@@ -16,7 +16,7 @@ set -eu
 MODEL_DIR="${MODEL_DIR:-$(pwd)/models}"
 mkdir -p "$MODEL_DIR"
 
-ORT_VER="1.17.3"
+ORT_VER="1.20.1"
 GOOS="${GOOS:-$(go env GOOS)}"
 GOARCH="${GOARCH:-$(go env GOARCH)}"
 

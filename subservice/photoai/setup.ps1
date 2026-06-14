@@ -9,7 +9,7 @@ param(
     [string]$ModelDir = "$(Get-Location)\models"
 )
 
-$OrtVer = "1.17.3"
+$OrtVer = "1.20.1"
 
 # Detect architecture
 $Arch = "x64"

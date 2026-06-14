@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -36,16 +37,28 @@ var (
 )
 
 func main() {
+	// Default models dir: <same directory as the running executable>/models
+	// so ArozOS can launch the binary from any working directory and still find
+	// the models without needing an explicit -models flag.
+	modelsDefault := "models"
+	if exe, err := os.Executable(); err == nil {
+		modelsDefault = filepath.Join(filepath.Dir(exe), "models")
+	}
+
 	flag.StringVar(&listenPort, "port", ":12320", "listen address (e.g. :12320)")
 	flag.StringVar(&rptEndpoint, "rpt", "", "ArozOS AGI endpoint (passed by subservice loader)")
-	flag.StringVar(&modelsDir, "models", "models", "directory containing ONNX models and runtime library")
+	flag.StringVar(&modelsDir, "models", modelsDefault, "directory containing ONNX models and runtime library")
 	flag.Parse()
 
 	initONNX(modelsDir)
 
-	// Open (or create) the per-subservice face database in the working directory.
+	// Open (or create) the face database next to the binary, not the working dir.
+	dataDir := "data"
+	if exe, err2 := os.Executable(); err2 == nil {
+		dataDir = filepath.Join(filepath.Dir(exe), "data")
+	}
 	var err error
-	storage, err = openFaceStorage("data")
+	storage, err = openFaceStorage(dataDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "photoai: open storage: %v\n", err)
 		os.Exit(1)
