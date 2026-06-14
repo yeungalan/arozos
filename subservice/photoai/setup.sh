@@ -8,6 +8,9 @@
 # Downloads go into ./models/ (override with MODEL_DIR=<path>).
 # Safe to re-run; existing files are not overwritten.
 #
+# Windows: use setup.ps1 instead (PowerShell ≥5.1 required):
+#   powershell -ExecutionPolicy Bypass -File setup.ps1
+#
 set -eu
 
 MODEL_DIR="${MODEL_DIR:-$(pwd)/models}"
@@ -25,6 +28,7 @@ ort_lib_name() {
         linux_arm)    echo "onnxruntime-linux-arm-${ORT_VER}.tgz" ;;
         darwin_amd64) echo "onnxruntime-osx-x86_64-${ORT_VER}.tgz" ;;
         darwin_arm64) echo "onnxruntime-osx-arm64-${ORT_VER}.tgz" ;;
+        windows_*) echo "WINDOWS"; return 0 ;;
         *) echo ""; return 1 ;;
     esac
 }
@@ -32,6 +36,11 @@ ort_lib_name() {
 # Only download the runtime if no library file is present yet.
 if ! ls "$MODEL_DIR"/libonnxruntime* "$MODEL_DIR"/onnxruntime.dll 2>/dev/null | grep -q .; then
     ORT_PKG=$(ort_lib_name) || { echo "Unsupported platform ${GOOS}/${GOARCH}; download ONNX Runtime manually."; }
+    if [ "$ORT_PKG" = "WINDOWS" ]; then
+        echo "Windows detected — run setup.ps1 instead (PowerShell):"
+        echo "  powershell -ExecutionPolicy Bypass -File setup.ps1"
+        exit 0
+    fi
     if [ -n "$ORT_PKG" ]; then
         ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VER}/${ORT_PKG}"
         echo "Downloading ONNX Runtime ${ORT_VER} for ${GOOS}/${GOARCH}..."
