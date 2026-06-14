@@ -7,16 +7,16 @@
 ::       Scoop (no admin):  irm get.scoop.sh | iex  &&  scoop install gcc
 ::       TDM-GCC installer: https://jmeubank.github.io/tdm-gcc/
 ::       w64devkit (zip):   https://github.com/skeeto/w64devkit/releases
-::     After installing, open a new terminal so gcc.exe is on your PATH.
+::     After installing, open a NEW terminal so gcc.exe is on your PATH.
+::
+::   On ARM64 Windows: install the x64 edition of Go (not ARM64 Go) so it
+::   matches the x64 TDM-GCC / Scoop GCC toolchain. Windows ARM64 can run
+::   x64 binaries transparently via built-in emulation.
 ::
 :: Usage (from subservice\photoai):
 ::   build.bat
 ::
 setlocal EnableDelayedExpansion
-
-:: Detect architecture from the running process
-set GOARCH=amd64
-if "%PROCESSOR_ARCHITECTURE%"=="ARM64" set GOARCH=arm64
 
 set GOOS=windows
 set CGO_ENABLED=1
@@ -38,7 +38,21 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo Building photoai for %GOOS%/%GOARCH% -^> photoai.exe
+:: Derive GOARCH from the GCC target triple so the Go target always matches the
+:: C toolchain.  This avoids a broken binary when gcc is x64 but GOARCH would
+:: otherwise be set to arm64 (e.g. on ARM64 Windows with x64 TDM-GCC).
+set GOARCH=
+for /f "delims=" %%a in ('gcc -dumpmachine 2^>nul') do set GCC_MACHINE=%%a
+if "!GCC_MACHINE:x86_64=!" neq "!GCC_MACHINE!" set GOARCH=amd64
+if "!GCC_MACHINE:aarch64=!" neq "!GCC_MACHINE!" set GOARCH=arm64
+if "!GCC_MACHINE:i686=!"   neq "!GCC_MACHINE!" set GOARCH=386
+if "%GOARCH%"=="" (
+    :: Fallback: use whatever Go's native GOARCH is
+    for /f "delims=" %%a in ('go env GOARCH') do set GOARCH=%%a
+    echo WARN: could not detect GCC machine type; using go env GOARCH=%GOARCH%
+)
+
+echo Building photoai for %GOOS%/%GOARCH% ^(gcc: %GCC_MACHINE%^) -^> photoai.exe
 go build -o photoai.exe .
 if %errorlevel% neq 0 (
     echo.
