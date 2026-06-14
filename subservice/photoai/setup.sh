@@ -78,13 +78,11 @@ download_model() {
 # ---- YOLOv5n (object detection → photo tags) ----------------------------
 YOLO_PATH="$MODEL_DIR/yolov5n.onnx"
 if [ ! -f "$YOLO_PATH" ]; then
-    # input: images [1,3,640,640]  output: output0 [1,25200,85]
+    # Use the classic yolov5 v7.0 repo export — float32, input images [1,3,640,640].
+    # The "yolov5nu.onnx" from ultralytics/assets is float16 and will not work.
     download_model \
-        "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov5nu.onnx" \
-        "$YOLO_PATH" "YOLOv5n ONNX" || \
-    download_model \
-        "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov5nu.onnx" \
-        "$YOLO_PATH" "YOLOv5n ONNX (fallback)" || \
+        "https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5n.onnx" \
+        "$YOLO_PATH" "YOLOv5n ONNX (float32, v7.0)" || \
     echo "[warn] Could not download YOLOv5n; object tagging will use colour heuristics"
 else
     echo "YOLOv5n already present"

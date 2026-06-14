@@ -108,6 +108,19 @@ func newYOLOSession(modelPath string) (*yoloSession, error) {
 	if _, err := os.Stat(modelPath); err != nil {
 		return nil, fmt.Errorf("not found: %s", modelPath)
 	}
+	ins, outs, err := ort.GetInputOutputInfo(modelPath)
+	if err != nil {
+		return nil, fmt.Errorf("inspect model: %w", err)
+	}
+	if len(ins) == 0 || len(outs) == 0 {
+		return nil, fmt.Errorf("model has no inputs or outputs")
+	}
+	if ins[0].DataType != ort.TensorElementDataTypeFloat {
+		return nil, fmt.Errorf("model input is %v, need float32 — delete yolov5n.onnx and re-run setup", ins[0].DataType)
+	}
+	inputName, outputName := ins[0].Name, outs[0].Name
+	fmt.Fprintf(os.Stderr, "photoai: yolov5n  input=%q(%v) output=%q\n", inputName, ins[0].DataType, outputName)
+
 	in, err := ort.NewTensor(ort.NewShape(1, 3, 640, 640), make([]float32, 1*3*640*640))
 	if err != nil {
 		return nil, fmt.Errorf("input tensor: %w", err)
@@ -118,7 +131,7 @@ func newYOLOSession(modelPath string) (*yoloSession, error) {
 		return nil, fmt.Errorf("output tensor: %w", err)
 	}
 	sess, err := ort.NewAdvancedSession(modelPath,
-		[]string{"images"}, []string{"output0"},
+		[]string{inputName}, []string{outputName},
 		[]ort.ArbitraryTensor{in}, []ort.ArbitraryTensor{out}, nil)
 	if err != nil {
 		in.Destroy()
@@ -132,6 +145,17 @@ func newUltrafaceSession(modelPath string) (*ultrafaceSession, error) {
 	if _, err := os.Stat(modelPath); err != nil {
 		return nil, fmt.Errorf("not found: %s", modelPath)
 	}
+	ins, outs, err := ort.GetInputOutputInfo(modelPath)
+	if err != nil {
+		return nil, fmt.Errorf("inspect model: %w", err)
+	}
+	if len(ins) == 0 || len(outs) < 2 {
+		return nil, fmt.Errorf("ultraface: expected 1 input and 2 outputs, got %d/%d", len(ins), len(outs))
+	}
+	inputName := ins[0].Name
+	scoresName, boxesName := outs[0].Name, outs[1].Name
+	fmt.Fprintf(os.Stderr, "photoai: ultraface  input=%q scores=%q boxes=%q\n", inputName, scoresName, boxesName)
+
 	in, err := ort.NewTensor(ort.NewShape(1, 3, 240, 320), make([]float32, 1*3*240*320))
 	if err != nil {
 		return nil, fmt.Errorf("input tensor: %w", err)
@@ -148,7 +172,7 @@ func newUltrafaceSession(modelPath string) (*ultrafaceSession, error) {
 		return nil, fmt.Errorf("boxes tensor: %w", err)
 	}
 	sess, err := ort.NewAdvancedSession(modelPath,
-		[]string{"input"}, []string{"scores", "boxes"},
+		[]string{inputName}, []string{scoresName, boxesName},
 		[]ort.ArbitraryTensor{in}, []ort.ArbitraryTensor{sc, bx}, nil)
 	if err != nil {
 		in.Destroy()
@@ -163,18 +187,28 @@ func newMobilefaceSession(modelPath string) (*mobilefaceSession, error) {
 	if _, err := os.Stat(modelPath); err != nil {
 		return nil, fmt.Errorf("not found: %s", modelPath)
 	}
+	ins, outs, err := ort.GetInputOutputInfo(modelPath)
+	if err != nil {
+		return nil, fmt.Errorf("inspect model: %w", err)
+	}
+	if len(ins) == 0 || len(outs) == 0 {
+		return nil, fmt.Errorf("model has no inputs or outputs")
+	}
+	inputName, outputName := ins[0].Name, outs[0].Name
+	embSize := int(outs[0].Dimensions.FlattenedSize())
+	fmt.Fprintf(os.Stderr, "photoai: mobilefacenet  input=%q output=%q embSize=%d\n", inputName, outputName, embSize)
+
 	in, err := ort.NewTensor(ort.NewShape(1, 3, 112, 112), make([]float32, 1*3*112*112))
 	if err != nil {
 		return nil, fmt.Errorf("input tensor: %w", err)
 	}
-	out, err := ort.NewTensor(ort.NewShape(1, 512), make([]float32, 512))
+	out, err := ort.NewTensor(ort.NewShape(int64(embSize)), make([]float32, embSize))
 	if err != nil {
 		in.Destroy()
 		return nil, fmt.Errorf("output tensor: %w", err)
 	}
-	// InsightFace MobileFaceNet exports use "input.1" / "fc1"
 	sess, err := ort.NewAdvancedSession(modelPath,
-		[]string{"input.1"}, []string{"fc1"},
+		[]string{inputName}, []string{outputName},
 		[]ort.ArbitraryTensor{in}, []ort.ArbitraryTensor{out}, nil)
 	if err != nil {
 		in.Destroy()
@@ -240,8 +274,9 @@ func runMobileFaceNet(img image.Image, box faceBox) ([]float32, error) {
 	if err := m.sess.Run(); err != nil {
 		return nil, fmt.Errorf("mobilefacenet run: %w", err)
 	}
-	emb := make([]float32, 512)
-	copy(emb, m.output.GetData())
+	raw := m.output.GetData()
+	emb := make([]float32, len(raw))
+	copy(emb, raw)
 	return emb, nil
 }
 

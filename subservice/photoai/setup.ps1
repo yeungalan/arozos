@@ -68,15 +68,11 @@ $YoloPath = Join-Path $ModelDir "yolov5n.onnx"
 if (Test-Path $YoloPath) {
     Write-Host "YOLOv5n already present"
 } else {
+    # Use the classic yolov5 v7.0 repo export which is float32.
+    # The "yolov5nu.onnx" from ultralytics/assets is float16 and will not work.
     $ok = Download-File `
-        "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov5nu.onnx" `
-        $YoloPath "YOLOv5n ONNX"
-    if (-not $ok) {
-        # fallback: older release tag
-        $ok = Download-File `
-            "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov5nu.onnx" `
-            $YoloPath "YOLOv5n ONNX (fallback)"
-    }
+        "https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5n.onnx" `
+        $YoloPath "YOLOv5n ONNX (float32, v7.0)"
     if (-not $ok) {
         Write-Warning "Could not download YOLOv5n. Object tagging will use colour heuristics."
     }
