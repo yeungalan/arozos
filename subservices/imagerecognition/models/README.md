@@ -13,25 +13,31 @@ identity descriptor and need no model.
 
 ## Enabling the ONNX/YOLO backend
 
-1. Fetch the runtime + model (not committed — large + platform specific):
+The model (`tinyyolov2-8.onnx`, tiny-yolov2 VOC, public-domain) **and** the
+ONNX Runtime shared library for **linux/amd64** are committed in this folder, so
+on linux/amd64 the ONNX backend is turnkey — just build with the tag:
 
-   ```sh
-   sh models/setup.sh
-   ```
+```sh
+go build -tags onnx -o imagerecognition_linux_amd64 .
+```
 
-   This downloads ONNX Runtime and `tinyyolov2-8.onnx` (tiny-yolov2, VOC,
-   public-domain) into this folder.
+`model.json` already points `sharedLibrary` at the bundled
+`onnxruntime-linux-x64-1.26.0/lib/libonnxruntime.so.1.26.0`, so no environment
+variable is needed. If the model or runtime is missing (e.g. on another
+platform) the service logs a notice and falls back to the builtin backend, so an
+`-tags onnx` build still runs everywhere.
 
-2. Build and run with the `onnx` tag, pointing at the runtime library:
+### Other platforms / refreshing the artefacts
 
-   ```sh
-   ONNXRUNTIME_LIB=$PWD/models/onnxruntime-linux-x64-1.26.0/lib/libonnxruntime.so \
-     go build -tags onnx -o imagerecognition_linux_amd64 .
-   ```
+For non-linux/amd64 hosts, fetch the matching runtime (and re-fetch the model):
 
-   At runtime the service auto-loads `model.json` from this folder; if the model
-   or runtime is missing it logs a notice and falls back to the builtin backend,
-   so an `-tags onnx` build still runs without the model present.
+```sh
+sh models/setup.sh
+ONNXRUNTIME_LIB=/path/to/your/libonnxruntime.so \
+  go build -tags onnx -o imagerecognition_<os>_<arch> .
+```
+
+`ONNXRUNTIME_LIB` (when set) overrides the `sharedLibrary` path in `model.json`.
 
 ## `model.json`
 

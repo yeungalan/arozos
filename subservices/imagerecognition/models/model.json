@@ -13,5 +13,5 @@
   ],
   "confThreshold": 0.3,
   "iouThreshold": 0.45,
-  "sharedLibrary": ""
+  "sharedLibrary": "onnxruntime-linux-x64-1.26.0/lib/libonnxruntime.so.1.26.0"
 }

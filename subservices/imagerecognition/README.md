@@ -55,8 +55,9 @@ form field, or a raw image body. Responses are JSON.
 # Pure-Go build for this host (object tags from the builtin scene tagger):
 sh build.sh
 
-# …or with real YOLO object detection (downloads runtime + model first):
-sh models/setup.sh
+# …or with real YOLO object detection. On linux/amd64 the model + ONNX Runtime
+# are bundled in models/, so this is turnkey; other platforms run models/setup.sh
+# first (see models/README.md):
 ONNX=1 sh build.sh
 ```
 

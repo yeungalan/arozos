@@ -6,10 +6,12 @@ imagerecognition_*
 # Runtime data (persistent people gallery)
 /data/
 
-# Large ML artefacts fetched by models/setup.sh — not committed (size +
-# platform specific). model.json, setup.sh and README.md ARE committed.
-models/*.onnx
+# Transient download archives
 models/*.tgz
 models/*.tar.gz
-models/onnxruntime-*/
-models/libonnxruntime.*
+
+# ONNX Runtime: keep the shared library + licenses (committed so the ONNX/YOLO
+# backend is turnkey on linux/amd64); drop the build-time headers and cmake.
+models/onnxruntime-*/include/
+models/onnxruntime-*/lib/cmake/
+models/onnxruntime-*/lib/pkgconfig/
