@@ -726,6 +726,56 @@
       ]
     },
     {
+      "id": "imagerecognition",
+      "name": "imagerecognition",
+      "desc": "AI image tagging and face recognition via the imagerecognition subservice. Enable in System Settings > AI Integration > Photo Recognition; it is auto-detected when the subservice is installed. Functions take a readable virtual file path and raise ImageRecognitionError when the service is disabled or unreachable.",
+      "load": "requirelib(\"imagerecognition\");",
+      "functions": [
+        {
+          "name": "imagerecognition.ready",
+          "sig": "imagerecognition.ready()",
+          "desc": "Returns true when photo recognition is enabled and an endpoint is configured. Guard all other calls with it.",
+          "ret": "bool",
+          "example": "requirelib(\"imagerecognition\");\nif (imagerecognition.ready()){ /* use it */ }"
+        },
+        {
+          "name": "imagerecognition.tag",
+          "sig": "imagerecognition.tag(vpath)",
+          "desc": "Return descriptive tags [{label, confidence, source}] - scene/colour tags, a person/people tag from face detection, and YOLO object classes when the ONNX backend is active.",
+          "ret": "array",
+          "example": "requirelib(\"imagerecognition\");\nvar tags = imagerecognition.tag(\"user:/Photo/holiday.jpg\");"
+        },
+        {
+          "name": "imagerecognition.detectFaces",
+          "sig": "imagerecognition.detectFaces(vpath)",
+          "desc": "Detect faces and return [{box, confidence}] without identity grouping.",
+          "ret": "array",
+          "example": "requirelib(\"imagerecognition\");\nvar faces = imagerecognition.detectFaces(\"user:/Photo/a.jpg\");"
+        },
+        {
+          "name": "imagerecognition.recognizeFaces",
+          "sig": "imagerecognition.recognizeFaces(vpath)",
+          "desc": "Detect faces and group the same person across photos under a stable personUUID. Returns [{box, confidence, personUUID, newPerson, matchScore}]. Another photo of a known person returns the same personUUID.",
+          "ret": "array",
+          "example": "requirelib(\"imagerecognition\");\nvar faces = imagerecognition.recognizeFaces(\"user:/Photo/party.jpg\");\nconsole.log(faces[0].personUUID);"
+        },
+        {
+          "name": "imagerecognition.analyze",
+          "sig": "imagerecognition.analyze(vpath)",
+          "desc": "One-shot {width, height, tags, faces, backend} combining tagging and face recognition.",
+          "ret": "object",
+          "example": "requirelib(\"imagerecognition\");\nvar r = imagerecognition.analyze(\"user:/Photo/a.jpg\");"
+        },
+        {
+          "name": "imagerecognition.listPeople",
+          "sig": "imagerecognition.listPeople()",
+          "desc": "Return the known-people gallery [{uuid, samples, created, updated}].",
+          "ret": "array",
+          "example": "requirelib(\"imagerecognition\");\nvar people = imagerecognition.listPeople();"
+        }
+      ]
+    },
+    {
       "id": "websocket",
       "name": "websocket",
       "desc": "Upgrade the HTTP connection to a persistent WebSocket session.",

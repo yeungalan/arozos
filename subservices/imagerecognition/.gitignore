@@ -1,0 +1,15 @@
+# Built binaries (produced by build.sh / go build)
+/imagerecognition
+imagerecognition_*
+*.exe
+
+# Runtime data (persistent people gallery)
+/data/
+
+# Large ML artefacts fetched by models/setup.sh — not committed (size +
+# platform specific). model.json, setup.sh and README.md ARE committed.
+models/*.onnx
+models/*.tgz
+models/*.tar.gz
+models/onnxruntime-*/
+models/libonnxruntime.*

@@ -272,6 +272,7 @@ Registered library IDs:
 - `ziplib` (includes 7z support via `ziplib.extract7zFile`, `ziplib.list7zFileContents`, etc.)
 - `sqlite` (SQLite database access — not available on linux/mipsle or windows/arm/386)
 - `aimodel` (OpenAI / Anthropic LLM chat: text & file based, with pricing & quota)
+- `imagerecognition` (AI image tagging & face recognition via the imagerecognition subservice)
 - `ffmpeg` (only when ffmpeg exists on host)
 
 Special case:
@@ -1475,6 +1476,66 @@ checkStatus();
 setInterval(checkStatus, 30000);
 </script>
 ```
+
+## imagerecognition API
+
+Load:
+
+```javascript
+requirelib("imagerecognition");
+```
+
+AI photo recognition — image tagging and face recognition — backed by the
+`imagerecognition` subservice. An administrator enables it in
+**System Settings → AI Integration → Photo Recognition**; it is detected
+automatically when the subservice is installed. All functions take a virtual
+file path the current user can read, and raise an `ImageRecognitionError` if the
+service is disabled/unreachable.
+
+### `imagerecognition.ready()` → bool
+Returns `true` when photo recognition is enabled and an endpoint is configured.
+Always guard calls with it.
+
+```javascript
+requirelib("imagerecognition");
+if (!imagerecognition.ready()){
+    sendResp("Photo recognition is not available");
+} else {
+    // ...
+}
+```
+
+### `imagerecognition.tag(vpath)` → array
+Returns descriptive tags `[{label, confidence, source}]` (scene/colour tags, a
+`person`/`people` tag from face detection, and YOLO object classes when the
+subservice runs the ONNX backend).
+
+```javascript
+var tags = imagerecognition.tag("user:/Photo/holiday.jpg");
+// [{label:"person",confidence:0.95,source:"object"}, {label:"outdoor"...}]
+```
+
+### `imagerecognition.detectFaces(vpath)` → array
+Returns detected faces `[{box:{x,y,width,height}, confidence}]` without grouping.
+
+### `imagerecognition.recognizeFaces(vpath)` → array
+Detects faces and groups **the same person across photos** under a stable
+`personUUID`. Returns `[{box, confidence, personUUID, newPerson, matchScore}]`.
+Submitting another photo of a known person returns the **same** `personUUID`.
+
+```javascript
+var faces = imagerecognition.recognizeFaces("user:/Photo/party.jpg");
+for (var i = 0; i < faces.length; i++){
+    console.log(faces[i].personUUID + (faces[i].newPerson ? " (new)" : ""));
+}
+```
+
+### `imagerecognition.analyze(vpath)` → object
+One-shot `{width, height, tags, faces, backend}` combining tagging and face
+recognition.
+
+### `imagerecognition.listPeople()` → array
+Returns the known-people gallery `[{uuid, samples, created, updated}]`.
 
 This documentation covers all available AGI APIs with practical examples. For more advanced usage, refer to the existing module implementations in the system.
 ## Notes and Caveats

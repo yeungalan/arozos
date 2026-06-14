@@ -133,19 +133,20 @@ func RunStartup() {
 	ArozcastInit()   //Arozcast remote projection pub/sub relay
 
 	//9. Initiate System Settings Handlers
-	SystemSettingInit()       //Start System Setting Core
-	DiskQuotaInit()           //Disk Quota Management
-	DiskServiceInit()         //Start Disk Services
-	DeviceServiceInit()       //Client Device Management
-	SystemIDInit()            //System UUID Manager
-	SystemInfoInit()          //System Information UI
-	AuthSettingsInit()        //Authentication Settings Handler, must be start after user Handler
-	AdvanceSettingInit()      //System Advance Settings
-	AIModelSettingInit()      //AI Model (OpenAI / Anthropic) config, pricing, quota & usage metrics
-	AGIRuntimeManagerInit()  //AGI VM lifecycle monitor (Developer Options tab)
-	StartupFlagsInit()        //System BootFlag settibg
-	HardwarePowerInit()       //Start host power manager
-	RegisterStorageSettings() //Storage Settings
+	SystemSettingInit()           //Start System Setting Core
+	DiskQuotaInit()               //Disk Quota Management
+	DiskServiceInit()             //Start Disk Services
+	DeviceServiceInit()           //Client Device Management
+	SystemIDInit()                //System UUID Manager
+	SystemInfoInit()              //System Information UI
+	AuthSettingsInit()            //Authentication Settings Handler, must be start after user Handler
+	AdvanceSettingInit()          //System Advance Settings
+	AIModelSettingInit()          //AI Model (OpenAI / Anthropic) config, pricing, quota & usage metrics
+	ImageRecognitionSettingInit() //Photo Recognition (image tagging + face recognition subservice)
+	AGIRuntimeManagerInit()       //AGI VM lifecycle monitor (Developer Options tab)
+	StartupFlagsInit()            //System BootFlag settibg
+	HardwarePowerInit()           //Start host power manager
+	RegisterStorageSettings()     //Storage Settings
 
 	//10. Startup network services and schedule services
 	NetworkServiceInit() //Initalize network serves (ssdp / mdns etc)

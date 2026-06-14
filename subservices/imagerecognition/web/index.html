@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Image Recognition</title>
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; background: #f3f4f6; color: #1f2937; }
+        header { background: #4d6bff; color: #fff; padding: 14px 20px; }
+        header h1 { margin: 0; font-size: 18px; }
+        header p { margin: 2px 0 0; font-size: 12px; opacity: .85; }
+        main { padding: 20px; max-width: 900px; margin: 0 auto; }
+        #drop { border: 2px dashed #b6bdc9; border-radius: 12px; padding: 28px; text-align: center; background: #fff; color: #6b7280; cursor: pointer; }
+        #drop.hover { border-color: #4d6bff; color: #4d6bff; }
+        .result { display: flex; gap: 18px; margin-top: 18px; flex-wrap: wrap; }
+        .imgwrap { position: relative; flex: 0 0 auto; }
+        .imgwrap img { max-width: 380px; border-radius: 10px; display: block; }
+        .face-box { position: absolute; border: 2px solid #00e0a4; border-radius: 4px; box-sizing: border-box; }
+        .face-tag { position: absolute; background: #00e0a4; color: #062b22; font-size: 10px; padding: 1px 4px; border-radius: 3px; transform: translateY(-100%); white-space: nowrap; }
+        .panel { flex: 1 1 280px; }
+        .chip { display: inline-block; background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 3px 10px; margin: 0 5px 6px 0; font-size: 12px; }
+        .chip b { color: #4d6bff; }
+        .muted { color: #6b7280; font-size: 12px; }
+        h3 { font-size: 13px; margin: 14px 0 8px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Image Recognition</h1>
+        <p>Image tagging &amp; face recognition · <span id="backend">…</span></p>
+    </header>
+    <main>
+        <div id="drop">Drop an image here, or click to choose a photo to analyse</div>
+        <input type="file" id="file" accept="image/*" style="display:none">
+        <div class="result" id="result" style="display:none;">
+            <div class="imgwrap" id="imgwrap"><img id="preview"></div>
+            <div class="panel">
+                <h3>Tags</h3>
+                <div id="tags" class="muted">—</div>
+                <h3>People</h3>
+                <div id="faces" class="muted">—</div>
+            </div>
+        </div>
+    </main>
+    <script>
+        const drop = document.getElementById('drop');
+        const file = document.getElementById('file');
+
+        fetch('api/info').then(r => r.json()).then(d => {
+            document.getElementById('backend').textContent = 'backend: ' + d.backend;
+        }).catch(() => {});
+
+        drop.onclick = () => file.click();
+        drop.ondragover = e => { e.preventDefault(); drop.classList.add('hover'); };
+        drop.ondragleave = () => drop.classList.remove('hover');
+        drop.ondrop = e => { e.preventDefault(); drop.classList.remove('hover'); if (e.dataTransfer.files[0]) analyse(e.dataTransfer.files[0]); };
+        file.onchange = () => { if (file.files[0]) analyse(file.files[0]); };
+
+        function analyse(f) {
+            const fd = new FormData();
+            fd.append('image', f);
+            const url = URL.createObjectURL(f);
+            document.getElementById('preview').src = url;
+            document.getElementById('result').style.display = 'flex';
+            document.getElementById('tags').textContent = 'Analysing…';
+            document.getElementById('faces').textContent = '';
+            fetch('api/analyze', { method: 'POST', body: fd })
+                .then(r => r.json()).then(render)
+                .catch(e => { document.getElementById('tags').textContent = 'Error: ' + e; });
+        }
+
+        function render(data) {
+            const tags = document.getElementById('tags');
+            tags.innerHTML = (data.tags || []).map(t =>
+                `<span class="chip">${t.label} <b>${Math.round(t.confidence * 100)}%</b></span>`).join('') || '<span class="muted">No tags</span>';
+
+            const faces = document.getElementById('faces');
+            faces.innerHTML = (data.faces || []).map((f, i) =>
+                `<span class="chip">Person ${i + 1}: <b>${(f.personUUID || '').slice(0, 8)}</b>${f.newPerson ? ' (new)' : ''}</span>`).join('') || '<span class="muted">No faces detected</span>';
+
+            // Draw boxes once the preview image is laid out.
+            const img = document.getElementById('preview');
+            const draw = () => {
+                document.querySelectorAll('.face-box,.face-tag').forEach(e => e.remove());
+                const sx = img.clientWidth / data.width, sy = img.clientHeight / data.height;
+                (data.faces || []).forEach((f, i) => {
+                    const box = document.createElement('div');
+                    box.className = 'face-box';
+                    box.style.left = (f.box.x * sx) + 'px';
+                    box.style.top = (f.box.y * sy) + 'px';
+                    box.style.width = (f.box.width * sx) + 'px';
+                    box.style.height = (f.box.height * sy) + 'px';
+                    const tag = document.createElement('div');
+                    tag.className = 'face-tag';
+                    tag.textContent = 'Person ' + (i + 1);
+                    tag.style.left = (f.box.x * sx) + 'px';
+                    tag.style.top = (f.box.y * sy) + 'px';
+                    document.getElementById('imgwrap').appendChild(box);
+                    document.getElementById('imgwrap').appendChild(tag);
+                });
+            };
+            if (img.complete) draw(); else img.onload = draw;
+        }
+    </script>
+</body>
+</html>
