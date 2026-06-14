@@ -3,10 +3,11 @@
 ::
 :: Requirements:
 ::   - Go  https://go.dev/dl/
-::   - A C compiler for CGo.  Install MinGW-w64 via winget:
-::       winget install mingw
-::     or download from https://www.mingw-w64.org/
-::     After installing, ensure gcc.exe is on your PATH.
+::   - A C compiler for CGo. Choose one of:
+::       Scoop (no admin):  irm get.scoop.sh | iex  &&  scoop install gcc
+::       TDM-GCC installer: https://jmeubank.github.io/tdm-gcc/
+::       w64devkit (zip):   https://github.com/skeeto/w64devkit/releases
+::     After installing, open a new terminal so gcc.exe is on your PATH.
 ::
 :: Usage (from subservice\photoai):
 ::   build.bat
@@ -30,9 +31,10 @@ if %errorlevel% neq 0 (
 where gcc >nul 2>&1
 if %errorlevel% neq 0 (
     echo ERROR: gcc not found on PATH ^(required for CGo^).
-    echo Install MinGW-w64:
-    echo   winget install mingw
-    echo Then re-open this terminal so PATH is updated.
+    echo Install a C compiler, then re-open this terminal:
+    echo   Scoop ^(no admin^):  irm get.scoop.sh ^| iex  ^&^&  scoop install gcc
+    echo   TDM-GCC installer:  https://jmeubank.github.io/tdm-gcc/
+    echo   w64devkit ^(zip^):    https://github.com/skeeto/w64devkit/releases
     exit /b 1
 )
 
