@@ -39,7 +39,9 @@ type FaceStorage struct {
 	db *sql.DB
 }
 
-const clusterSimilarityThreshold = 0.80
+// 0.45 is appropriate for L2-normalised 512-dim MobileFaceNet embeddings;
+// the colour-grid fallback uses a higher effective threshold due to lower dimensionality.
+const clusterSimilarityThreshold = 0.45
 
 func openFaceStorage(dataDir string) (*FaceStorage, error) {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {

@@ -1,16 +1,17 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"math"
+	"os"
 
 	"github.com/disintegration/imaging"
 )
 
-// FaceDetection is one detected face candidate within an image.
-// Bounding box coordinates are in the range [0, 1] relative to the image
-// dimensions so they remain valid regardless of resolution.
+// FaceDetection is one detected face within an image.
+// Bounding-box coordinates are normalised to [0,1].
 type FaceDetection struct {
 	BBoxX      float64   `json:"bbox_x"`
 	BBoxY      float64   `json:"bbox_y"`
@@ -20,16 +21,69 @@ type FaceDetection struct {
 	Feature    []float64 `json:"-"`
 }
 
-// DetectFaces finds face candidates in img using skin-colour blob detection in
-// the YCbCr colour space.  The returned bounding boxes are normalised to [0,1].
+// DetectFaces returns face detections for img. When the ultraface ONNX model is
+// loaded it is used for detection and MobileFaceNet for 512-dim embeddings;
+// otherwise the skin-colour heuristic is used as a fallback.
 func DetectFaces(img image.Image) []FaceDetection {
+	if globalUltraface != nil {
+		faces, err := detectFacesONNX(img)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "photoai: onnx face detect: %v; falling back\n", err)
+		} else {
+			return faces
+		}
+	}
+	return detectFacesSkin(img)
+}
+
+func detectFacesONNX(img image.Image) ([]FaceDetection, error) {
+	boxes, err := runUltraface(img)
+	if err != nil {
+		return nil, err
+	}
+	b := img.Bounds()
+	W, H := b.Dx(), b.Dy()
+	var faces []FaceDetection
+	for _, box := range boxes {
+		if len(faces) >= 10 {
+			break
+		}
+		det := FaceDetection{
+			BBoxX:      float64(box.X1),
+			BBoxY:      float64(box.Y1),
+			BBoxW:      float64(box.X2 - box.X1),
+			BBoxH:      float64(box.Y2 - box.Y1),
+			Confidence: float64(box.Score),
+		}
+		if globalMobileFace != nil {
+			emb, embErr := runMobileFaceNet(img, box)
+			if embErr != nil {
+				fmt.Fprintf(os.Stderr, "photoai: mobilefacenet: %v\n", embErr)
+			} else {
+				feat := make([]float64, len(emb))
+				for i, v := range emb {
+					feat[i] = float64(v)
+				}
+				det.Feature = feat
+			}
+		}
+		if len(det.Feature) == 0 {
+			// Fall back to colour-grid features for clustering.
+			det.Feature = extractFeature(img, det, W, H)
+		}
+		faces = append(faces, det)
+	}
+	return faces, nil
+}
+
+// detectFacesSkin uses YCbCr skin-tone blob detection as a fallback.
+func detectFacesSkin(img image.Image) []FaceDetection {
 	bounds := img.Bounds()
-	W, H := bounds.Max.X-bounds.Min.X, bounds.Max.Y-bounds.Min.Y
+	W, H := bounds.Dx(), bounds.Dy()
 	if W == 0 || H == 0 {
 		return nil
 	}
 
-	// Build a binary mask of skin-coloured pixels.
 	mask := make([][]bool, H)
 	for y := range mask {
 		mask[y] = make([]bool, W)
@@ -40,38 +94,26 @@ func DetectFaces(img image.Image) []FaceDetection {
 
 	blobs := findBlobs(mask, W, H)
 	var faces []FaceDetection
-	for _, b := range blobs {
-		bW := b.maxX - b.minX + 1
-		bH := b.maxY - b.minY + 1
-
-		// Size filter: too small or too large relative to the image.
-		minPx := max(W, H) / 20
-		if bW < minPx || bH < minPx {
+	for _, bl := range blobs {
+		bW := bl.maxX - bl.minX + 1
+		bH := bl.maxY - bl.minY + 1
+		minPx := maxInt(W, H) / 20
+		if bW < minPx || bH < minPx || bW > W*2/3 || bH > H*2/3 {
 			continue
 		}
-		if bW > W*2/3 || bH > H*2/3 {
-			continue
-		}
-
-		// Aspect ratio: faces are roughly square.
 		ratio := float64(bW) / float64(bH)
 		if ratio < 0.4 || ratio > 2.5 {
 			continue
 		}
-
-		// Density: at least 30% of the bounding box is skin.
-		density := float64(b.pixels) / float64(bW*bH)
+		density := float64(bl.pixels) / float64(bW*bH)
 		if density < 0.30 {
 			continue
 		}
-
-		// Confidence is the product of density and a closeness-to-square bonus.
 		squareness := 1.0 - math.Abs(1.0-ratio)/2.0
 		confidence := math.Min(density*squareness*1.5, 1.0)
-
 		det := FaceDetection{
-			BBoxX:      float64(b.minX) / float64(W),
-			BBoxY:      float64(b.minY) / float64(H),
+			BBoxX:      float64(bl.minX) / float64(W),
+			BBoxY:      float64(bl.minY) / float64(H),
 			BBoxW:      float64(bW) / float64(W),
 			BBoxH:      float64(bH) / float64(H),
 			Confidence: confidence,
@@ -80,7 +122,6 @@ func DetectFaces(img image.Image) []FaceDetection {
 		faces = append(faces, det)
 	}
 
-	// Keep at most 10 faces, sorted by confidence descending.
 	sortByConfidence(faces)
 	if len(faces) > 10 {
 		faces = faces[:10]
@@ -88,41 +129,24 @@ func DetectFaces(img image.Image) []FaceDetection {
 	return faces
 }
 
-// isSkin returns true when the colour falls within skin-tone ranges in YCbCr.
-// Range chosen from "Human skin colour detection using the YCbCr colour space"
-// (Kolkur et al., 2017).
 func isSkin(c color.Color) bool {
 	r, g, b, _ := c.RGBA()
-	r8 := uint8(r >> 8)
-	g8 := uint8(g >> 8)
-	b8 := uint8(b >> 8)
-
-	yr, cb, cr := color.RGBToYCbCr(r8, g8, b8)
-
-	// Very dark or very light pixels are not skin.
+	yr, cb, cr := color.RGBToYCbCr(uint8(r>>8), uint8(g>>8), uint8(b>>8))
 	if yr < 20 || yr > 240 {
 		return false
 	}
-	// YCbCr skin range.
 	return cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173
 }
 
-// blob tracks a connected component of skin pixels.
-type blob struct {
-	minX, maxX, minY, maxY, pixels int
-}
+type blob struct{ minX, maxX, minY, maxY, pixels int }
 
-// findBlobs performs a single-pass connected-component analysis on the mask
-// using a simple row-at-a-time union approach. Returns the merged blobs.
 func findBlobs(mask [][]bool, W, H int) []blob {
 	label := make([][]int, H)
 	for y := range label {
 		label[y] = make([]int, W)
 	}
-
 	nextLabel := 1
 	parent := []int{0}
-
 	find := func(x int) int {
 		for parent[x] != x {
 			parent[x] = parent[parent[x]]
@@ -140,21 +164,18 @@ func findBlobs(mask [][]bool, W, H int) []blob {
 			}
 		}
 	}
-
 	for y := 0; y < H; y++ {
 		for x := 0; x < W; x++ {
 			if !mask[y][x] {
 				continue
 			}
-			above := 0
-			left := 0
+			above, left := 0, 0
 			if y > 0 && mask[y-1][x] {
 				above = label[y-1][x]
 			}
 			if x > 0 && mask[y][x-1] {
 				left = label[y][x-1]
 			}
-
 			switch {
 			case above == 0 && left == 0:
 				label[y][x] = nextLabel
@@ -170,8 +191,6 @@ func findBlobs(mask [][]bool, W, H int) []blob {
 			}
 		}
 	}
-
-	// Collect bounding boxes per canonical label.
 	type bb struct{ minX, maxX, minY, maxY, pixels int }
 	blobs := map[int]*bb{}
 	for y := 0; y < H; y++ {
@@ -201,7 +220,6 @@ func findBlobs(mask [][]bool, W, H int) []blob {
 			}
 		}
 	}
-
 	result := make([]blob, 0, len(blobs))
 	for _, b := range blobs {
 		result = append(result, blob(*b))
@@ -209,36 +227,25 @@ func findBlobs(mask [][]bool, W, H int) []blob {
 	return result
 }
 
-// extractFeature produces a 96-dimensional colour-grid feature vector for the
-// face region.  The face is divided into a 4×4 grid; for each cell the mean
-// R, G, B channels and their variances are computed (4*4*6 = 96 dimensions).
-// The vector is L2-normalised so cosine similarity reduces to dot product.
+// extractFeature produces a 96-dim colour-grid feature vector for the face
+// region (4×4 grid, 6 stats per cell). Used when MobileFaceNet is unavailable.
 func extractFeature(src image.Image, det FaceDetection, W, H int) []float64 {
-	// Crop and resize face region to a fixed 48×48 patch.
 	x0 := int(det.BBoxX * float64(W))
 	y0 := int(det.BBoxY * float64(H))
 	x1 := x0 + int(det.BBoxW*float64(W))
 	y1 := y0 + int(det.BBoxH*float64(H))
-
 	cropped := imaging.Crop(src, image.Rect(x0, y0, x1, y1))
 	resized := imaging.Resize(cropped, 48, 48, imaging.Lanczos)
-
-	const cells = 4
-	const cellSize = 48 / cells
+	const cells, cellSize = 4, 12
 	feat := make([]float64, cells*cells*6)
-
 	for cy := 0; cy < cells; cy++ {
 		for cx := 0; cx < cells; cx++ {
-			var sumR, sumG, sumB float64
-			var sumR2, sumG2, sumB2 float64
+			var sumR, sumG, sumB, sumR2, sumG2, sumB2 float64
 			n := float64(cellSize * cellSize)
-
 			for py := 0; py < cellSize; py++ {
 				for px := 0; px < cellSize; px++ {
 					r, g, b, _ := resized.At(cx*cellSize+px, cy*cellSize+py).RGBA()
-					rf := float64(r) / 65535.0
-					gf := float64(g) / 65535.0
-					bf := float64(b) / 65535.0
+					rf, gf, bf := float64(r)/65535.0, float64(g)/65535.0, float64(b)/65535.0
 					sumR += rf
 					sumG += gf
 					sumB += bf
@@ -247,7 +254,6 @@ func extractFeature(src image.Image, det FaceDetection, W, H int) []float64 {
 					sumB2 += bf * bf
 				}
 			}
-
 			base := (cy*cells + cx) * 6
 			feat[base+0] = sumR / n
 			feat[base+1] = sumG / n
@@ -257,14 +263,11 @@ func extractFeature(src image.Image, det FaceDetection, W, H int) []float64 {
 			feat[base+5] = sumB2/n - feat[base+2]*feat[base+2]
 		}
 	}
-
-	// L2 normalise.
 	var norm float64
 	for _, v := range feat {
 		norm += v * v
 	}
-	norm = math.Sqrt(norm)
-	if norm > 0 {
+	if norm = math.Sqrt(norm); norm > 0 {
 		for i := range feat {
 			feat[i] /= norm
 		}
@@ -280,7 +283,7 @@ func sortByConfidence(faces []FaceDetection) {
 	}
 }
 
-func max(a, b int) int {
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}

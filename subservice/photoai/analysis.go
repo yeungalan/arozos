@@ -9,6 +9,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"math"
+	"os"
 	"strings"
 
 	"github.com/disintegration/imaging"
@@ -21,26 +22,54 @@ type ImageAnalysis struct {
 }
 
 // AnalyzeImageData decodes base64 image data (data-URL or raw base64) and
-// returns tags and face detections.  exifHints is optional key/value metadata
-// the caller already knows (e.g. taken_date, orientation, megapixels).
+// returns tags and face detections. When ONNX models are loaded it uses
+// YOLOv5n for object tags; otherwise it falls back to colour/EXIF heuristics.
+// exifHints is optional caller-supplied metadata (megapixels, taken_month, …).
 func AnalyzeImageData(dataURL string, exifHints map[string]string) (*ImageAnalysis, error) {
 	raw, err := decodeDataURL(dataURL)
 	if err != nil {
 		return nil, fmt.Errorf("decode image: %w", err)
 	}
-
 	img, _, err := image.Decode(bytes.NewReader(raw))
 	if err != nil {
 		return nil, fmt.Errorf("parse image: %w", err)
 	}
 
-	// Work on a max 640-px copy for efficiency.
-	img = fitImage(img, 640)
-
+	img = fitImage(img, 800)
 	faces := DetectFaces(img)
-	tags := generateTags(img, faces, exifHints)
+
+	var tags []string
+	if globalYOLO != nil {
+		objTags, yoloErr := runYOLO(img, 0.35)
+		if yoloErr != nil {
+			fmt.Fprintf(os.Stderr, "photoai: yolo: %v\n", yoloErr)
+		}
+		// Merge object tags with colour/EXIF tags for richer results.
+		colorTags := generateTags(img, faces, exifHints)
+		tags = mergeTags(objTags, colorTags)
+	} else {
+		tags = generateTags(img, faces, exifHints)
+	}
 
 	return &ImageAnalysis{Tags: tags, Faces: faces}, nil
+}
+
+func mergeTags(a, b []string) []string {
+	seen := make(map[string]struct{}, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, t := range a {
+		if _, ok := seen[t]; !ok {
+			seen[t] = struct{}{}
+			out = append(out, t)
+		}
+	}
+	for _, t := range b {
+		if _, ok := seen[t]; !ok {
+			seen[t] = struct{}{}
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // decodeDataURL accepts either a data-URL ("data:image/jpeg;base64,...") or
@@ -52,11 +81,10 @@ func decodeDataURL(s string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(s)
 }
 
-// fitImage returns img scaled so neither dimension exceeds maxDim.  If img
-// already fits, it is returned unchanged to avoid a needless copy.
+// fitImage returns img scaled so neither dimension exceeds maxDim.
 func fitImage(img image.Image, maxDim int) image.Image {
 	b := img.Bounds()
-	W, H := b.Max.X-b.Min.X, b.Max.Y-b.Min.Y
+	W, H := b.Dx(), b.Dy()
 	if W <= maxDim && H <= maxDim {
 		return img
 	}
@@ -66,24 +94,21 @@ func fitImage(img image.Image, maxDim int) image.Image {
 	return imaging.Resize(img, 0, maxDim, imaging.Lanczos)
 }
 
-// colourStats holds aggregate colour measurements over the whole image.
+// colourStats holds aggregate colour measurements for the whole image.
 type colourStats struct {
-	meanR, meanG, meanB float64 // 0..1 linear
-	saturation          float64 // 0..1
-	brightness          float64 // 0..1
-	warmth              float64 // 0..1 (1 = warm red/orange, 0 = cool blue)
+	meanR, meanG, meanB float64
+	saturation          float64
+	brightness          float64
+	warmth              float64
 }
 
 func measureColour(img image.Image) colourStats {
 	bounds := img.Bounds()
-	W, H := bounds.Max.X-bounds.Min.X, bounds.Max.Y-bounds.Min.Y
+	W, H := bounds.Dx(), bounds.Dy()
 	if W == 0 || H == 0 {
 		return colourStats{}
 	}
-
-	// Sample every 4th pixel for speed.
-	var sumR, sumG, sumB float64
-	var count float64
+	var sumR, sumG, sumB, count float64
 	for y := bounds.Min.Y; y < bounds.Max.Y; y += 4 {
 		for x := bounds.Min.X; x < bounds.Max.X; x += 4 {
 			r, g, b, _ := img.At(x, y).RGBA()
@@ -96,59 +121,43 @@ func measureColour(img image.Image) colourStats {
 	if count == 0 {
 		return colourStats{}
 	}
-
-	mR := sumR / count
-	mG := sumG / count
-	mB := sumB / count
-
+	mR, mG, mB := sumR/count, sumG/count, sumB/count
 	maxC := math.Max(mR, math.Max(mG, mB))
 	minC := math.Min(mR, math.Min(mG, mB))
 	chroma := maxC - minC
-
 	brightness := (maxC + minC) / 2.0
 	saturation := 0.0
 	if brightness > 0 && brightness < 1 {
 		saturation = chroma / (1 - math.Abs(2*brightness-1))
 	}
-
-	// Warmth: how much the image skews toward red/orange vs blue.
-	warmth := (mR - mB + 1.0) / 2.0
-
 	return colourStats{
-		meanR:      mR,
-		meanG:      mG,
-		meanB:      mB,
+		meanR: mR, meanG: mG, meanB: mB,
 		saturation: saturation,
 		brightness: brightness,
-		warmth:     warmth,
+		warmth:     (mR - mB + 1.0) / 2.0,
 	}
 }
 
-// generateTags builds a list of descriptive tags from colour measurements,
-// detected faces and the optional caller-supplied EXIF hints.
+// generateTags builds descriptive tags from colour measurements, detected
+// faces and optional EXIF hints. Used as a fallback when YOLO is unavailable,
+// and merged with YOLO tags when it is available.
 func generateTags(img image.Image, faces []FaceDetection, hints map[string]string) []string {
 	cs := measureColour(img)
 	set := map[string]struct{}{}
+	add := func(t string) { set[t] = struct{}{} }
 
-	add := func(tag string) { set[tag] = struct{}{} }
-
-	// Brightness tags.
 	switch {
 	case cs.brightness < 0.2:
 		add("dark")
 	case cs.brightness > 0.8:
 		add("bright")
 	}
-
-	// Colour temperature tags.
 	switch {
 	case cs.warmth > 0.65:
 		add("warm")
 	case cs.warmth < 0.35:
 		add("cool")
 	}
-
-	// Saturation tags.
 	switch {
 	case cs.saturation > 0.55:
 		add("vibrant")
@@ -156,22 +165,19 @@ func generateTags(img image.Image, faces []FaceDetection, hints map[string]strin
 		add("monochrome")
 	}
 
-	// Face-based tags.
 	switch len(faces) {
-	case 0:
-		// no people tag
 	case 1:
 		add("people")
 		add("portrait")
 	default:
-		add("people")
-		add("group")
+		if len(faces) > 1 {
+			add("people")
+			add("group")
+		}
 	}
 
-	// Orientation from image dimensions.
 	b := img.Bounds()
-	W, H := b.Max.X-b.Min.X, b.Max.Y-b.Min.Y
-	ratio := float64(W) / float64(H)
+	ratio := float64(b.Dx()) / float64(b.Dy())
 	switch {
 	case ratio > 2.0:
 		add("panoramic")
@@ -181,7 +187,6 @@ func generateTags(img image.Image, faces []FaceDetection, hints map[string]strin
 		add("portrait-orientation")
 	}
 
-	// EXIF-hint-derived tags.
 	if hints != nil {
 		if orient, ok := hints["orientation"]; ok {
 			switch orient {
@@ -193,7 +198,6 @@ func generateTags(img image.Image, faces []FaceDetection, hints map[string]strin
 				add("square")
 			}
 		}
-
 		if mp, ok := hints["megapixels"]; ok {
 			var mpf float64
 			fmt.Sscanf(mp, "%f", &mpf)
@@ -203,7 +207,6 @@ func generateTags(img image.Image, faces []FaceDetection, hints map[string]strin
 				add("low-res")
 			}
 		}
-
 		if taken, ok := hints["taken_month"]; ok {
 			switch taken {
 			case "12", "1", "2":
@@ -216,7 +219,6 @@ func generateTags(img image.Image, faces []FaceDetection, hints map[string]strin
 				add("autumn")
 			}
 		}
-
 		if hour, ok := hints["taken_hour"]; ok {
 			var h int
 			fmt.Sscanf(hour, "%d", &h)

@@ -1,13 +1,20 @@
 #!/bin/sh
 #
-# build.sh — Build and install the photoai subservice binary for the current OS/arch.
+# build.sh — Build the photoai subservice binary.
 #
-# Usage (from the repository root or this directory):
+# Usage:
 #   cd subservice/photoai && sh build.sh
 #
-# The resulting binary is placed in this directory with the name required by
-# the ArozOS subservice loader: photoai_<goos>_<goarch>  (e.g. photoai_linux_amd64).
-# On Windows the binary is named photoai.exe.
+# CGo is required (ONNX Runtime bindings). The runtime shared library is
+# loaded at runtime via SetSharedLibraryPath; only CGo itself is needed at
+# build time — the ONNX header files are bundled inside onnxruntime_go.
+#
+# If the ONNX Runtime library is installed system-wide (e.g. from your distro
+# package manager), no extra flags are needed. If you placed the library in
+# ./models/, set CGO_LDFLAGS before calling this script:
+#
+#   export CGO_LDFLAGS="-L$(pwd)/models -Wl,-rpath,$(pwd)/models"
+#   sh build.sh
 #
 set -eu
 
@@ -21,8 +28,8 @@ else
 fi
 
 echo "Building photoai for ${GOOS}/${GOARCH} → ${OUT}"
-go build -o "$OUT" .
+CGO_ENABLED=1 go build -o "$OUT" .
 echo "Done: $(pwd)/${OUT}"
 echo ""
-echo "To install, ensure this directory ($(pwd)) exists under <arozos-binary>/subservice/photoai/"
-echo "then restart ArozOS. The Photo AI module will appear automatically in the module list."
+echo "Run setup.sh first to download ONNX Runtime and model files into ./models/"
+echo "Then start with: ./${OUT} -models $(pwd)/models"

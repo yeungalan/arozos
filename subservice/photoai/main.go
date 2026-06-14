@@ -31,13 +31,17 @@ const version = "1.0.0"
 var (
 	listenPort  string
 	rptEndpoint string
+	modelsDir   string
 	storage     *FaceStorage
 )
 
 func main() {
 	flag.StringVar(&listenPort, "port", ":12320", "listen address (e.g. :12320)")
 	flag.StringVar(&rptEndpoint, "rpt", "", "ArozOS AGI endpoint (passed by subservice loader)")
+	flag.StringVar(&modelsDir, "models", "models", "directory containing ONNX models and runtime library")
 	flag.Parse()
+
+	initONNX(modelsDir)
 
 	// Open (or create) the per-subservice face database in the working directory.
 	var err error
@@ -122,9 +126,13 @@ func handleIcon(w http.ResponseWriter, r *http.Request) {
 
 func handleStatus(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, map[string]interface{}{
-		"ok":      true,
-		"version": version,
-		"service": "Photo AI",
+		"ok":         true,
+		"version":    version,
+		"service":    "Photo AI",
+		"onnx":       onnxReady,
+		"yolo":       globalYOLO != nil,
+		"face_detect": globalUltraface != nil,
+		"face_embed": globalMobileFace != nil,
 	})
 }
 
