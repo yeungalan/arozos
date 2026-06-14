@@ -1,0 +1,12 @@
+{
+    "Name": "Photo AI",
+    "Desc": "AI-powered photo tagging and face recognition for ArozOS Photo",
+    "Group": "Media",
+    "IconPath": "photoai/icon.svg",
+    "Version": "1.0.0",
+    "StartDir": "photoai/index.html",
+    "SupportFW": true,
+    "LaunchFWDir": "photoai/index.html",
+    "SupportEmb": false,
+    "InitFWSize": [860, 600]
+}
