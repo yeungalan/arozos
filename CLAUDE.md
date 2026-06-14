@@ -35,6 +35,45 @@ Key points:
   you change AGI functions or signatures, also update the in-app help data file
   [`src/web/Terminal/docs/api.json`](src/web/Terminal/docs/api.json) to match.
 
+## What subservices are
+
+A **subservice** is an independent binary web server — written in any language —
+that ArozOS launches as a child process and surfaces as a first-class module on
+the web desktop. Subservices are how ArozOS integrates programs that are *not*
+written in the AGI JavaScript runtime (e.g. wrapping Syncthing, or shipping a
+Go/Python/Rust web app) without baking them into the main binary. AGI runs
+sandboxed scripts inside ArozOS; a subservice runs a whole separate executable
+beside it.
+
+Key points:
+
+- **Where it lives:** the runtime is [`src/mod/subservice/`](src/mod/subservice/)
+  (`subservice.go`, `common.go`), wired up by
+  [`src/subservice.go`](src/subservice.go) (`SubserviceInit` /
+  `SubserviceHandleShutdown`). On disk, each service is a folder under
+  `./subservice/<name>/` whose executable is named after the folder with a
+  platform suffix (`<name>_linux_amd64`, `<name>.exe`, …).
+- **How it's launched:** at startup ArozOS scans `./subservice/*`, runs each
+  binary as its own OS process on an auto-assigned port (from `subserviceBasePort`,
+  starting at 12810), and stands up a reverse proxy — with WebSocket support —
+  that serves the service's web UI at its `StartDir` endpoint. A service that
+  stops responding is auto-restarted after ~10s.
+- **The startup contract:** ArozOS calls the binary with `-info` to read its
+  `ModuleInfo` JSON (or reads `moduleInfo.json` if present), then launches it with
+  `-port <port> -rpt <url>`, where `-rpt` points back at the AGI gateway
+  (`/api/ajgi/interface`) so the service can call ArozOS APIs.
+- **Per-folder control files:** `.noproxy` (compatibility mode — run the process
+  but skip the reverse proxy), `.startscript` (launch `start.sh`/`start.bat`
+  instead of the binary), `.intport` (pass the port without a leading colon), and
+  `.disabled` (don't autoload at startup; toggle it from the settings UI).
+- **Security:** reverse-proxy endpoints may not collide with reserved paths
+  (`web`, `system`, `SystemAO`, `img`, …); access is gated by per-module
+  permission, and the start/kill admin endpoints
+  (`/system/subservice/{list,kill,start}`) are registered through the permission
+  router (rule 4). Disable the whole feature with the `-disable_subservice` flag.
+- **Full reference:** the "Subservice Logics and Configuration" section of
+  [`src/README.md`](src/README.md).
+
 ## Build, run and test
 
 All Go commands run from `src/`:
@@ -188,5 +227,6 @@ short comment explaining why. Use it sparingly — it is reviewed.
 - [`src/mod/info/logger/`](src/mod/info/logger/) — the system logger (rule 1).
 - [`src/mod/prouter/`](src/mod/prouter/) — permission/auth router (rule 4).
 - [`src/mod/agi/`](src/mod/agi/) — the AGI JavaScript gateway runtime (see "What AGI is"); API reference in [`src/mod/agi/README.md`](src/mod/agi/README.md).
+- [`src/mod/subservice/`](src/mod/subservice/) — the subservice runtime that runs external binaries as proxied desktop modules (see "What subservices are").
 - [`src/web/`](src/web/) — front-end assets and web apps.
 - [`src/system/`](src/system/) — runtime data and config (not shipped in release).
