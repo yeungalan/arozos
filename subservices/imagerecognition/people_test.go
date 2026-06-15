@@ -117,6 +117,28 @@ func TestPeopleStoreReset(t *testing.T) {
 	}
 }
 
+func TestMultiExemplarMatching(t *testing.T) {
+	//A person can hold several diverse exemplars; a query is matched to the
+	//nearest exemplar, not to an averaged centroid (which could match neither).
+	p := &personRecord{Embeddings: [][]float32{{1, 0, 0, 0}}}
+	p.addExemplar([]float32{0, 1, 0, 0}) //a very different pose of the same person
+
+	if got := p.bestSimilarity([]float32{0.99, 0.1, 0, 0}); got < 0.9 {
+		t.Errorf("query near exemplar 1: best similarity %.3f, want >= 0.9", got)
+	}
+	if got := p.bestSimilarity([]float32{0.1, 0.99, 0, 0}); got < 0.9 {
+		t.Errorf("query near exemplar 2: best similarity %.3f, want >= 0.9", got)
+	}
+
+	//The exemplar set is capped.
+	for i := 0; i < maxExemplarsPerPerson+10; i++ {
+		p.addExemplar([]float32{float32(i), 1, 0, 0})
+	}
+	if len(p.Embeddings) > maxExemplarsPerPerson {
+		t.Errorf("exemplars = %d, want <= %d", len(p.Embeddings), maxExemplarsPerPerson)
+	}
+}
+
 func TestNewUUIDv4Format(t *testing.T) {
 	seen := map[string]bool{}
 	for i := 0; i < 100; i++ {

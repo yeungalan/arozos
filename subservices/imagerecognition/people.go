@@ -27,13 +27,20 @@ import (
 	collapse to one group across many photos and across service restarts.
 */
 
+// maxExemplarsPerPerson caps how many identity vectors are kept per person.
+// Keeping several exemplars (rather than one averaged centroid) lets a person be
+// recognised across very different poses/lighting: a new face is matched to the
+// nearest stored exemplar, not to a blurred mean.
+const maxExemplarsPerPerson = 16
+
 // personRecord is the persisted state of one known person.
 type personRecord struct {
-	UUID     string    `json:"uuid"`
-	Centroid []float32 `json:"centroid"` //Running mean of descriptors (not re-normalised)
-	Samples  int       `json:"samples"`  //Number of faces merged into this person
-	Created  int64     `json:"created"`  //Unix seconds
-	Updated  int64     `json:"updated"`  //Unix seconds
+	UUID       string      `json:"uuid"`
+	Embeddings [][]float32 `json:"embeddings"`         //Diverse identity exemplars for this person
+	Centroid   []float32   `json:"centroid,omitempty"` //Legacy single-centroid field, migrated on load
+	Samples    int         `json:"samples"`            //Number of faces grouped into this person
+	Created    int64       `json:"created"`            //Unix seconds
+	Updated    int64       `json:"updated"`            //Unix seconds
 }
 
 // PeopleStore is a concurrency-safe gallery of known people backed by a JSON
@@ -61,9 +68,10 @@ func NewPeopleStore(path string, threshold float64) (*PeopleStore, error) {
 	return s, nil
 }
 
-// Assign groups descriptor under the best-matching known person, or creates a
-// new person if none is similar enough. It returns the person's UUID, whether a
-// new person was created and the similarity score of the match.
+// Assign groups descriptor under the best-matching known person (nearest stored
+// exemplar across all people), or creates a new person if none is similar
+// enough. Returns the person's UUID, whether a new person was created and the
+// similarity score of the match.
 func (s *PeopleStore) Assign(descriptor []float32) (string, bool, float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -71,7 +79,7 @@ func (s *PeopleStore) Assign(descriptor []float32) (string, bool, float64) {
 	bestIdx := -1
 	bestScore := -1.0
 	for i, p := range s.people {
-		score := cosineSimilarity(descriptor, p.Centroid)
+		score := p.bestSimilarity(descriptor)
 		if score > bestScore {
 			bestScore = score
 			bestIdx = i
@@ -81,25 +89,61 @@ func (s *PeopleStore) Assign(descriptor []float32) (string, bool, float64) {
 	now := time.Now().Unix()
 	if bestIdx >= 0 && bestScore >= s.threshold {
 		p := s.people[bestIdx]
-		mergeCentroid(p, descriptor)
+		p.addExemplar(descriptor)
+		p.Samples++
 		p.Updated = now
 		s.persist()
 		return p.UUID, false, roundTo(bestScore, 4)
 	}
 
 	//No sufficiently similar person; register a new one.
-	centroid := make([]float32, len(descriptor))
-	copy(centroid, descriptor)
 	p := &personRecord{
-		UUID:     newUUIDv4(),
-		Centroid: centroid,
-		Samples:  1,
-		Created:  now,
-		Updated:  now,
+		UUID:       newUUIDv4(),
+		Embeddings: [][]float32{cloneVec(descriptor)},
+		Samples:    1,
+		Created:    now,
+		Updated:    now,
 	}
 	s.people = append(s.people, p)
 	s.persist()
 	return p.UUID, true, roundTo(maxFloat(bestScore, 0), 4)
+}
+
+// bestSimilarity returns the highest cosine similarity between descriptor and
+// any of the person's stored exemplars.
+func (p *personRecord) bestSimilarity(descriptor []float32) float64 {
+	best := -1.0
+	for _, e := range p.Embeddings {
+		if sc := cosineSimilarity(descriptor, e); sc > best {
+			best = sc
+		}
+	}
+	return best
+}
+
+// addExemplar stores descriptor as a new identity exemplar. Below the cap it is
+// simply appended; once full, it replaces the most-similar existing exemplar so
+// the retained set stays diverse across poses rather than filling with
+// near-duplicates.
+func (p *personRecord) addExemplar(descriptor []float32) {
+	if len(p.Embeddings) < maxExemplarsPerPerson {
+		p.Embeddings = append(p.Embeddings, cloneVec(descriptor))
+		return
+	}
+	mostSimIdx, mostSim := 0, -2.0
+	for i, e := range p.Embeddings {
+		if sc := cosineSimilarity(descriptor, e); sc > mostSim {
+			mostSim = sc
+			mostSimIdx = i
+		}
+	}
+	p.Embeddings[mostSimIdx] = cloneVec(descriptor)
+}
+
+func cloneVec(v []float32) []float32 {
+	out := make([]float32, len(v))
+	copy(out, v)
+	return out
 }
 
 // List returns the UUIDs of all known people, newest last.
@@ -155,22 +199,6 @@ func (s *PeopleStore) Reset() error {
 	return nil
 }
 
-// mergeCentroid updates p's centroid with a new descriptor using an incremental
-// mean, then increments the sample count.
-func mergeCentroid(p *personRecord, descriptor []float32) {
-	if len(p.Centroid) != len(descriptor) {
-		//First descriptor wins the dimensionality if records were empty.
-		p.Centroid = append([]float32(nil), descriptor...)
-		p.Samples = 1
-		return
-	}
-	n := float64(p.Samples)
-	for i := range p.Centroid {
-		p.Centroid[i] = float32((float64(p.Centroid[i])*n + float64(descriptor[i])) / (n + 1))
-	}
-	p.Samples++
-}
-
 // persist writes the gallery to disk. Callers must hold s.mu. Errors are
 // swallowed deliberately: a failed write must not break recognition, and the
 // next successful Assign will re-persist.
@@ -205,6 +233,13 @@ func (s *PeopleStore) load() error {
 	var records []*personRecord
 	if err := json.Unmarshal(data, &records); err != nil {
 		return fmt.Errorf("corrupt people store %s: %w", s.path, err)
+	}
+	//Migrate legacy single-centroid records to the exemplar format.
+	for _, p := range records {
+		if len(p.Embeddings) == 0 && len(p.Centroid) > 0 {
+			p.Embeddings = [][]float32{p.Centroid}
+		}
+		p.Centroid = nil
 	}
 	s.people = records
 	return nil
