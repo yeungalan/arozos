@@ -102,6 +102,92 @@ func sceneTags(img image.Image) []Tag {
 	return tags
 }
 
+// attributeTags adds higher-level descriptive tags (nature, sky, indoor/outdoor,
+// time of day) derived from where colour and brightness sit in the frame. These
+// complement sceneTags and the object/people tags to describe the photo in more
+// detail, and need no ML model.
+func attributeTags(img image.Image) []Tag {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w == 0 || h == 0 {
+		return nil
+	}
+	const grid = 64
+	stepX := maxInt(w/grid, 1)
+	stepY := maxInt(h/grid, 1)
+
+	var total, green, warm, skyHits, topSamples float64
+	var sumLum float64
+	topCut := b.Min.Y + h/3
+	for y := b.Min.Y; y < b.Max.Y; y += stepY {
+		for x := b.Min.X; x < b.Max.X; x += stepX {
+			r, g, bl, _ := img.At(x, y).RGBA()
+			hue, sat, val := rgbToHSV(float64(r)/65535, float64(g)/65535, float64(bl)/65535)
+			total++
+			sumLum += val
+			if sat > 0.18 && val > 0.15 && hue >= 70 && hue <= 175 {
+				green++ //foliage / grass / trees
+			}
+			if sat > 0.15 && val > 0.3 && (hue < 50 || hue >= 350) {
+				warm++ //warm tones (skin, indoor incandescent, sunset)
+			}
+			if y < topCut {
+				topSamples++
+				if val > 0.55 && hue >= 180 && hue <= 250 && sat > 0.1 {
+					skyHits++ //blue sky in the upper frame
+				}
+			}
+		}
+	}
+	if total == 0 {
+		return nil
+	}
+	greenFrac := green / total
+	avgLum := sumLum / total
+	skyFrac := 0.0
+	if topSamples > 0 {
+		skyFrac = skyHits / topSamples
+	}
+
+	tags := []Tag{}
+	outdoor := false
+	if greenFrac > 0.18 {
+		tags = append(tags, Tag{Label: "nature", Confidence: roundTo(capConfidence(0.5+greenFrac), 3), Source: "scene"})
+		tags = append(tags, Tag{Label: "greenery", Confidence: roundTo(capConfidence(0.5+greenFrac), 3), Source: "scene"})
+		outdoor = true
+	}
+	if skyFrac > 0.25 {
+		tags = append(tags, Tag{Label: "sky", Confidence: roundTo(capConfidence(0.4+skyFrac), 3), Source: "scene"})
+		outdoor = true
+	}
+
+	switch {
+	case avgLum < 0.22:
+		tags = append(tags, Tag{Label: "night", Confidence: roundTo(capConfidence(1-avgLum), 3), Source: "scene"})
+	case outdoor && avgLum > 0.45:
+		tags = append(tags, Tag{Label: "daylight", Confidence: 0.7, Source: "scene"})
+	}
+
+	if outdoor {
+		tags = append(tags, Tag{Label: "outdoor", Confidence: 0.7, Source: "scene"})
+	} else if avgLum >= 0.22 && warm/total > 0.35 {
+		//Warm, enclosed, no sky/foliage: likely an indoor scene.
+		tags = append(tags, Tag{Label: "indoor", Confidence: 0.6, Source: "scene"})
+	}
+	return tags
+}
+
+// capConfidence clamps a confidence score to a sensible <1.0 maximum.
+func capConfidence(v float64) float64 {
+	if v > 0.99 {
+		return 0.99
+	}
+	if v < 0 {
+		return 0
+	}
+	return v
+}
+
 // rgbToHSV converts 0-1 RGB to hue (0-360), saturation (0-1) and value (0-1).
 func rgbToHSV(r, g, b float64) (float64, float64, float64) {
 	max := math.Max(r, math.Max(g, b))

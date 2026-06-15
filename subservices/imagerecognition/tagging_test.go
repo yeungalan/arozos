@@ -77,6 +77,55 @@ func TestSceneTagsDominantHue(t *testing.T) {
 	}
 }
 
+func TestAttributeTags(t *testing.T) {
+	green := solidImage(80, 80, color.RGBA{40, 150, 50, 255})
+	if tags := attributeTags(green); !hasTag(tags, "nature") || !hasTag(tags, "outdoor") {
+		t.Errorf("green image: expected nature+outdoor in %+v", tags)
+	}
+	dark := solidImage(80, 80, color.RGBA{10, 10, 12, 255})
+	if tags := attributeTags(dark); !hasTag(tags, "night") {
+		t.Errorf("dark image: expected night in %+v", tags)
+	}
+	//Confidences must stay below 1.0.
+	for _, tag := range attributeTags(green) {
+		if tag.Confidence > 1.0 {
+			t.Errorf("confidence %v exceeds 1.0 for %q", tag.Confidence, tag.Label)
+		}
+	}
+}
+
+func TestCompositionTags(t *testing.T) {
+	tests := []struct {
+		name  string
+		faces []Face
+		want  string
+	}{
+		{"single face is portrait", []Face{{Box: Box{0, 0, 10, 10}}}, "portrait"},
+		{"two faces", []Face{{Box: Box{0, 0, 10, 10}}, {Box: Box{20, 0, 10, 10}}}, "two people"},
+		{"four faces is a group", []Face{{}, {}, {}, {}}, "group photo"},
+		{"many faces is a crowd", make([]Face, 8), "crowd"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := compositionTags(tc.faces, 100, 100); !hasTag(got, tc.want) {
+				t.Errorf("got %+v, want tag %q", got, tc.want)
+			}
+		})
+	}
+
+	//A face filling much of the frame is a close-up.
+	big := []Face{{Box: Box{0, 0, 60, 60}}}
+	tags := compositionTags(big, 100, 100)
+	if !hasTag(tags, "close-up") {
+		t.Errorf("large face: expected close-up in %+v", tags)
+	}
+	for _, tag := range tags {
+		if tag.Confidence > 1.0 {
+			t.Errorf("confidence %v exceeds 1.0", tag.Confidence)
+		}
+	}
+}
+
 func TestDedupeTags(t *testing.T) {
 	in := []Tag{
 		{Label: "person", Confidence: 0.6},

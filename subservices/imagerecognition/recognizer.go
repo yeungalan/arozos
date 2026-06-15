@@ -113,10 +113,13 @@ func (r *Recognizer) detectFaces(img image.Image) []Face {
 	return r.detector.detect(img)
 }
 
-// Tag returns descriptive tags for img: scene/colour tags, object-class tags
-// when an ML detector is active, plus a people tag derived from face detection.
+// Tag returns descriptive tags for img: scene/colour tags, higher-level scene
+// attributes (nature/sky/indoor/night), object-class tags when an ML detector
+// is active, and people/composition tags from face detection.
 func (r *Recognizer) Tag(img image.Image) []Tag {
+	b := img.Bounds()
 	tags := sceneTags(img)
+	tags = append(tags, attributeTags(img)...)
 
 	if r.engine != nil && r.engine.Objects != nil {
 		if dets, err := r.engine.Objects.Detect(img); err != nil {
@@ -126,12 +129,43 @@ func (r *Recognizer) Tag(img image.Image) []Tag {
 		}
 	}
 
-	//Face detection yields a useful people tag in every configuration.
+	//Face detection yields people + composition tags in every configuration.
 	if faces := r.detectFaces(img); len(faces) > 0 {
 		tags = append(tags, peopleTag(len(faces)))
+		tags = append(tags, compositionTags(faces, b.Dx(), b.Dy())...)
 	}
 
 	return dedupeTags(tags)
+}
+
+// compositionTags describes the framing/grouping of the people in the photo.
+func compositionTags(faces []Face, w, h int) []Tag {
+	n := len(faces)
+	if n == 0 || w == 0 || h == 0 {
+		return nil
+	}
+	tags := []Tag{}
+	switch {
+	case n == 1:
+		tags = append(tags, Tag{Label: "portrait", Confidence: 0.7, Source: "scene"})
+	case n == 2:
+		tags = append(tags, Tag{Label: "two people", Confidence: 0.75, Source: "scene"})
+	case n <= 5:
+		tags = append(tags, Tag{Label: "group photo", Confidence: 0.75, Source: "scene"})
+	default:
+		tags = append(tags, Tag{Label: "crowd", Confidence: 0.85, Source: "scene"})
+	}
+	//A large face relative to the frame means a close-up.
+	maxFrac := 0.0
+	for _, f := range faces {
+		if frac := float64(f.Box.Width*f.Box.Height) / float64(w*h); frac > maxFrac {
+			maxFrac = frac
+		}
+	}
+	if maxFrac > 0.12 {
+		tags = append(tags, Tag{Label: "close-up", Confidence: roundTo(capConfidence(0.6+maxFrac), 3), Source: "scene"})
+	}
+	return tags
 }
 
 // DetectFaces returns the bounding boxes of faces found in img (no identity
