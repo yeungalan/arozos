@@ -34,8 +34,11 @@ var (
 	ortInitErr  error
 )
 
-// objectModelConfig describes a tiny-yolov2 style object detector.
+// objectModelConfig describes an object detector. "type" selects the decoder:
+// "yolov2" (anchor grid, default) or "yolov3tiny" (ONNX model-zoo tiny-yolov3
+// with built-in NMS). Anchors/GridSize apply only to yolov2.
 type objectModelConfig struct {
+	Type          string    `json:"type"`
 	Model         string    `json:"model"`
 	InputName     string    `json:"inputName"`
 	OutputName    string    `json:"outputName"`
@@ -46,6 +49,16 @@ type objectModelConfig struct {
 	Classes       []string  `json:"classes"`
 	ConfThreshold float64   `json:"confThreshold"`
 	IoUThreshold  float64   `json:"iouThreshold"`
+}
+
+// newObjectDetector builds the object detector named by cfg.Type.
+func newObjectDetector(dir string, cfg objectModelConfig) (ObjectDetector, error) {
+	switch cfg.Type {
+	case "yolov3tiny":
+		return newONNXYolov3Detector(dir, cfg)
+	default:
+		return newONNXObjectDetector(dir, cfg)
+	}
 }
 
 // onnxModelConfig is the on-disk model configuration (models/model.json).
@@ -82,12 +95,12 @@ func newMLEngine(dataDir string, lg *svcLogger) *Engine {
 	engine := &Engine{Backend: "builtin"}
 
 	if cfg.Object != nil {
-		if det, derr := newONNXObjectDetector(modelsDir, *cfg.Object); derr != nil {
+		if det, derr := newObjectDetector(modelsDir, *cfg.Object); derr != nil {
 			lg.Err("ONNX: object detector unavailable, tagging falls back to scene tagger", derr)
 		} else {
 			engine.Objects = det
-			engine.Backend = "onnx-yolo"
-			lg.logf("ONNX: YOLO object detector active (%s)", cfg.Object.Model)
+			engine.Backend = det.Name()
+			lg.logf("ONNX: object detector active (%s, %s)", det.Name(), cfg.Object.Model)
 		}
 	}
 

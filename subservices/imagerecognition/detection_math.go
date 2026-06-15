@@ -20,6 +20,12 @@ import (
 // image together with the scale factor and x/y padding applied, which callers
 // use to map detections back to original-image coordinates.
 func letterbox(src image.Image, size int) (*image.RGBA, float64, int, int) {
+	return letterboxPad(src, size, 114)
+}
+
+// letterboxPad is letterbox with a configurable padding colour (YOLO uses 114;
+// the ONNX model-zoo tiny-yolov3 preprocessing uses 128).
+func letterboxPad(src image.Image, size int, pad uint8) (*image.RGBA, float64, int, int) {
 	b := src.Bounds()
 	sw, sh := b.Dx(), b.Dy()
 	if sw == 0 || sh == 0 {
@@ -32,12 +38,11 @@ func letterbox(src image.Image, size int) (*image.RGBA, float64, int, int) {
 	padY := (size - nh) / 2
 
 	dst := image.NewRGBA(image.Rect(0, 0, size, size))
-	//Fill with mid-grey (114) as is conventional for YOLO letterboxing.
 	for i := range dst.Pix {
 		if (i % 4) == 3 {
 			dst.Pix[i] = 255
 		} else {
-			dst.Pix[i] = 114
+			dst.Pix[i] = pad
 		}
 	}
 	resized := resizeImage(src, nw, nh)

@@ -5,7 +5,7 @@ linux/amd64, and all permissively licensed — see `NOTICE.md`):
 
 | Capability | Model | Builtin fallback (default build) |
 |------------|-------|----------------------------------|
-| Object tags | `tinyyolov2-8.onnx` (YOLO, VOC) | scene/colour tags + a person tag |
+| Object tags | `yolov3tiny.onnx` (tiny-yolov3, COCO-80) | scene/colour + composition tags + a person tag |
 | **Face detection** | `yunet.onnx` (YuNet, + 5 landmarks) | pigo cascade |
 | **Face recognition** | `sface.onnx` (SFace, 128-d embedding) | appearance/HOG descriptor |
 

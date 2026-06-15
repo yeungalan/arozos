@@ -5,7 +5,7 @@ commercially (consistent with the repository's dependency policy).
 
 | File | Purpose | Source | License |
 |------|---------|--------|---------|
-| `tinyyolov2-8.onnx` | Object detection (tags) | [ONNX Model Zoo – tiny-yolov2](https://github.com/onnx/models) | Public domain (PJReddie YOLO) |
+| `yolov3tiny.onnx` | Object detection — COCO 80 classes (tags) | [ONNX Model Zoo – tiny-yolov3](https://github.com/onnx/models) | Public domain (PJReddie YOLO) |
 | `yunet.onnx` | Face detection + landmarks | [OpenCV Zoo – face_detection_yunet](https://github.com/opencv/opencv_zoo) (`face_detection_yunet_2023mar.onnx`) | MIT © 2020 Shiqi Yu |
 | `sface.onnx` | Face recognition embedding | [OpenCV Zoo – face_recognition_sface](https://github.com/opencv/opencv_zoo) (`face_recognition_sface_2021dec.onnx`) | Apache-2.0 |
 | `onnxruntime-linux-x64-1.26.0/` | ONNX Runtime (linux/amd64) | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime) | MIT (see its `LICENSE`) |

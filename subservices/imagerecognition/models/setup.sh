@@ -24,10 +24,10 @@ tar -xzf "$DIR/ort.tgz" -C "$DIR"
 rm -f "$DIR/ort.tgz"
 echo "    lib: $DIR/onnxruntime-${OS}-${ORT_VERSION}/lib/libonnxruntime.so"
 
-echo "==> tiny-yolov2 object model (VOC, ONNX model zoo, public domain)"
-curl -fsSL -o "$DIR/tinyyolov2-8.onnx" \
-    "https://github.com/onnx/models/raw/main/validated/vision/object_detection_segmentation/tiny-yolov2/model/tinyyolov2-8.onnx"
-echo "    object: $DIR/tinyyolov2-8.onnx ($(wc -c < "$DIR/tinyyolov2-8.onnx") bytes)"
+echo "==> tiny-yolov3 object model (COCO-80, ONNX model zoo, public domain)"
+curl -fsSL -o "$DIR/yolov3tiny.onnx" \
+    "https://github.com/onnx/models/raw/main/validated/vision/object_detection_segmentation/tiny-yolov3/model/tiny-yolov3-11.onnx"
+echo "    object: $DIR/yolov3tiny.onnx ($(wc -c < "$DIR/yolov3tiny.onnx") bytes)"
 
 echo "==> YuNet face detector (OpenCV Zoo, MIT)"
 curl -fsSL -o "$DIR/yunet.onnx" \

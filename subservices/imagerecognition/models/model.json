@@ -1,20 +1,27 @@
 {
   "sharedLibrary": "onnxruntime-linux-x64-1.26.0/lib/libonnxruntime.so.1.26.0",
   "object": {
-    "model": "tinyyolov2-8.onnx",
-    "inputName": "image",
-    "outputName": "grid",
+    "type": "yolov3tiny",
+    "model": "yolov3tiny.onnx",
+    "inputName": "input_1",
     "inputSize": 416,
-    "gridSize": 13,
-    "numClasses": 20,
-    "anchors": [1.08, 1.19, 3.42, 4.41, 6.63, 11.38, 9.42, 5.11, 16.62, 10.52],
+    "numClasses": 80,
     "classes": [
-      "aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat",
-      "chair", "cow", "diningtable", "dog", "horse", "motorbike", "person",
-      "pottedplant", "sheep", "sofa", "train", "tvmonitor"
+      "person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train",
+      "truck", "boat", "traffic light", "fire hydrant", "stop sign",
+      "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
+      "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag",
+      "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite",
+      "baseball bat", "baseball glove", "skateboard", "surfboard",
+      "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon",
+      "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot",
+      "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant",
+      "bed", "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote",
+      "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
+      "refrigerator", "book", "clock", "vase", "scissors", "teddy bear",
+      "hair drier", "toothbrush"
     ],
-    "confThreshold": 0.3,
-    "iouThreshold": 0.45
+    "confThreshold": 0.4
   },
   "faceDetection": {
     "model": "yunet.onnx",
