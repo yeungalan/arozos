@@ -1,17 +1,32 @@
 {
-  "objectModel": "tinyyolov2-8.onnx",
-  "inputName": "image",
-  "outputName": "grid",
-  "inputSize": 416,
-  "gridSize": 13,
-  "numClasses": 20,
-  "anchors": [1.08, 1.19, 3.42, 4.41, 6.63, 11.38, 9.42, 5.11, 16.62, 10.52],
-  "classes": [
-    "aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat",
-    "chair", "cow", "diningtable", "dog", "horse", "motorbike", "person",
-    "pottedplant", "sheep", "sofa", "train", "tvmonitor"
-  ],
-  "confThreshold": 0.3,
-  "iouThreshold": 0.45,
-  "sharedLibrary": "onnxruntime-linux-x64-1.26.0/lib/libonnxruntime.so.1.26.0"
+  "sharedLibrary": "onnxruntime-linux-x64-1.26.0/lib/libonnxruntime.so.1.26.0",
+  "object": {
+    "model": "tinyyolov2-8.onnx",
+    "inputName": "image",
+    "outputName": "grid",
+    "inputSize": 416,
+    "gridSize": 13,
+    "numClasses": 20,
+    "anchors": [1.08, 1.19, 3.42, 4.41, 6.63, 11.38, 9.42, 5.11, 16.62, 10.52],
+    "classes": [
+      "aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat",
+      "chair", "cow", "diningtable", "dog", "horse", "motorbike", "person",
+      "pottedplant", "sheep", "sofa", "train", "tvmonitor"
+    ],
+    "confThreshold": 0.3,
+    "iouThreshold": 0.45
+  },
+  "faceDetection": {
+    "model": "yunet.onnx",
+    "inputName": "input",
+    "inputSize": 640,
+    "scoreThreshold": 0.7,
+    "nmsThreshold": 0.3
+  },
+  "faceRecognition": {
+    "model": "sface.onnx",
+    "inputName": "data",
+    "outputName": "fc1",
+    "matchThreshold": 0.363
+  }
 }

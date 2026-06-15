@@ -131,6 +131,54 @@ func nonMaxSuppression(dets []ObjectDetection, iouThreshold float64) []ObjectDet
 	return kept
 }
 
+// faceNMS applies non-maximum suppression to detected faces (single class),
+// keeping the highest-confidence box in each overlapping cluster.
+func faceNMS(faces []Face, iouThreshold float64) []Face {
+	if len(faces) == 0 {
+		return faces
+	}
+	sorted := make([]Face, len(faces))
+	copy(sorted, faces)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].Confidence > sorted[j].Confidence
+	})
+	kept := make([]Face, 0, len(sorted))
+	suppressed := make([]bool, len(sorted))
+	for i := range sorted {
+		if suppressed[i] {
+			continue
+		}
+		kept = append(kept, sorted[i])
+		for j := i + 1; j < len(sorted); j++ {
+			if !suppressed[j] && iou(sorted[i].Box, sorted[j].Box) > iouThreshold {
+				suppressed[j] = true
+			}
+		}
+	}
+	return kept
+}
+
+// clampBoxToImage clips a box to the image bounds, returning a zero-size box if
+// it falls entirely outside.
+func clampBoxToImage(box Box, w, h int) Box {
+	x := clampInt(box.X, 0, w)
+	y := clampInt(box.Y, 0, h)
+	x2 := clampInt(box.X+box.Width, 0, w)
+	y2 := clampInt(box.Y+box.Height, 0, h)
+	return Box{X: x, Y: y, Width: x2 - x, Height: y2 - y}
+}
+
+// clamp01 clamps v to the [0,1] range.
+func clamp01(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
 func maxInt(a, b int) int {
 	if a > b {
 		return a

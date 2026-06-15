@@ -59,6 +59,8 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		"name":         s.info.Name,
 		"version":      s.version,
 		"backend":      s.recognizer.backendName(),
+		"faceDetector": s.recognizer.faceDetectorName(),
+		"faceEmbedder": s.recognizer.faceEmbedderName(),
 		"knownPeople":  s.recognizer.people.Count(),
 		"capabilities": []string{"tagging", "face-detection", "face-recognition"},
 	})

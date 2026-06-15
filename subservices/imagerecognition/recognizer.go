@@ -12,23 +12,23 @@ import (
 	recognizer.go
 
 	Orchestrates the full pipeline: scene/object tagging and face detection ->
-	embedding -> persistent identity grouping. It hides whether the optional ML
-	engine is active behind a stable result shape.
+	embedding -> persistent identity grouping. It hides which backends are active
+	(DNN via ONNX, or the builtin pure-Go fallbacks) behind a stable result shape.
+
+	Face detection prefers the YuNet DNN detector (accurate, with landmarks) and
+	falls back to the pigo cascade. Recognition prefers the SFace embedding (with
+	landmark alignment) and falls back to the builtin appearance descriptor.
 */
 
-// defaultFaceSimilarityThreshold is the minimum cosine similarity for two face
-// descriptors to be treated as the same person. Tunable via the
-// IMGRECOG_FACE_THRESHOLD environment variable.
-//
-// It is chosen for the builtin descriptor: empirically the same face across
-// lighting/jitter scores ~0.97-0.99 while different people score <0.78, so 0.80
-// separates them with margin. The optional ONNX face-embedding backend uses a
-// learned embedding where this threshold is likewise effective.
+// defaultFaceSimilarityThreshold is the cosine-similarity cut-off for the
+// builtin descriptor (same face across lighting/jitter ~0.97-0.99, different
+// people <0.78). The SFace embedder supplies its own, lower threshold. Override
+// with IMGRECOG_FACE_THRESHOLD.
 const defaultFaceSimilarityThreshold = 0.80
 
 // Recognizer is the top level image-recognition service object.
 type Recognizer struct {
-	detector *faceDetector
+	detector *faceDetector //builtin pigo fallback
 	engine   *Engine
 	people   *PeopleStore
 	lg       *svcLogger
@@ -44,7 +44,12 @@ func NewRecognizer(dataDir string, lg *svcLogger) (*Recognizer, error) {
 
 	engine := newMLEngine(dataDir, lg)
 
+	//Pick the similarity threshold appropriate to the active embedder. An
+	//explicit env override always wins.
 	threshold := defaultFaceSimilarityThreshold
+	if engine != nil && engine.FaceEmbedder != nil {
+		threshold = engine.FaceEmbedder.MatchThreshold()
+	}
 	if v := os.Getenv("IMGRECOG_FACE_THRESHOLD"); v != "" {
 		if parsed, perr := strconv.ParseFloat(v, 64); perr == nil {
 			threshold = parsed
@@ -60,13 +65,10 @@ func NewRecognizer(dataDir string, lg *svcLogger) (*Recognizer, error) {
 		return nil, err
 	}
 
-	lg.logf("recognizer ready (face threshold %.2f, %d known people)", threshold, people.Count())
-	return &Recognizer{
-		detector: detector,
-		engine:   engine,
-		people:   people,
-		lg:       lg,
-	}, nil
+	r := &Recognizer{detector: detector, engine: engine, people: people, lg: lg}
+	lg.logf("recognizer ready (face detector %q, embedder %q, threshold %.3f, %d known people)",
+		r.faceDetectorName(), r.faceEmbedderName(), threshold, people.Count())
+	return r, nil
 }
 
 // Close releases backend resources.
@@ -84,6 +86,33 @@ func (r *Recognizer) backendName() string {
 	return "builtin-scene"
 }
 
+func (r *Recognizer) faceDetectorName() string {
+	if r.engine != nil && r.engine.FaceDetector != nil {
+		return r.engine.FaceDetector.Name()
+	}
+	return "pigo"
+}
+
+func (r *Recognizer) faceEmbedderName() string {
+	if r.engine != nil && r.engine.FaceEmbedder != nil {
+		return r.engine.FaceEmbedder.Name()
+	}
+	return "builtin-descriptor"
+}
+
+// detectFaces runs the best available face detector, falling back to pigo if the
+// DNN detector errors.
+func (r *Recognizer) detectFaces(img image.Image) []Face {
+	if r.engine != nil && r.engine.FaceDetector != nil {
+		faces, err := r.engine.FaceDetector.DetectFaces(img)
+		if err == nil {
+			return faces
+		}
+		r.lg.Err("DNN face detector failed, using pigo", err)
+	}
+	return r.detector.detect(img)
+}
+
 // Tag returns descriptive tags for img: scene/colour tags, object-class tags
 // when an ML detector is active, plus a people tag derived from face detection.
 func (r *Recognizer) Tag(img image.Image) []Tag {
@@ -97,8 +126,8 @@ func (r *Recognizer) Tag(img image.Image) []Tag {
 		}
 	}
 
-	//Even without an object model, face detection yields a useful people tag.
-	if faces := r.detector.detect(img); len(faces) > 0 {
+	//Face detection yields a useful people tag in every configuration.
+	if faces := r.detectFaces(img); len(faces) > 0 {
 		tags = append(tags, peopleTag(len(faces)))
 	}
 
@@ -108,15 +137,15 @@ func (r *Recognizer) Tag(img image.Image) []Tag {
 // DetectFaces returns the bounding boxes of faces found in img (no identity
 // grouping is performed).
 func (r *Recognizer) DetectFaces(img image.Image) []Face {
-	return r.detector.detect(img)
+	return r.detectFaces(img)
 }
 
 // RecognizeFaces detects faces, computes an identity embedding for each and
 // groups it under a persistent person UUID, creating new people as needed.
 func (r *Recognizer) RecognizeFaces(img image.Image) []Face {
-	faces := r.detector.detect(img)
+	faces := r.detectFaces(img)
 	for i := range faces {
-		emb := r.embedFace(img, faces[i].Box)
+		emb := r.embedFace(img, faces[i])
 		uuid, isNew, score := r.people.Assign(emb)
 		faces[i].PersonUUID = uuid
 		faces[i].NewPerson = isNew
@@ -128,35 +157,42 @@ func (r *Recognizer) RecognizeFaces(img image.Image) []Face {
 // Analyze runs the full pipeline and returns the combined result.
 func (r *Recognizer) Analyze(img image.Image) *AnalyzeResult {
 	b := img.Bounds()
+	faces := r.RecognizeFaces(img)
 	return &AnalyzeResult{
 		Width:   b.Dx(),
 		Height:  b.Dy(),
 		Tags:    r.Tag(img),
-		Faces:   r.RecognizeFaces(img),
+		Faces:   faces,
 		Backend: r.backendName(),
 	}
 }
 
-// embedFace produces an identity vector for the given face region, preferring
-// the learned ML embedder and falling back to the builtin descriptor.
-func (r *Recognizer) embedFace(img image.Image, box Box) []float32 {
-	if r.engine != nil && r.engine.Faces != nil {
-		margin := box.Width / 5
-		crop := cropImage(img, Box{
-			X:      box.X - margin,
-			Y:      box.Y - margin,
-			Width:  box.Width + 2*margin,
-			Height: box.Height + 2*margin,
-		})
-		emb, err := r.engine.Faces.Embed(crop)
+// embedFace produces an identity vector for a detected face, preferring the
+// learned ML embedder (with landmark alignment) and falling back to the builtin
+// descriptor.
+func (r *Recognizer) embedFace(img image.Image, face Face) []float32 {
+	if r.engine != nil && r.engine.FaceEmbedder != nil {
+		var crop image.Image
+		if len(face.Landmarks) >= 5 {
+			crop = alignFace(img, face.Landmarks) //similarity-warp to 112x112
+		} else {
+			//No landmarks: feed an expanded, centred crop.
+			margin := face.Box.Width / 5
+			crop = cropImage(img, Box{
+				X:      face.Box.X - margin,
+				Y:      face.Box.Y - margin,
+				Width:  face.Box.Width + 2*margin,
+				Height: face.Box.Height + 2*margin,
+			})
+		}
+		emb, err := r.engine.FaceEmbedder.Embed(crop)
 		if err != nil {
 			r.lg.Err("face embedder failed, using builtin descriptor", err)
 		} else if len(emb) > 0 {
-			l2Normalize(emb)
-			return emb
+			return emb //already L2-normalised by the embedder
 		}
 	}
-	return describeFace(img, box)
+	return describeFace(img, face.Box)
 }
 
 // objectTags converts raw object detections into deduplicated tags.
@@ -181,7 +217,6 @@ func peopleTag(faceCount int) Tag {
 	if faceCount > 1 {
 		label = "people"
 	}
-	//More faces -> higher confidence this is a people photo, capped at 0.99.
 	conf := 0.5 + 0.1*float64(faceCount)
 	if conf > 0.99 {
 		conf = 0.99

@@ -17,19 +17,16 @@ import (
 /*
 	onnx_backend.go  (build tag: onnx)
 
-	Real machine-learning object detection via ONNX Runtime, enabled by building
-	the subservice with -tags onnx and providing a model. It implements a
-	YOLO-style detector (validated against the tiny-yolov2 VOC model from the
-	ONNX model zoo) so image tagging returns concrete object classes such as
-	"person", "car" or "dog".
+	Real machine-learning backends via ONNX Runtime, enabled by building with
+	-tags onnx. Configured by models/model.json, which has up to three sections:
 
-	The model, class list and anchors are described by models/model.json; the
-	ONNX Runtime shared library is located via the ONNXRUNTIME_LIB environment
-	variable or model.json's "sharedLibrary" field. When anything required is
-	missing the engine degrades gracefully to the builtin scene tagger, so a
-	-tags onnx build still runs everywhere.
+	  "object"          – YOLO-style object detector (tiny-yolov2) for rich tags
+	  "faceDetection"   – YuNet DNN face detector (boxes + 5 landmarks)
+	  "faceRecognition" – SFace face-embedding model for identity grouping
 
-	See models/README.md and models/setup.sh for fetching the runtime + model.
+	Each section is optional; a missing model degrades gracefully to the builtin
+	pure-Go path for that capability. The ONNX Runtime shared library is located
+	via ONNXRUNTIME_LIB or model.json's "sharedLibrary" field.
 */
 
 var (
@@ -37,29 +34,36 @@ var (
 	ortInitErr  error
 )
 
-// onnxModelConfig is the on-disk description of the object-detection model.
-type onnxModelConfig struct {
-	ObjectModel   string    `json:"objectModel"`   //ONNX file name (relative to models dir)
-	InputName     string    `json:"inputName"`     //Model input tensor name
-	OutputName    string    `json:"outputName"`    //Model output tensor name
-	InputSize     int       `json:"inputSize"`     //Square input edge, e.g. 416
-	GridSize      int       `json:"gridSize"`      //Detection grid edge, e.g. 13
-	NumClasses    int       `json:"numClasses"`    //Number of object classes
-	Anchors       []float64 `json:"anchors"`       //Flat anchor pairs (grid units)
-	Classes       []string  `json:"classes"`       //Class label names
-	ConfThreshold float64   `json:"confThreshold"` //Minimum score to report a detection
-	IoUThreshold  float64   `json:"iouThreshold"`  //NMS overlap threshold
-	SharedLibrary string    `json:"sharedLibrary"` //Optional path to libonnxruntime
+// objectModelConfig describes a tiny-yolov2 style object detector.
+type objectModelConfig struct {
+	Model         string    `json:"model"`
+	InputName     string    `json:"inputName"`
+	OutputName    string    `json:"outputName"`
+	InputSize     int       `json:"inputSize"`
+	GridSize      int       `json:"gridSize"`
+	NumClasses    int       `json:"numClasses"`
+	Anchors       []float64 `json:"anchors"`
+	Classes       []string  `json:"classes"`
+	ConfThreshold float64   `json:"confThreshold"`
+	IoUThreshold  float64   `json:"iouThreshold"`
 }
 
-// newMLEngine loads the ONNX object detector if a model is configured,
-// otherwise returns the builtin engine.
+// onnxModelConfig is the on-disk model configuration (models/model.json).
+type onnxModelConfig struct {
+	SharedLibrary   string             `json:"sharedLibrary"`
+	Object          *objectModelConfig `json:"object"`
+	FaceDetection   *yuNetConfig       `json:"faceDetection"`
+	FaceRecognition *sFaceConfig       `json:"faceRecognition"`
+}
+
+// newMLEngine loads whichever ONNX models are configured, falling back to the
+// builtin path for any that are absent or fail to load.
 func newMLEngine(dataDir string, lg *svcLogger) *Engine {
 	modelsDir := resolveModelsDir(dataDir)
 	cfgPath := filepath.Join(modelsDir, "model.json")
 	raw, err := os.ReadFile(cfgPath)
 	if err != nil {
-		lg.Info("ONNX: no models/model.json found; using builtin scene tagging (run models/setup.sh to enable YOLO).")
+		lg.Info("ONNX: no models/model.json found; using builtin path (run models/setup.sh to enable models).")
 		return &Engine{Backend: "builtin"}
 	}
 
@@ -69,17 +73,47 @@ func newMLEngine(dataDir string, lg *svcLogger) *Engine {
 		return &Engine{Backend: "builtin"}
 	}
 
-	det, err := newONNXObjectDetector(modelsDir, cfg, lg)
-	if err != nil {
-		lg.Err("ONNX: object detector unavailable, using builtin", err)
+	//Initialise ONNX Runtime once, resolving the shared library.
+	if err := ensureORTFromConfig(modelsDir, cfg.SharedLibrary); err != nil {
+		lg.Err("ONNX Runtime unavailable, using builtin (set ONNXRUNTIME_LIB)", err)
 		return &Engine{Backend: "builtin"}
 	}
-	lg.logf("ONNX: YOLO object detector active (%s)", cfg.ObjectModel)
-	return &Engine{Objects: det, Backend: "onnx-yolo"}
+
+	engine := &Engine{Backend: "builtin"}
+
+	if cfg.Object != nil {
+		if det, derr := newONNXObjectDetector(modelsDir, *cfg.Object); derr != nil {
+			lg.Err("ONNX: object detector unavailable, tagging falls back to scene tagger", derr)
+		} else {
+			engine.Objects = det
+			engine.Backend = "onnx-yolo"
+			lg.logf("ONNX: YOLO object detector active (%s)", cfg.Object.Model)
+		}
+	}
+
+	if cfg.FaceDetection != nil {
+		if fd, derr := newONNXFaceDetector(modelsDir, *cfg.FaceDetection); derr != nil {
+			lg.Err("ONNX: face detector unavailable, falling back to pigo", derr)
+		} else {
+			engine.FaceDetector = fd
+			lg.logf("ONNX: YuNet face detector active (%s)", cfg.FaceDetection.Model)
+		}
+	}
+
+	if cfg.FaceRecognition != nil {
+		if fe, derr := newONNXFaceEmbedder(modelsDir, *cfg.FaceRecognition); derr != nil {
+			lg.Err("ONNX: face embedder unavailable, falling back to builtin descriptor", derr)
+		} else {
+			engine.FaceEmbedder = fe
+			lg.logf("ONNX: SFace face embedder active (%s, threshold %.3f)", cfg.FaceRecognition.Model, fe.MatchThreshold())
+		}
+	}
+
+	return engine
 }
 
-// resolveModelsDir finds the models directory: ONNX_MODELS env, else a "models"
-// folder next to the executable, else ./models.
+// resolveModelsDir finds the models directory: IMGRECOG_MODELS env, else a
+// "models" folder next to the executable, else ./models.
 func resolveModelsDir(dataDir string) string {
 	if env := os.Getenv("IMGRECOG_MODELS"); env != "" {
 		return env
@@ -93,9 +127,17 @@ func resolveModelsDir(dataDir string) string {
 	return filepath.Join(".", "models")
 }
 
-// ensureORT initialises the ONNX Runtime environment exactly once.
-func ensureORT(libPath string) error {
+// ensureORTFromConfig initialises ONNX Runtime once, resolving the shared
+// library from ONNXRUNTIME_LIB or the model.json path (relative to dir).
+func ensureORTFromConfig(dir, sharedLibrary string) error {
 	ortInitOnce.Do(func() {
+		libPath := sharedLibrary
+		if env := os.Getenv("ONNXRUNTIME_LIB"); env != "" {
+			libPath = env
+		}
+		if libPath != "" && !filepath.IsAbs(libPath) {
+			libPath = filepath.Join(dir, libPath)
+		}
 		if libPath != "" {
 			ort.SetSharedLibraryPath(libPath)
 		}
@@ -104,69 +146,45 @@ func ensureORT(libPath string) error {
 	return ortInitErr
 }
 
-// onnxObjectDetector runs a tiny-yolov2 style model through ONNX Runtime.
+// ── Object detector (tiny-yolov2) ────────────────────────────────────────────
+
 type onnxObjectDetector struct {
-	mu      sync.Mutex //ONNX Runtime sessions are not safe for concurrent Run
+	mu      sync.Mutex
 	session *ort.AdvancedSession
 	input   *ort.Tensor[float32]
 	output  *ort.Tensor[float32]
-	cfg     onnxModelConfig
+	cfg     objectModelConfig
 }
 
-func newONNXObjectDetector(dir string, cfg onnxModelConfig, lg *svcLogger) (*onnxObjectDetector, error) {
+func newONNXObjectDetector(dir string, cfg objectModelConfig) (*onnxObjectDetector, error) {
 	if cfg.InputSize <= 0 || cfg.GridSize <= 0 || cfg.NumClasses <= 0 || len(cfg.Anchors) < 2 {
-		return nil, fmt.Errorf("incomplete model.json (inputSize/gridSize/numClasses/anchors)")
+		return nil, fmt.Errorf("incomplete object model config")
 	}
-
-	libPath := cfg.SharedLibrary
-	if env := os.Getenv("ONNXRUNTIME_LIB"); env != "" {
-		libPath = env
-	}
-	if libPath != "" && !filepath.IsAbs(libPath) {
-		libPath = filepath.Join(dir, libPath)
-	}
-	if err := ensureORT(libPath); err != nil {
-		return nil, fmt.Errorf("ONNX Runtime init failed (set ONNXRUNTIME_LIB): %w", err)
-	}
-
-	modelPath := filepath.Join(dir, cfg.ObjectModel)
+	modelPath := filepath.Join(dir, cfg.Model)
 	if _, err := os.Stat(modelPath); err != nil {
-		return nil, fmt.Errorf("model file missing: %w", err)
+		return nil, err
 	}
 
 	numAnchors := len(cfg.Anchors) / 2
 	outChannels := (5 + cfg.NumClasses) * numAnchors
 
-	inputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(1, 3, int64(cfg.InputSize), int64(cfg.InputSize)))
+	input, err := ort.NewEmptyTensor[float32](ort.NewShape(1, 3, int64(cfg.InputSize), int64(cfg.InputSize)))
 	if err != nil {
 		return nil, err
 	}
-	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(1, int64(outChannels), int64(cfg.GridSize), int64(cfg.GridSize)))
+	output, err := ort.NewEmptyTensor[float32](ort.NewShape(1, int64(outChannels), int64(cfg.GridSize), int64(cfg.GridSize)))
 	if err != nil {
-		inputTensor.Destroy()
+		input.Destroy()
 		return nil, err
 	}
-
-	session, err := ort.NewAdvancedSession(
-		modelPath,
-		[]string{cfg.InputName},
-		[]string{cfg.OutputName},
-		[]ort.Value{inputTensor},
-		[]ort.Value{outputTensor},
-		nil,
-	)
+	session, err := ort.NewAdvancedSession(modelPath, []string{cfg.InputName}, []string{cfg.OutputName},
+		[]ort.Value{input}, []ort.Value{output}, nil)
 	if err != nil {
-		inputTensor.Destroy()
-		outputTensor.Destroy()
+		input.Destroy()
+		output.Destroy()
 		return nil, err
 	}
-
-	return &onnxObjectDetector{
-		session: session,
-		input:   inputTensor,
-		output:  outputTensor,
-		cfg:     cfg,
-	}, nil
+	return &onnxObjectDetector{session: session, input: input, output: output, cfg: cfg}, nil
 }
 
 func (d *onnxObjectDetector) Name() string { return "onnx-yolo" }
@@ -186,7 +204,6 @@ func (d *onnxObjectDetector) Close() {
 	}
 }
 
-// Detect resizes img to the model input, runs inference and decodes detections.
 func (d *onnxObjectDetector) Detect(img image.Image) ([]ObjectDetection, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -195,9 +212,7 @@ func (d *onnxObjectDetector) Detect(img image.Image) ([]ObjectDetection, error) 
 	}
 
 	size := d.cfg.InputSize
-	resized := resizeImage(img, size, size) //stretch to square (tiny-yolov2 preprocessing)
-
-	//Fill the input tensor as CHW, RGB, 0-255 (tiny-yolov2 expects raw pixels).
+	resized := resizeImage(img, size, size)
 	data := d.input.GetData()
 	plane := size * size
 	for y := 0; y < size; y++ {
@@ -208,22 +223,20 @@ func (d *onnxObjectDetector) Detect(img image.Image) ([]ObjectDetection, error) 
 			data[2*plane+y*size+x] = float32(b >> 8)
 		}
 	}
-
 	if err := d.session.Run(); err != nil {
 		return nil, err
 	}
-
 	b := img.Bounds()
-	dets := d.decode(d.output.GetData(), b.Dx(), b.Dy())
+	dets := decodeYolo(d.output.GetData(), d.cfg, b.Dx(), b.Dy())
 	return nonMaxSuppression(dets, d.cfg.IoUThreshold), nil
 }
 
-// decode turns a tiny-yolov2 output grid into detections in original-image
+// decodeYolo decodes a tiny-yolov2 output grid into detections in original-image
 // pixel coordinates.
-func (d *onnxObjectDetector) decode(out []float32, origW, origH int) []ObjectDetection {
-	grid := d.cfg.GridSize
-	nc := d.cfg.NumClasses
-	na := len(d.cfg.Anchors) / 2
+func decodeYolo(out []float32, cfg objectModelConfig, origW, origH int) []ObjectDetection {
+	grid := cfg.GridSize
+	nc := cfg.NumClasses
+	na := len(cfg.Anchors) / 2
 	step := grid * grid
 	perAnchor := 5 + nc
 	scaleX := float64(origW) / float64(grid)
@@ -235,10 +248,7 @@ func (d *onnxObjectDetector) decode(out []float32, origW, origH int) []ObjectDet
 			for b := 0; b < na; b++ {
 				base := b * perAnchor
 				val := func(c int) float64 { return float64(out[(base+c)*step+cy*grid+cx]) }
-
 				objness := sigmoid(val(4))
-
-				//Softmax over the class logits.
 				maxLogit := math.Inf(-1)
 				for c := 0; c < nc; c++ {
 					if v := val(5 + c); v > maxLogit {
@@ -257,45 +267,23 @@ func (d *onnxObjectDetector) decode(out []float32, origW, origH int) []ObjectDet
 						bestP, bestC = p, c
 					}
 				}
-
 				score := objness * bestP
-				if score < d.cfg.ConfThreshold {
+				if score < cfg.ConfThreshold {
 					continue
 				}
-
-				anchorW := d.cfg.Anchors[2*b]
-				anchorH := d.cfg.Anchors[2*b+1]
 				bx := (float64(cx) + sigmoid(val(0))) * scaleX
 				by := (float64(cy) + sigmoid(val(1))) * scaleY
-				bw := math.Exp(val(2)) * anchorW * scaleX
-				bh := math.Exp(val(3)) * anchorH * scaleY
-
-				x := int(bx - bw/2)
-				y := int(by - bh/2)
-				w := int(bw)
-				h := int(bh)
-				//Clamp to the image.
-				x = clampInt(x, 0, origW)
-				y = clampInt(y, 0, origH)
-				if x+w > origW {
-					w = origW - x
-				}
-				if y+h > origH {
-					h = origH - y
-				}
-				if w <= 0 || h <= 0 {
+				bw := math.Exp(val(2)) * cfg.Anchors[2*b] * scaleX
+				bh := math.Exp(val(3)) * cfg.Anchors[2*b+1] * scaleY
+				box := clampBoxToImage(Box{X: int(bx - bw/2), Y: int(by - bh/2), Width: int(bw), Height: int(bh)}, origW, origH)
+				if box.Width <= 0 || box.Height <= 0 {
 					continue
 				}
-
 				label := fmt.Sprintf("class_%d", bestC)
-				if bestC < len(d.cfg.Classes) {
-					label = d.cfg.Classes[bestC]
+				if bestC < len(cfg.Classes) {
+					label = cfg.Classes[bestC]
 				}
-				dets = append(dets, ObjectDetection{
-					Label:      label,
-					Confidence: roundTo(score, 4),
-					Box:        Box{X: x, Y: y, Width: w, Height: h},
-				})
+				dets = append(dets, ObjectDetection{Label: label, Confidence: roundTo(score, 4), Box: box})
 			}
 		}
 	}

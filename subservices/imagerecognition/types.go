@@ -23,6 +23,12 @@ type Box struct {
 	Height int `json:"height"`
 }
 
+// Point is a 2D point in pixel coordinates (used for facial landmarks).
+type Point struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
 // ObjectDetection is a located, classified object produced by an ML backend.
 type ObjectDetection struct {
 	Label      string  `json:"label"`
@@ -37,6 +43,7 @@ type Face struct {
 	PersonUUID string    `json:"personUUID,omitempty"` //Stable id grouping the same person across photos
 	NewPerson  bool      `json:"newPerson,omitempty"`  //True when this call created the person group
 	MatchScore float64   `json:"matchScore,omitempty"` //Similarity to the matched person group (0-1)
+	Landmarks  []Point   `json:"landmarks,omitempty"`  //5 facial landmarks (eyes, nose, mouth corners) when available
 	Embedding  []float32 `json:"-"`                    //Internal identity vector, never serialised
 }
 

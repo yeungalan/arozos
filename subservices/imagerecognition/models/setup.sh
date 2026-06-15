@@ -24,10 +24,20 @@ tar -xzf "$DIR/ort.tgz" -C "$DIR"
 rm -f "$DIR/ort.tgz"
 echo "    lib: $DIR/onnxruntime-${OS}-${ORT_VERSION}/lib/libonnxruntime.so"
 
-echo "==> tiny-yolov2 model (VOC, ONNX model zoo)"
+echo "==> tiny-yolov2 object model (VOC, ONNX model zoo, public domain)"
 curl -fsSL -o "$DIR/tinyyolov2-8.onnx" \
     "https://github.com/onnx/models/raw/main/validated/vision/object_detection_segmentation/tiny-yolov2/model/tinyyolov2-8.onnx"
-echo "    model: $DIR/tinyyolov2-8.onnx ($(wc -c < "$DIR/tinyyolov2-8.onnx") bytes)"
+echo "    object: $DIR/tinyyolov2-8.onnx ($(wc -c < "$DIR/tinyyolov2-8.onnx") bytes)"
 
-echo "Done. model.json already points at tinyyolov2-8.onnx."
+echo "==> YuNet face detector (OpenCV Zoo, MIT)"
+curl -fsSL -o "$DIR/yunet.onnx" \
+    "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
+echo "    faces:  $DIR/yunet.onnx ($(wc -c < "$DIR/yunet.onnx") bytes)"
+
+echo "==> SFace face recognizer (OpenCV Zoo, Apache-2.0)"
+curl -fsSL -o "$DIR/sface.onnx" \
+    "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx"
+echo "    embed:  $DIR/sface.onnx ($(wc -c < "$DIR/sface.onnx") bytes)"
+
+echo "Done. model.json already references all three models."
 echo "Set ONNXRUNTIME_LIB to the libonnxruntime.so path above when running."

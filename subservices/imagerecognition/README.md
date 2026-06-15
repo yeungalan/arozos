@@ -75,13 +75,24 @@ does this for you.
 | `IMGRECOG_MODELS` | `<exe dir>/models` | Models directory (ONNX build) |
 | `ONNXRUNTIME_LIB` | — | Path to `libonnxruntime.so` (ONNX build) |
 
-## Recognition accuracy
+## Recognition accuracy — builtin vs. DNN
 
-The builtin face embedding is a deterministic appearance + gradient descriptor.
-It reliably groups the same face across re-encodes, crops, brightness changes
-and detector jitter (validated in `recognizer_test.go`), and separates clearly
-different people. For maximum cross-pose/lighting accuracy, plug a learned face
-embedding model into the `FaceEmbedder` interface (see `engine.go`).
+Face detection and recognition have two tiers, selected at build time:
+
+| | Detection | Recognition (grouping) |
+|--|-----------|------------------------|
+| **default** (`go build`) | pigo cascade | appearance/HOG descriptor |
+| **`-tags onnx`** | **YuNet** DNN + landmarks | **SFace** 128-d embedding (landmark-aligned) |
+
+The builtin tier is pure-Go and dependency-free but limited: the cascade can
+produce false positives on reflections/foliage and miss non-frontal faces, and
+the descriptor only groups near-duplicate crops. **For real-world accuracy use
+the `-tags onnx` build** — YuNet removes those false positives and SFace groups
+the *same person across different photos* (different pose, lighting, camera)
+reliably. On linux/amd64 the models + runtime are bundled, so it is turnkey
+(see `models/README.md`). The DNN pipeline is validated end-to-end in
+`face_onnx_test.go` (same person across rotation/brightness/scale variants →
+one UUID; different people → distinct UUIDs; non-face scenes → no faces).
 
 ## Tests
 
