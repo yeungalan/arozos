@@ -53,7 +53,8 @@ type Engine struct {
 	Objects      ObjectDetector
 	FaceDetector FaceDetector
 	FaceEmbedder FaceEmbedder
-	Backend      string //Human-readable description of the active object backend
+	Backend      string   //Human-readable description of the active object backend
+	Status       []string //Diagnostic lines explaining what ML loaded (or why not)
 }
 
 // Close releases any resources held by the backends.

@@ -63,6 +63,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		"faceEmbedder": s.recognizer.faceEmbedderName(),
 		"knownPeople":  s.recognizer.people.Count(),
 		"capabilities": []string{"tagging", "face-detection", "face-recognition"},
+		"mlStatus":     s.recognizer.mlStatus(),
 	})
 }
 

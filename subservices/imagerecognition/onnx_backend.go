@@ -71,58 +71,83 @@ type onnxModelConfig struct {
 }
 
 // newMLEngine loads whichever ONNX models are configured, falling back to the
-// builtin path for any that are absent or fail to load.
+// builtin path for any that are absent or fail to load. Engine.Status records a
+// human-readable diagnostic of what happened (surfaced via /api/info) so a
+// misconfigured deployment is easy to debug.
 func newMLEngine(dataDir string, lg *svcLogger) *Engine {
 	modelsDir := resolveModelsDir(dataDir)
+	status := []string{"models dir: " + modelsDir}
+	builtin := func(reason string) *Engine {
+		lg.Info("ONNX inactive — " + reason)
+		return &Engine{Backend: "builtin", Status: append(status, "RESULT: builtin fallback — "+reason)}
+	}
+
 	cfgPath := filepath.Join(modelsDir, "model.json")
 	raw, err := os.ReadFile(cfgPath)
 	if err != nil {
-		lg.Info("ONNX: no models/model.json found; using builtin path (run models/setup.sh to enable models).")
-		return &Engine{Backend: "builtin"}
+		status = append(status, "model.json: NOT FOUND at "+cfgPath)
+		return builtin("model.json not found (place the models/ folder next to the executable, or set IMGRECOG_MODELS)")
 	}
+	status = append(status, "model.json: found")
 
 	var cfg onnxModelConfig
 	if err := json.Unmarshal(raw, &cfg); err != nil {
-		lg.Err("ONNX: invalid model.json, using builtin", err)
-		return &Engine{Backend: "builtin"}
+		status = append(status, "model.json: INVALID JSON: "+err.Error())
+		return builtin("invalid model.json")
 	}
 
-	//Initialise ONNX Runtime once, resolving the shared library.
-	if err := ensureORTFromConfig(modelsDir, cfg.SharedLibrary); err != nil {
-		lg.Err("ONNX Runtime unavailable, using builtin (set ONNXRUNTIME_LIB)", err)
-		return &Engine{Backend: "builtin"}
+	//Resolve and initialise the ONNX Runtime shared library.
+	libPath := resolveORTLibPath(modelsDir, cfg.SharedLibrary)
+	if libPath == "" {
+		status = append(status, "onnx runtime: NOT FOUND (no onnxruntime."+runtimeLibExt()+" in models/ or next to the executable)")
+		return builtin("ONNX runtime library not found")
+	}
+	status = append(status, "onnx runtime: "+libPath)
+	if err := ensureORT(libPath); err != nil {
+		status = append(status, "onnx runtime: INIT FAILED: "+err.Error())
+		return builtin("ONNX runtime failed to load (" + err.Error() + ") — on Windows install the Visual C++ 2015-2022 Redistributable x64")
 	}
 
 	engine := &Engine{Backend: "builtin"}
 
 	if cfg.Object != nil {
 		if det, derr := newObjectDetector(modelsDir, *cfg.Object); derr != nil {
+			status = append(status, "object detector: FAILED: "+derr.Error())
 			lg.Err("ONNX: object detector unavailable, tagging falls back to scene tagger", derr)
 		} else {
 			engine.Objects = det
 			engine.Backend = det.Name()
+			status = append(status, "object detector: "+det.Name()+" ("+cfg.Object.Model+")")
 			lg.logf("ONNX: object detector active (%s, %s)", det.Name(), cfg.Object.Model)
 		}
 	}
 
 	if cfg.FaceDetection != nil {
 		if fd, derr := newONNXFaceDetector(modelsDir, *cfg.FaceDetection); derr != nil {
+			status = append(status, "face detector: FAILED: "+derr.Error())
 			lg.Err("ONNX: face detector unavailable, falling back to pigo", derr)
 		} else {
 			engine.FaceDetector = fd
+			status = append(status, "face detector: "+fd.Name()+" ("+cfg.FaceDetection.Model+")")
 			lg.logf("ONNX: YuNet face detector active (%s)", cfg.FaceDetection.Model)
 		}
 	}
 
 	if cfg.FaceRecognition != nil {
 		if fe, derr := newONNXFaceEmbedder(modelsDir, *cfg.FaceRecognition); derr != nil {
+			status = append(status, "face embedder: FAILED: "+derr.Error())
 			lg.Err("ONNX: face embedder unavailable, falling back to builtin descriptor", derr)
 		} else {
 			engine.FaceEmbedder = fe
+			status = append(status, fmt.Sprintf("face embedder: %s (%s, threshold %.3f)", fe.Name(), cfg.FaceRecognition.Model, fe.MatchThreshold()))
 			lg.logf("ONNX: SFace face embedder active (%s, threshold %.3f)", cfg.FaceRecognition.Model, fe.MatchThreshold())
 		}
 	}
 
+	engine.Status = status
+	for _, s := range status {
+		lg.Info("ML: " + s)
+	}
 	return engine
 }
 
@@ -141,32 +166,48 @@ func resolveModelsDir(dataDir string) string {
 	return filepath.Join(".", "models")
 }
 
-// ensureORTFromConfig initialises ONNX Runtime once. The shared library is
-// resolved from ONNXRUNTIME_LIB, then model.json's path, and finally by scanning
-// for the platform-appropriate library so the same model.json works on Linux,
-// Windows and macOS.
-func ensureORTFromConfig(dir, sharedLibrary string) error {
+// resolveORTLibPath determines the ONNX Runtime shared-library path: from
+// ONNXRUNTIME_LIB, then model.json's path, and finally by scanning for the
+// platform-appropriate library so the same model.json works on Linux, Windows
+// and macOS. Returns "" when nothing suitable is found.
+func resolveORTLibPath(dir, sharedLibrary string) string {
+	libPath := sharedLibrary
+	if env := os.Getenv("ONNXRUNTIME_LIB"); env != "" {
+		libPath = env
+	}
+	if libPath != "" && !filepath.IsAbs(libPath) {
+		libPath = filepath.Join(dir, libPath)
+	}
+	//If the configured path is missing (e.g. a Linux path on Windows), look for
+	//the right library next to the models / executable.
+	if libPath == "" || !fileExists(libPath) {
+		libPath = findONNXRuntime(dir)
+	}
+	return libPath
+}
+
+// ensureORT initialises the ONNX Runtime environment exactly once with libPath.
+func ensureORT(libPath string) error {
 	ortInitOnce.Do(func() {
-		libPath := sharedLibrary
-		if env := os.Getenv("ONNXRUNTIME_LIB"); env != "" {
-			libPath = env
-		}
-		if libPath != "" && !filepath.IsAbs(libPath) {
-			libPath = filepath.Join(dir, libPath)
-		}
-		//If the configured path is missing (e.g. a Linux path on Windows), look
-		//for the right library next to the models / executable.
-		if libPath == "" || !fileExists(libPath) {
-			if found := findONNXRuntime(dir); found != "" {
-				libPath = found
-			}
-		}
 		if libPath != "" {
 			ort.SetSharedLibraryPath(libPath)
 		}
 		ortInitErr = ort.InitializeEnvironment()
 	})
 	return ortInitErr
+}
+
+// runtimeLibExt returns the expected ONNX Runtime library file extension for the
+// current OS, for use in diagnostic messages.
+func runtimeLibExt() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "dll"
+	case "darwin":
+		return "dylib"
+	default:
+		return "so"
+	}
 }
 
 // findONNXRuntime searches the models directory and the executable's directory

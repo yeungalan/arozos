@@ -100,6 +100,14 @@ func (r *Recognizer) faceEmbedderName() string {
 	return "builtin-descriptor"
 }
 
+// mlStatus returns the engine's diagnostic lines (what ML loaded, or why not).
+func (r *Recognizer) mlStatus() []string {
+	if r.engine == nil {
+		return nil
+	}
+	return r.engine.Status
+}
+
 // detectFaces runs the best available face detector, falling back to pigo if the
 // DNN detector errors.
 func (r *Recognizer) detectFaces(img image.Image) []Face {

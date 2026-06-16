@@ -18,5 +18,8 @@ package main
 // pure-Go logic for every capability.
 func newMLEngine(dataDir string, lg *svcLogger) *Engine {
 	lg.Info("ML backend: builtin (pure-Go scene tagging + pigo faces). Build with -tags onnx for YOLO object detection.")
-	return &Engine{Backend: "builtin"}
+	return &Engine{
+		Backend: "builtin",
+		Status:  []string{"RESULT: builtin only — binary was built WITHOUT -tags onnx (no ONNX/YuNet/SFace)"},
+	}
 }
