@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 
 	ort "github.com/yalue/onnxruntime_go"
@@ -166,24 +167,46 @@ func resolveModelsDir(dataDir string) string {
 	return filepath.Join(".", "models")
 }
 
-// resolveORTLibPath determines the ONNX Runtime shared-library path: from
-// ONNXRUNTIME_LIB, then model.json's path, and finally by scanning for the
-// platform-appropriate library so the same model.json works on Linux, Windows
-// and macOS. Returns "" when nothing suitable is found.
+// resolveORTLibPath determines the ONNX Runtime shared-library path so the same
+// model.json works on Linux, Windows and macOS. Order:
+//  1. ONNXRUNTIME_LIB (explicit override).
+//  2. An OS-appropriate library found next to the models/executable. This is
+//     preferred over the configured path because the repo bundles BOTH the
+//     Linux .so and the Windows .dll, so "the configured path exists" is not
+//     enough — it must match the current OS.
+//  3. The model.json path, only if it exists AND matches this OS.
+//
+// Returns "" when nothing suitable is found.
 func resolveORTLibPath(dir, sharedLibrary string) string {
-	libPath := sharedLibrary
 	if env := os.Getenv("ONNXRUNTIME_LIB"); env != "" {
-		libPath = env
+		return env
 	}
-	if libPath != "" && !filepath.IsAbs(libPath) {
-		libPath = filepath.Join(dir, libPath)
+	if found := findONNXRuntime(dir); found != "" {
+		return found
 	}
-	//If the configured path is missing (e.g. a Linux path on Windows), look for
-	//the right library next to the models / executable.
-	if libPath == "" || !fileExists(libPath) {
-		libPath = findONNXRuntime(dir)
+	if sharedLibrary != "" {
+		p := sharedLibrary
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(dir, p)
+		}
+		if fileExists(p) && libMatchesOS(p) {
+			return p
+		}
 	}
-	return libPath
+	return ""
+}
+
+// libMatchesOS reports whether a library filename is loadable on the current OS.
+func libMatchesOS(path string) bool {
+	p := strings.ToLower(path)
+	switch runtime.GOOS {
+	case "windows":
+		return strings.HasSuffix(p, ".dll")
+	case "darwin":
+		return strings.Contains(p, ".dylib")
+	default:
+		return strings.Contains(p, ".so")
+	}
 }
 
 // ensureORT initialises the ONNX Runtime environment exactly once with libPath.
