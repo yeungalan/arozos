@@ -66,6 +66,25 @@ for ONNX, `models/` folders) in your ArozOS install under
 `./subservice/imagerecognition/` and restart ArozOS. `build.sh DEPLOY=...`
 does this for you.
 
+### Windows
+
+ArozOS launches `imagerecognition.exe` on Windows, which must be a real Windows
+build (a Linux binary renamed `.exe` gives *"not a valid Win32 application"*).
+The ONNX build uses CGO, so it needs a C compiler. Easiest is to cross-build
+from Linux/macOS with mingw-w64:
+
+```sh
+sh build-windows.sh          # -> imagerecognition.exe (ONNX/YOLO)
+# PUREGO=1 sh build-windows.sh   # pure-Go .exe (weaker faces, no models)
+```
+
+Then copy `imagerecognition.exe` **and** the `models/` and `web/` folders into
+`<arozos>\src\subservice\imagerecognition\` and start ArozOS. The Windows ONNX
+Runtime DLL is bundled (`models/onnxruntime-win-x64-*/lib/onnxruntime.dll`) and
+found automatically — no environment variable needed. (If Windows reports a
+missing DLL when loading it, install the Microsoft Visual C++ 2015-2022
+Redistributable x64.)
+
 ## Configuration (environment)
 
 | Variable | Default | Meaning |

@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	ort "github.com/yalue/onnxruntime_go"
@@ -140,8 +141,10 @@ func resolveModelsDir(dataDir string) string {
 	return filepath.Join(".", "models")
 }
 
-// ensureORTFromConfig initialises ONNX Runtime once, resolving the shared
-// library from ONNXRUNTIME_LIB or the model.json path (relative to dir).
+// ensureORTFromConfig initialises ONNX Runtime once. The shared library is
+// resolved from ONNXRUNTIME_LIB, then model.json's path, and finally by scanning
+// for the platform-appropriate library so the same model.json works on Linux,
+// Windows and macOS.
 func ensureORTFromConfig(dir, sharedLibrary string) error {
 	ortInitOnce.Do(func() {
 		libPath := sharedLibrary
@@ -151,12 +154,54 @@ func ensureORTFromConfig(dir, sharedLibrary string) error {
 		if libPath != "" && !filepath.IsAbs(libPath) {
 			libPath = filepath.Join(dir, libPath)
 		}
+		//If the configured path is missing (e.g. a Linux path on Windows), look
+		//for the right library next to the models / executable.
+		if libPath == "" || !fileExists(libPath) {
+			if found := findONNXRuntime(dir); found != "" {
+				libPath = found
+			}
+		}
 		if libPath != "" {
 			ort.SetSharedLibraryPath(libPath)
 		}
 		ortInitErr = ort.InitializeEnvironment()
 	})
 	return ortInitErr
+}
+
+// findONNXRuntime searches the models directory and the executable's directory
+// for the ONNX Runtime shared library matching the current OS.
+func findONNXRuntime(modelsDir string) string {
+	var patterns []string
+	switch runtime.GOOS {
+	case "windows":
+		patterns = []string{"onnxruntime.dll", "onnxruntime-*/lib/onnxruntime.dll", "onnxruntime-*/onnxruntime.dll"}
+	case "darwin":
+		patterns = []string{"libonnxruntime.dylib", "libonnxruntime.*.dylib", "onnxruntime-*/lib/libonnxruntime*.dylib"}
+	default:
+		patterns = []string{"libonnxruntime.so", "libonnxruntime.so.*", "onnxruntime-*/lib/libonnxruntime.so*"}
+	}
+
+	searchDirs := []string{modelsDir}
+	if exe, err := os.Executable(); err == nil {
+		searchDirs = append(searchDirs, filepath.Dir(exe), filepath.Join(filepath.Dir(exe), "models"))
+	}
+	for _, d := range searchDirs {
+		for _, p := range patterns {
+			matches, _ := filepath.Glob(filepath.Join(d, p))
+			for _, m := range matches {
+				if fi, err := os.Stat(m); err == nil && !fi.IsDir() {
+					return m
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 // ── Object detector (tiny-yolov2) ────────────────────────────────────────────
