@@ -1,0 +1,175 @@
+<!--
+    Photo Recognition settings page
+    Loaded inside System Settings > AI Integration > Photo Recognition.
+    Talks to /system/imagerecognition/{status,config,test}.
+-->
+<link rel="stylesheet" href="../../script/semantic/semantic.min.css">
+<script src="../../script/jquery.min.js"></script>
+<script src="../../script/semantic/semantic.min.js"></script>
+<script src="../../script/ao_module.js"></script>
+
+<style>
+    #pr-root {
+        --pr-border: #e5e5e5;
+        --pr-dim: #676767;
+        --pr-soft: #f7f7f7;
+        --pr-accent: #4d6bff;
+        --pr-ok: #107c10;
+        --pr-danger: #c42b1c;
+        color: #1f1f1f;
+        font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 13px;
+        padding: 14px;
+    }
+    body.dark #pr-root { color: #ececec; --pr-border:#3b3b3b; --pr-dim:#aaa; --pr-soft:#343434; --pr-ok:#2ecc71; --pr-danger:#ff6b5e; }
+    #pr-root .pr-card { border:1px solid var(--pr-border); border-radius:10px; background:var(--pr-soft); padding:14px; margin-bottom:12px; }
+    #pr-root .pr-title { font-size:16px; font-weight:600; margin-bottom:2px; }
+    #pr-root .pr-sub { font-size:12px; color:var(--pr-dim); margin-bottom:14px; }
+    #pr-root .pr-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    #pr-root .pr-dot { width:10px; height:10px; border-radius:50%; background:var(--pr-dim); display:inline-block; }
+    #pr-root .pr-dot.ok { background:var(--pr-ok); } #pr-root .pr-dot.off { background:var(--pr-danger); }
+    #pr-root code { background:rgba(127,127,127,0.15); padding:1px 5px; border-radius:4px; font-size:12px; }
+    #pr-root pre { background:rgba(127,127,127,0.12); padding:10px; border-radius:8px; overflow:auto; font-size:12px; }
+    #pr-root .pr-kv { display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed var(--pr-border); }
+    #pr-root .pr-kv:last-child { border-bottom:0; }
+    #pr-root .pr-muted { color:var(--pr-dim); }
+</style>
+
+<div id="pr-root">
+    <div class="pr-title">Photo Recognition</div>
+    <div class="pr-sub">AI image tagging and face recognition, powered by the <code>imagerecognition</code> subservice.
+        When the subservice is installed it is detected automatically and exposed to AGI scripts via
+        <code>requirelib("imagerecognition")</code>.</div>
+
+    <!-- Status -->
+    <div class="pr-card">
+        <div class="pr-row"><span id="prStatusDot" class="pr-dot"></span><b id="prStatusText">Checking…</b></div>
+        <div class="pr-kv"><span>Subservice installed</span><span id="prInstalled" class="pr-muted">—</span></div>
+        <div class="pr-kv"><span>Service reachable</span><span id="prReachable" class="pr-muted">—</span></div>
+        <div class="pr-kv"><span>AGI access enabled</span><span id="prEnabled" class="pr-muted">—</span></div>
+        <div class="pr-kv"><span>Detection backend</span><span id="prBackend" class="pr-muted">—</span></div>
+        <div class="pr-kv"><span>Known people</span><span id="prPeople" class="pr-muted">—</span></div>
+        <div class="pr-kv"><span>Endpoint</span><span id="prEndpoint" class="pr-muted">—</span></div>
+        <div style="margin-top:10px;">
+            <button class="ui tiny button" onclick="refreshStatus()"><i class="refresh icon"></i> Refresh</button>
+            <button class="ui tiny primary button" onclick="testConn()"><i class="plug icon"></i> Test connection</button>
+        </div>
+        <div id="prNotInstalled" style="display:none; margin-top:10px;" class="ui small warning message">
+            The <b>imagerecognition</b> subservice is not installed. Build it from
+            <code>subservices/imagerecognition</code> and place the binary in <code>./subservice/imagerecognition/</code>,
+            then restart ArozOS. Until then, photo recognition is unavailable to AGI scripts.
+        </div>
+    </div>
+
+    <!-- Connection -->
+    <div class="pr-card">
+        <div style="font-weight:600; margin-bottom:8px;">Connection</div>
+        <div class="ui toggle checkbox" style="margin-bottom:10px;">
+            <input type="checkbox" id="prManual" onchange="toggleManual()">
+            <label>Manually configure the recognizer endpoint (e.g. a recognizer running on another host)</label>
+        </div>
+        <div id="prManualFields" style="display:none;">
+            <div class="ui small fluid input" style="margin-bottom:8px;">
+                <input type="text" id="prEndpointInput" placeholder="http://localhost:12810">
+            </div>
+            <div class="ui checkbox" style="margin-bottom:10px;">
+                <input type="checkbox" id="prEnabledInput"><label>Enable AGI access to this endpoint</label>
+            </div>
+            <button class="ui tiny primary button" onclick="saveManual()"><i class="save icon"></i> Save</button>
+            <button class="ui tiny button" onclick="useAuto()"><i class="magic icon"></i> Use auto-detect instead</button>
+        </div>
+        <div id="prAutoNote" class="pr-muted" style="font-size:12px;">
+            Auto-detection is active: the endpoint follows the installed subservice automatically.
+        </div>
+    </div>
+
+    <!-- AGI usage -->
+    <div class="pr-card">
+        <div style="font-weight:600; margin-bottom:8px;">Using it from AGI</div>
+        <pre>requirelib("imagerecognition");
+
+if (imagerecognition.ready()){
+    // Descriptive + object tags
+    var tags = imagerecognition.tag("user:/Photo/holiday.jpg");
+
+    // Group the same person across photos under a stable UUID
+    var faces = imagerecognition.recognizeFaces("user:/Photo/holiday.jpg");
+    for (var i = 0; i &lt; faces.length; i++){
+        console.log("person " + faces[i].personUUID + " at " + JSON.stringify(faces[i].box));
+    }
+
+    sendJSONResp(JSON.stringify({tags: tags, faces: faces}));
+}</pre>
+    </div>
+</div>
+
+<script>
+    var API = "../../system/imagerecognition/";
+
+    function setDot(id, ok){
+        var el = document.getElementById(id);
+        el.className = "pr-dot " + (ok ? "ok" : "off");
+    }
+    function yesno(v){ return v ? "Yes" : "No"; }
+
+    function refreshStatus(){
+        $.get(API + "status", function(data){
+            if (typeof(data) == "string"){ data = JSON.parse(data); }
+            $("#prInstalled").text(yesno(data.installed));
+            $("#prReachable").text(yesno(data.reachable));
+            $("#prEnabled").text(yesno(data.enabled));
+            $("#prEndpoint").text(data.endpoint || "(none)");
+            var info = data.serviceInfo || {};
+            $("#prBackend").text(info.backend || "—");
+            $("#prPeople").text((info.knownPeople != null) ? info.knownPeople : "—");
+
+            var live = data.installed && data.reachable && data.enabled;
+            setDot("prStatusDot", live);
+            $("#prStatusText").text(live ? "Active — photo recognition is available to AGI" :
+                (data.installed ? "Subservice detected but not reachable / disabled" : "Subservice not installed"));
+            $("#prNotInstalled").toggle(!data.installed && !data.endpoint);
+
+            // Reflect manual/auto state
+            $("#prManual").prop("checked", data.manual);
+            $("#prEnabledInput").prop("checked", data.enabled);
+            if (data.endpoint){ $("#prEndpointInput").val(data.endpoint); }
+            applyManualUI(data.manual);
+        }).fail(function(){
+            $("#prStatusText").text("Could not load status");
+            setDot("prStatusDot", false);
+        });
+    }
+
+    function applyManualUI(manual){
+        $("#prManualFields").toggle(manual);
+        $("#prAutoNote").toggle(!manual);
+    }
+    function toggleManual(){ applyManualUI($("#prManual").prop("checked")); }
+
+    function saveManual(){
+        var endpoint = $("#prEndpointInput").val().trim();
+        if (endpoint == ""){ alert("Please enter an endpoint URL"); return; }
+        $.post(API + "config", {endpoint: endpoint, enabled: $("#prEnabledInput").prop("checked")}, function(){
+            refreshStatus();
+        }).fail(function(x){ alert("Save failed: " + (x.responseText || "error")); });
+    }
+
+    function useAuto(){
+        $.post(API + "config", {auto: true}, function(){
+            $("#prManual").prop("checked", false);
+            applyManualUI(false);
+            refreshStatus();
+        });
+    }
+
+    function testConn(){
+        var endpoint = $("#prManual").prop("checked") ? $("#prEndpointInput").val().trim() : "";
+        $.post(API + "test", {endpoint: endpoint}, function(data){
+            if (typeof(data) == "string"){ try { data = JSON.parse(data); } catch(e){} }
+            if (data && data.error){ alert("Test failed: " + data.message); }
+            else { alert("Connected. Backend: " + ((data && data.backend) || "unknown")); refreshStatus(); }
+        }).fail(function(x){ alert("Test failed: " + (x.responseText || "unreachable")); });
+    }
+
+    $(document).ready(refreshStatus);
+</script>

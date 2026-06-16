@@ -1,0 +1,17 @@
+# Built binaries (produced by build.sh / go build)
+/imagerecognition
+imagerecognition_*
+*.exe
+
+# Runtime data (persistent people gallery)
+/data/
+
+# Transient download archives
+models/*.tgz
+models/*.tar.gz
+
+# ONNX Runtime: keep the shared library + licenses (committed so the ONNX/YOLO
+# backend is turnkey on linux/amd64); drop the build-time headers and cmake.
+models/onnxruntime-*/include/
+models/onnxruntime-*/lib/cmake/
+models/onnxruntime-*/lib/pkgconfig/
