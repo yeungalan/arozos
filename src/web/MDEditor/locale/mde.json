@@ -1,0 +1,77 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "mde/app_name": "MDEditor",
+                "mde/save": "Save",
+                "mde/placeholder": "(Empty file)",
+                "mde/save_failed": "Save File Failed!",
+                "mde/save_before_exit": "Some changes are not saved. Save before exit?",
+                "mde/unsaved_exit": "Content is not saved. Confirm Exit?"
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "mde/app_name": "Markdown 編輯器",
+                "mde/save": "儲存",
+                "mde/placeholder": "(空白文件)",
+                "mde/save_failed": "儲存檔案失敗！",
+                "mde/save_before_exit": "尚有未儲存的變更。離開前是否儲存？",
+                "mde/unsaved_exit": "內容尚未儲存。確定要離開？"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "mde/app_name": "Markdown 編輯器",
+                "mde/save": "儲存",
+                "mde/placeholder": "(空白文件)",
+                "mde/save_failed": "儲存檔案失敗！",
+                "mde/save_before_exit": "有未儲存的更改。退出前是否儲存？",
+                "mde/unsaved_exit": "內容尚未儲存。確認退出？"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "mde/app_name": "Markdown 编辑器",
+                "mde/save": "保存",
+                "mde/placeholder": "(空文件)",
+                "mde/save_failed": "保存文件失败！",
+                "mde/save_before_exit": "有未保存的更改。退出前是否保存？",
+                "mde/unsaved_exit": "内容尚未保存。确认退出？"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "mde/app_name": "Markdown エディタ",
+                "mde/save": "保存",
+                "mde/placeholder": "(空のファイル)",
+                "mde/save_failed": "ファイルの保存に失敗しました！",
+                "mde/save_before_exit": "保存されていない変更があります。終了前に保存しますか？",
+                "mde/unsaved_exit": "内容が保存されていません。終了してもよいですか？"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "mde/app_name": "Markdown 편집기",
+                "mde/save": "저장",
+                "mde/placeholder": "(빈 파일)",
+                "mde/save_failed": "파일 저장에 실패했습니다!",
+                "mde/save_before_exit": "저장되지 않은 변경 사항이 있습니다. 종료 전에 저장하시겠습니까?",
+                "mde/unsaved_exit": "내용이 저장되지 않았습니다. 종료하시겠습니까?"
+            }
+        }
+    }
+}
