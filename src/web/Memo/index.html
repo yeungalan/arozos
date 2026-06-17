@@ -9,6 +9,7 @@
         <link rel="stylesheet" href="./script/bulma/bulma.css">
         <script src="../script/jquery.min.js"></script>
         <script src="../script/ao_module.js"></script>
+        <script src="../script/applocale.js"></script>
         <script src="script/lightpick/moment.min.js"></script>
         <script src="script/lightpick/lightpick.js"></script>
         <link rel="icon" type="image/png" href="img/small_icon.png"/>
@@ -28,46 +29,46 @@
             </div>
         </nav>
         <div class="box">
-            <button class="button is-warning" onclick="openMemoBox();">New Memo</button>
-            <button class="button is-link is-light" onclick="listAllMemo();">Refresh</button>
+            <button class="button is-warning" onclick="openMemoBox();"><span locale="memo/btn/new">New Memo</span></button>
+            <button class="button is-link is-light" onclick="listAllMemo();"><span locale="memo/btn/refresh">Refresh</span></button>
         </div>
         <div id="memobox" class="box" style="display:none;">
-            <h2 class="title is-4">New Memo</h2>
-            <h4 class="subtitle is-6">Create a new Memo and try not to forget about it</h4>
+            <h2 class="title is-4" locale="memo/title/new">New Memo</h2>
+            <h4 class="subtitle is-6" locale="memo/subtitle/new">Create a new Memo and try not to forget about it</h4>
             <hr>
             <div class="field">
-                <label class="label">Title</label>
+                <label class="label" locale="memo/label/title">Title</label>
                 <div class="control">
-                    <input class="input" id="title" type="text" placeholder="Title">
+                    <input class="input" id="title" type="text" placeholder="Title" locale-placeholder="memo/placeholder/title">
                 </div>
             </div>
             <div class="field">
-                <label class="label">Message</label>
+                <label class="label" locale="memo/label/message">Message</label>
                 <div class="control">
-                    <textarea class="textarea" id="message" placeholder="Write some notes here!"></textarea>
+                    <textarea class="textarea" id="message" placeholder="Write some notes here!" locale-placeholder="memo/placeholder/message"></textarea>
                 </div>
             </div>
             <div class="field">
-                <label class="label">Deadline (Optional)</label>
+                <label class="label" locale="memo/label/deadline">Deadline (Optional)</label>
                 <div class="control">
-                    <input class="input" id="deadline" type="text" placeholder="Deadline">
+                    <input class="input" id="deadline" type="text" placeholder="Deadline" locale-placeholder="memo/placeholder/deadline">
                 </div>
             </div>
             <div class="field is-grouped">
                 <div class="control">
-                    <button class="button is-link" onclick="createNewMemo();">Submit</button>
+                    <button class="button is-link" onclick="createNewMemo();"><span locale="memo/btn/submit">Submit</span></button>
                 </div>
                 <div class="control">
-                    <button class="button is-link is-light" onclick="cancelNewMemo();">Cancel</button>
+                    <button class="button is-link is-light" onclick="cancelNewMemo();"><span locale="memo/btn/cancel">Cancel</span></button>
                 </div>
             </div>
         </div>
         <div id="deadlineTodayBanner" class="hero is-danger">
             <div class="hero-body">
-                <p class="title">
+                <p class="title" locale="memo/banner/today">
                 Deadline Today!
                 </p>
-                <p class="subtitle">
+                <p class="subtitle" locale="memo/subtitle/today">
                 Deadline within 24 hours!!!
                 </p>
             </div>
@@ -78,10 +79,10 @@
 
         <div id="deadlineSoonBanner" class="hero is-warning">
             <div class="hero-body">
-                <p class="title">
+                <p class="title" locale="memo/banner/soon">
                 Deadline Soon
                 </p>
-                <p class="subtitle">
+                <p class="subtitle" locale="memo/subtitle/soon">
                 Deadline this week
                 </p>
             </div>
@@ -91,10 +92,10 @@
         </div>
         <div class="hero is-medium is-link">
             <div class="hero-body">
-                <p class="title">
+                <p class="title" locale="memo/section/other">
                 Other Memos
                 </p>
-                <p class="subtitle">
+                <p class="subtitle" locale="memo/subtitle/other">
                 Non urgent items
                 </p>
             </div>
@@ -132,7 +133,7 @@
             function timestampToDateString(key){
                 return new Date(parseInt(key)).toLocaleString(undefined, {year: 'numeric', month: '2-digit', day: '2-digit', weekday:"long", hour: '2-digit', hour12: false, minute:'2-digit', second:'2-digit'})
             }
-            
+
             function uuidv4() {
                 return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
                     (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
@@ -164,10 +165,11 @@
                         let fullContent = content.message;
                         let displayContent = ``;
                         let thisUUID = uuidv4();
+                        let readMoreLabel = applocale ? applocale.getString('memo/link/read_more', 'Read More') : 'Read More';
                         if (fullContent.length > 800){
                             let abstract = fullContent.substr(0, 600);
                             let remaining = fullContent.substr(600);
-                            displayContent = abstract + `<span id="${thisUUID}" style="display:none;">${remaining}</span><br><a onclick="handleReadMore('${thisUUID}', this);">Read More</a>`;
+                            displayContent = abstract + `<span id="${thisUUID}" style="display:none;">${remaining}</span><br><a onclick="handleReadMore('${thisUUID}', this);">${readMoreLabel}</a>`;
                         }else{
                             displayContent = fullContent;
                         }
@@ -187,7 +189,12 @@
 
                             }
                         }
-                        
+
+                        let moveToTopLabel = applocale ? applocale.getString('memo/link/move_to_top', 'Move to Top') : 'Move to Top';
+                        let editLabel = applocale ? applocale.getString('memo/link/edit', 'Edit') : 'Edit';
+                        let deleteLabel = applocale ? applocale.getString('memo/link/delete', 'Delete') : 'Delete';
+                        let creationDateLabel = applocale ? applocale.getString('memo/label/creation_date', 'Creation Date:') : 'Creation Date:';
+
                         appendTarget.append(`<div class="card memeobject">
                             <br>
                             <div class="card-content">
@@ -205,13 +212,13 @@
                                 <div class="content">
                                     ${displayContent}
                                 <br>
-                                <time>Creation Date: ${timestampToDateString(key)}</time>
+                                <time>${creationDateLabel} ${timestampToDateString(key)}</time>
                                 </div>
                             </div>
                             <footer class="card-footer">
-                                <a href="#" class="card-footer-item" memo="${key}" onclick="moveToTop(this)">Move to Top</a>
-                                <a href="#" class="card-footer-item" memo="${key}" onclick="editMemo(this);">Edit</a>
-                                <a href="#" class="card-footer-item" memo="${key}" onclick="removeMemoByButton(this);">Delete</a>
+                                <a href="#" class="card-footer-item" memo="${key}" onclick="moveToTop(this)">${moveToTopLabel}</a>
+                                <a href="#" class="card-footer-item" memo="${key}" onclick="editMemo(this);">${editLabel}</a>
+                                <a href="#" class="card-footer-item" memo="${key}" onclick="removeMemoByButton(this);">${deleteLabel}</a>
                             </footer>
                             </div>`);
                     });
@@ -229,8 +236,6 @@
                     }
                 })
             }
-
-            listAllMemo();
 
             function editMemo(btn){
                 let memoID = $(btn).attr("memo");
@@ -260,7 +265,7 @@
                 createNewMemo(function(){
                     removeMemo(memoID);
                 });
-                
+
             }
 
             function removeMemoByButton(btn){
@@ -307,12 +312,23 @@
                             listAllMemo();
                         }
                     }
-                   
+
                 })
-                
+
             }
 
-            
+            function startApp() {
+                listAllMemo();
+            }
+
+            if (typeof applocale !== 'undefined' && applocale) {
+                applocale.init('locale/memo.json', function() {
+                    applocale.translate();
+                    startApp();
+                });
+            } else {
+                startApp();
+            }
         </script>
     </body>
 </html>
