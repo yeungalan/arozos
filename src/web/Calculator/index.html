@@ -6,6 +6,7 @@
     <title>Calculator</title>
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
+    <script src="../script/applocale.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -171,7 +172,7 @@
     <div class="calculator">
         <!-- Display -->
         <div class="display">
-            <span class="theme-toggle" id="themeToggle" title="Toggle theme">&#9679;</span>
+            <span class="theme-toggle" id="themeToggle" title="Toggle theme" locale="calculator/btn/theme">&#9679;</span>
             <div class="expression" id="expression"></div>
             <div class="result" id="result">0</div>
         </div>
@@ -179,7 +180,7 @@
         <!-- Buttons -->
         <div class="buttons">
             <!-- Row 1 -->
-            <button class="btn btn-func" data-action="clear">AC</button>
+            <button class="btn btn-func" data-action="clear" locale="calculator/btn/ac">AC</button>
             <button class="btn btn-func" data-action="sign">&#177;</button>
             <button class="btn btn-func" data-action="percent">%</button>
             <button class="btn btn-op"   data-action="op" data-op="&divide;">&divide;</button>
@@ -211,6 +212,7 @@
 
     <script>
         // -- Display initialization and state management for calculator logic --
+        function startApp() {
         ao_module_setFixedWindowSize();
 
         // ── State ──────────────────────────────────────────────────────────────
@@ -280,7 +282,7 @@
 
             if (operator === '÷') {
                 if (curr === 0) {
-                    currentValue  = 'Error';
+                    currentValue  = (applocale ? applocale.getString('calculator/msg/error', 'Error') : 'Error');
                     operator      = null;
                     previousValue = '';
                     shouldReset   = true;
@@ -323,7 +325,7 @@
             shouldReset   = false;
             expressionStr = '';
             highlightOperator(null);
-            document.querySelector('[data-action="clear"]').textContent = 'AC';
+            document.querySelector('[data-action="clear"]').textContent = (applocale ? applocale.getString('calculator/btn/ac', 'AC') : 'AC');
             updateDisplay();
         }
 
@@ -358,7 +360,7 @@
 
                 // Once a digit/decimal is typed, switch AC → C
                 if (action === 'num' || action === 'decimal') {
-                    document.querySelector('[data-action="clear"]').textContent = 'C';
+                    document.querySelector('[data-action="clear"]').textContent = (applocale ? applocale.getString('calculator/btn/c', 'C') : 'C');
                 }
 
                 switch (action) {
@@ -375,14 +377,14 @@
 
         // Keyboard support
         document.addEventListener('keydown', function(e) {
-            if (e.key >= '0' && e.key <= '9')  { handleNumber(e.key); document.querySelector('[data-action="clear"]').textContent = 'C'; }
+            if (e.key >= '0' && e.key <= '9')  { handleNumber(e.key); document.querySelector('[data-action="clear"]').textContent = (applocale ? applocale.getString('calculator/btn/c', 'C') : 'C'); }
             else if (e.key === '+')             handleOperator('+');
             else if (e.key === '-')             handleOperator('−');
             else if (e.key === '*')             handleOperator('×');
             else if (e.key === '/')             { e.preventDefault(); handleOperator('÷'); }
             else if (e.key === 'Enter' || e.key === '=') performCalculation();
             else if (e.key === 'Escape')        handleClear();
-            else if (e.key === '.')             { handleDecimal(); document.querySelector('[data-action="clear"]').textContent = 'C'; }
+            else if (e.key === '.')             { handleDecimal(); document.querySelector('[data-action="clear"]').textContent = (applocale ? applocale.getString('calculator/btn/c', 'C') : 'C'); }
             else if (e.key === '%')             handlePercent();
             else if (e.key === 'Backspace') {
                 if (currentValue.length > 1 && currentValue !== 'Error') {
@@ -413,6 +415,16 @@
 
         // Initial render
         updateDisplay();
+        } // end startApp
+
+        if (typeof applocale !== 'undefined' && applocale) {
+            applocale.init('locale/calculator.json', function() {
+                applocale.translate();
+                startApp();
+            });
+        } else {
+            startApp();
+        }
     </script>
 </body>
 </html>

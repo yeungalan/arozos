@@ -1,0 +1,65 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "calculator/btn/ac": "AC",
+                "calculator/btn/c": "C",
+                "calculator/btn/theme": "Toggle theme",
+                "calculator/msg/error": "Error"
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "calculator/btn/ac": "全清",
+                "calculator/btn/c": "清除",
+                "calculator/btn/theme": "切換主題",
+                "calculator/msg/error": "錯誤"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "calculator/btn/ac": "全清",
+                "calculator/btn/c": "清除",
+                "calculator/btn/theme": "切換主題",
+                "calculator/msg/error": "錯誤"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "calculator/btn/ac": "全清",
+                "calculator/btn/c": "清除",
+                "calculator/btn/theme": "切换主题",
+                "calculator/msg/error": "错误"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "calculator/btn/ac": "全消去",
+                "calculator/btn/c": "消去",
+                "calculator/btn/theme": "テーマ切替",
+                "calculator/msg/error": "エラー"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "calculator/btn/ac": "전체 지우기",
+                "calculator/btn/c": "지우기",
+                "calculator/btn/theme": "테마 전환",
+                "calculator/msg/error": "오류"
+            }
+        }
+    }
+}
