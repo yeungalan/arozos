@@ -85,6 +85,48 @@
             }
         },
 
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fwtitle": "漫畫櫃",
+            "fontFamily": "\"Microsoft JhengHei\", \"Apple LiGothic Medium\", \"STHeiti\", sans-serif",
+            "strings": {
+                "app/title":                "漫畫",
+                "loading/library":          "載入中…",
+                "loading/chapter":          "載入話中…",
+                "empty/title":              "搵唔到漫畫",
+                "empty/sub":               "請將漫畫資料夾加入",
+                "nosearch/title":           "無搜尋結果",
+                "nosearch/sub":            "搵唔到符合嘅漫畫。",
+                "btn/back_library":         "返回櫃台",
+                "btn/back":                "返回",
+                "btn/prev":                "上一話",
+                "btn/next":                "下一話",
+                "btn/close":               "關閉",
+                "btn/go_back":             "返回",
+                "detail/no_chapters":       "搵唔到章節。",
+                "reader/end_chapter":       "本話完",
+                "reader/next_chapter":      "下一章節",
+                "reader/finished":          "已讀完最後一話。",
+                "reader/up_next":           "下一話：",
+                "overlay/chapters":         "章節列表",
+                "settings/title":           "設定",
+                "settings/save_progress":   "儲存進度",
+                "settings/save_progress_sub": "自動返回上次閱讀頁面",
+                "settings/pc_mode":         "電腦模式",
+                "settings/pc_mode_sub":     "縮小圖片以適應大螢幕",
+                "error/load_failed":        "章節載入失敗。"
+            },
+            "titles": {
+                "Toggle theme":             "切換主題",
+                "Open manga folder":        "開啟漫畫資料夾",
+                "Chapter list":             "章節列表",
+                "Settings":                 "設定"
+            },
+            "placeholder": {
+                "Search titles, authors…": "搜尋標題、作者…"
+            }
+        },
+
         "zh-cn": {
             "name": "简体中文",
             "fwtitle": "漫画柜",

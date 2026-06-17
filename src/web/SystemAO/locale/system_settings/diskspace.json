@@ -34,6 +34,38 @@
                 "diskspace/total": "总计：",
                 "diskspace/na": "不适用"
             }
+        },
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "diskspace/title": "Storage Space",
+                "diskspace/toggle-tmpfs": "Show/Hide tmpfs",
+                "diskspace/free": "Free: ",
+                "diskspace/total": "Total: ",
+                "diskspace/na": "N/A"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "diskspace/title": "ストレージ容量",
+                "diskspace/toggle-tmpfs": "tmpfs を表示/非表示",
+                "diskspace/free": "空き: ",
+                "diskspace/total": "合計: ",
+                "diskspace/na": "N/A"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "diskspace/title": "저장 공간",
+                "diskspace/toggle-tmpfs": "tmpfs 표시/숨기기",
+                "diskspace/free": "여유: ",
+                "diskspace/total": "전체: ",
+                "diskspace/na": "N/A"
+            }
         }
     }
 }

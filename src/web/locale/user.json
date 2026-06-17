@@ -16,6 +16,85 @@
                 "user/create":        "建立",
                 "user/cancel":        "取消"
             }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "user/title":         "新增用戶",
+                "user/subtitle":      "填寫以下資訊以建立帳號。",
+                "user/username":      "用戶名稱",
+                "user/password":      "密碼",
+                "user/confirm-pw":    "確認密碼",
+                "user/group":         "用戶群組",
+                "user/loading":       "載入中…",
+                "user/required-note": "此欄位為必填",
+                "user/create":        "建立",
+                "user/cancel":        "取消"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "user/title":         "新增用户",
+                "user/subtitle":      "填写以下信息以创建账号。",
+                "user/username":      "用户名",
+                "user/password":      "密码",
+                "user/confirm-pw":    "确认密码",
+                "user/group":         "用户群组",
+                "user/loading":       "加载中…",
+                "user/required-note": "此字段为必填",
+                "user/create":        "创建",
+                "user/cancel":        "取消"
+            }
+        },
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "user/title":         "Add User",
+                "user/subtitle":      "Fill in the details below to create an account.",
+                "user/username":      "Username",
+                "user/password":      "Password",
+                "user/confirm-pw":    "Confirm Password",
+                "user/group":         "User Group",
+                "user/loading":       "Loading…",
+                "user/required-note": "This field is required",
+                "user/create":        "Create",
+                "user/cancel":        "Cancel"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "user/title":         "ユーザーを追加",
+                "user/subtitle":      "アカウントを作成するために以下の情報を入力してください。",
+                "user/username":      "ユーザー名",
+                "user/password":      "パスワード",
+                "user/confirm-pw":    "パスワードを確認",
+                "user/group":         "ユーザーグループ",
+                "user/loading":       "読み込み中…",
+                "user/required-note": "このフィールドは必須です",
+                "user/create":        "作成",
+                "user/cancel":        "キャンセル"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "user/title":         "사용자 추가",
+                "user/subtitle":      "계정을 만들기 위해 아래 정보를 입력해 주세요.",
+                "user/username":      "사용자 이름",
+                "user/password":      "비밀번호",
+                "user/confirm-pw":    "비밀번호 확인",
+                "user/group":         "사용자 그룹",
+                "user/loading":       "로딩 중…",
+                "user/required-note": "이 필드는 필수입니다",
+                "user/create":        "만들기",
+                "user/cancel":        "취소"
+            }
         }
     }
 }

@@ -73,6 +73,77 @@
                 "neighbour/js/norecord":        "无记录",
                 "neighbour/js/unsupported":     "不支持"
             }
+        },
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "neighbour/title":              "Cluster Neighbours",
+                "neighbour/subtitle":           "Automatic Cluster Discovery Service",
+                "neighbour/error/title":        "Cluster Scan Error",
+                "neighbour/section/thishost":   "This Host",
+                "neighbour/section/nearby":     "Nearby Hosts",
+                "neighbour/section/offline":    "Offline Hosts",
+                "neighbour/footer/retention":   "Hosts offline for more than 30 days will be automatically removed from records",
+                "neighbour/footer/lastupdated": "Last Updated",
+                "neighbour/footer/secsago":     "seconds ago",
+                "neighbour/empty/nearby":       "No nearby hosts discovered",
+                "neighbour/empty/offline":      "No offline hosts",
+                "neighbour/btn/wol":            "Wake on LAN",
+                "neighbour/label/ip":           "IP",
+                "neighbour/label/version":      "Version",
+                "neighbour/label/uuid":         "UUID",
+                "neighbour/label/mac":          "MAC",
+                "neighbour/js/norecord":        "No records",
+                "neighbour/js/unsupported":     "Unsupported"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "neighbour/title":              "クラスター隣接ノード",
+                "neighbour/subtitle":           "自動クラスター探索サービス",
+                "neighbour/error/title":        "クラスタースキャンエラー",
+                "neighbour/section/thishost":   "このホスト",
+                "neighbour/section/nearby":     "近くのホスト",
+                "neighbour/section/offline":    "オフラインのホスト",
+                "neighbour/footer/retention":   "30日以上オフラインのホストは自動的に記録から削除されます",
+                "neighbour/footer/lastupdated": "最終更新",
+                "neighbour/footer/secsago":     "秒前",
+                "neighbour/empty/nearby":       "近くのホストが見つかりません",
+                "neighbour/empty/offline":      "オフラインのホストはありません",
+                "neighbour/btn/wol":            "Wake on LAN",
+                "neighbour/label/ip":           "IP",
+                "neighbour/label/version":      "バージョン",
+                "neighbour/label/uuid":         "UUID",
+                "neighbour/label/mac":          "MAC",
+                "neighbour/js/norecord":        "記録なし",
+                "neighbour/js/unsupported":     "未対応"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "neighbour/title":              "클러스터 이웃",
+                "neighbour/subtitle":           "자동 클러스터 탐색 서비스",
+                "neighbour/error/title":        "클러스터 스캔 오류",
+                "neighbour/section/thishost":   "이 호스트",
+                "neighbour/section/nearby":     "근처 호스트",
+                "neighbour/section/offline":    "오프라인 호스트",
+                "neighbour/footer/retention":   "30일 이상 오프라인인 호스트는 자동으로 기록에서 제거됩니다",
+                "neighbour/footer/lastupdated": "마지막 업데이트",
+                "neighbour/footer/secsago":     "초 전",
+                "neighbour/empty/nearby":       "근처 호스트를 찾을 수 없습니다",
+                "neighbour/empty/offline":      "오프라인 호스트 없음",
+                "neighbour/btn/wol":            "Wake on LAN",
+                "neighbour/label/ip":           "IP",
+                "neighbour/label/version":      "버전",
+                "neighbour/label/uuid":         "UUID",
+                "neighbour/label/mac":          "MAC",
+                "neighbour/js/norecord":        "기록 없음",
+                "neighbour/js/unsupported":     "지원 안 됨"
+            }
         }
     }
 }

@@ -18,6 +18,95 @@
                 "newuser/btn-create":         "建立用戶",
                 "newuser/err-request-failed": "請求失敗，請再試一次。"
             }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "newuser/title":               "建立新用戶",
+                "newuser/section-account":    "帳號資訊",
+                "newuser/field-username":     "用戶名稱",
+                "newuser/field-password":     "密碼",
+                "newuser/field-confirm-pw":   "確認密碼",
+                "newuser/section-group":      "權限群組",
+                "newuser/field-group":        "用戶群組",
+                "newuser/loading":            "載入中…",
+                "newuser/required-note":      "此欄位為必填",
+                "newuser/btn-cancel":         "取消",
+                "newuser/btn-create":         "建立用戶",
+                "newuser/err-request-failed": "請求失敗，請再試一次。"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "newuser/title":               "创建新用户",
+                "newuser/section-account":    "账号信息",
+                "newuser/field-username":     "用户名",
+                "newuser/field-password":     "密码",
+                "newuser/field-confirm-pw":   "确认密码",
+                "newuser/section-group":      "权限群组",
+                "newuser/field-group":        "用户群组",
+                "newuser/loading":            "加载中…",
+                "newuser/required-note":      "此字段为必填",
+                "newuser/btn-cancel":         "取消",
+                "newuser/btn-create":         "创建用户",
+                "newuser/err-request-failed": "请求失败，请重试。"
+            }
+        },
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "newuser/title":               "Create New User",
+                "newuser/section-account":    "Account Information",
+                "newuser/field-username":     "Username",
+                "newuser/field-password":     "Password",
+                "newuser/field-confirm-pw":   "Confirm Password",
+                "newuser/section-group":      "Permission Group",
+                "newuser/field-group":        "User Group",
+                "newuser/loading":            "Loading…",
+                "newuser/required-note":      "This field is required",
+                "newuser/btn-cancel":         "Cancel",
+                "newuser/btn-create":         "Create User",
+                "newuser/err-request-failed": "Request failed, please try again."
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "newuser/title":               "新規ユーザーを作成",
+                "newuser/section-account":    "アカウント情報",
+                "newuser/field-username":     "ユーザー名",
+                "newuser/field-password":     "パスワード",
+                "newuser/field-confirm-pw":   "パスワードを確認",
+                "newuser/section-group":      "権限グループ",
+                "newuser/field-group":        "ユーザーグループ",
+                "newuser/loading":            "読み込み中…",
+                "newuser/required-note":      "このフィールドは必須です",
+                "newuser/btn-cancel":         "キャンセル",
+                "newuser/btn-create":         "ユーザーを作成",
+                "newuser/err-request-failed": "リクエストに失敗しました。もう一度試してください。"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "newuser/title":               "새 사용자 만들기",
+                "newuser/section-account":    "계정 정보",
+                "newuser/field-username":     "사용자 이름",
+                "newuser/field-password":     "비밀번호",
+                "newuser/field-confirm-pw":   "비밀번호 확인",
+                "newuser/section-group":      "권한 그룹",
+                "newuser/field-group":        "사용자 그룹",
+                "newuser/loading":            "로딩 중…",
+                "newuser/required-note":      "이 필드는 필수입니다",
+                "newuser/btn-cancel":         "취소",
+                "newuser/btn-create":         "사용자 만들기",
+                "newuser/err-request-failed": "요청에 실패했습니다. 다시 시도해 주세요."
+            }
         }
     }
 }
