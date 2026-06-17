@@ -7,6 +7,7 @@
     <link rel="icon" type="image/png" href="img/module_icon.png">
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
+    <script src="../script/applocale.js"></script>
     <style>
         /* ===== THEME VARIABLES ===== */
         :root {
@@ -254,7 +255,7 @@
 
         /* File-handler app badge */
         .app-card.file-handler { border-style: dashed; opacity: 0.8; }
-        .app-card.file-handler .app-card-name::after { content: " 📎"; font-size: 0.6rem; }
+        .app-card.file-handler .app-card-name::after { content: " [file]"; font-size: 0.6rem; }
 
         /* ===== THEME SWATCHES ===== */
         .theme-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 4px; }
@@ -760,14 +761,14 @@
     </div>
     <!-- Mini-Tools: CPU / RAM / Network -->
     <div class="minitools-card" id="minitoolsWidget">
-        <div class="minitools-title">⚡ System</div>
+        <div class="minitools-title" locale="dashboard/section/system">System</div>
         <div class="minitool-row">
-            <span class="minitool-label">CPU</span>
+            <span class="minitool-label" locale="dashboard/label/cpu">CPU</span>
             <div class="minitool-bar"><div id="cpuBar" class="minitool-fill" style="width:0%"></div></div>
             <span class="minitool-val" id="cpuVal">—</span>
         </div>
         <div class="minitool-row">
-            <span class="minitool-label">RAM</span>
+            <span class="minitool-label" locale="dashboard/label/ram">RAM</span>
             <div class="minitool-bar"><div id="ramBar" class="minitool-fill" style="width:0%"></div></div>
             <span class="minitool-val" id="ramVal">—</span>
         </div>
@@ -845,14 +846,14 @@
     </div>
     <div class="system-grid">
         <div class="system-card" onclick="openSystemSettings()">
-            <div class="sys-icon">⚙️</div>
+            <div class="sys-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
             <div>
                 <div class="sys-name">System Settings</div>
                 <div class="sys-desc">ArozOS system configuration</div>
             </div>
         </div>
         <div class="system-card" onclick="openDashboardSettings()">
-            <div class="sys-icon">🎛️</div>
+            <div class="sys-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h1v6H9zm5 0h1v6h-1z"/></svg></div>
             <div>
                 <div class="sys-name">Dashboard Settings</div>
                 <div class="sys-desc">Customize widgets &amp; theme</div>
@@ -866,7 +867,7 @@
 <div class="modal-overlay" id="dashSettingsModal">
     <div class="modal">
         <button class="modal-close" onclick="closeModal('dashSettingsModal')">✕</button>
-        <div class="modal-title">🎛️ Dashboard Settings</div>
+        <div class="modal-title" locale="dashboard/modal/settings_title">Dashboard Settings</div>
 
         <!-- Theme Selector -->
         <div class="form-group">
@@ -947,7 +948,7 @@
 <div class="modal-overlay" id="addPinModal">
     <div class="modal">
         <button class="modal-close" onclick="closeModal('addPinModal')">✕</button>
-        <div class="modal-title">📌 Pin an Application</div>
+        <div class="modal-title" locale="dashboard/modal/pin_app">Pin an Application</div>
         <input type="text" class="pin-search" id="pinSearchInput" placeholder="Search applications…" oninput="filterPinList(this.value)">
         <div class="pin-app-list" id="pinAppList">
             <div class="empty-msg">Loading…</div>
@@ -995,30 +996,30 @@ var _calViewDate      = new Date();
 //  WMO WEATHER CODE TABLE
 // =============================================================
 var WMO = {
-    0:  { icon: "☀️",  desc: "Clear sky" },
-    1:  { icon: "🌤️", desc: "Mainly clear" },
-    2:  { icon: "⛅",  desc: "Partly cloudy" },
-    3:  { icon: "☁️",  desc: "Overcast" },
-    45: { icon: "🌫️", desc: "Foggy" },
-    48: { icon: "🌫️", desc: "Icy fog" },
-    51: { icon: "🌦️", desc: "Light drizzle" },
-    53: { icon: "🌦️", desc: "Drizzle" },
-    55: { icon: "🌧️", desc: "Heavy drizzle" },
-    61: { icon: "🌧️", desc: "Light rain" },
-    63: { icon: "🌧️", desc: "Rain" },
-    65: { icon: "🌧️", desc: "Heavy rain" },
-    71: { icon: "❄️",  desc: "Light snow" },
-    73: { icon: "❄️",  desc: "Snow" },
-    75: { icon: "❄️",  desc: "Heavy snow" },
-    77: { icon: "🌨️", desc: "Snow grains" },
-    80: { icon: "🌦️", desc: "Rain showers" },
-    81: { icon: "🌧️", desc: "Heavy showers" },
-    82: { icon: "⛈️",  desc: "Violent showers" },
-    85: { icon: "🌨️", desc: "Snow showers" },
-    86: { icon: "🌨️", desc: "Heavy snow showers" },
-    95: { icon: "⛈️",  desc: "Thunderstorm" },
-    96: { icon: "⛈️",  desc: "Thunderstorm w/ hail" },
-    99: { icon: "⛈️",  desc: "Thunderstorm w/ heavy hail" }
+    0:  { icon: "Clear",  desc: "Clear sky" },
+    1:  { icon: "Clear",  desc: "Mainly clear" },
+    2:  { icon: "P.Cloud", desc: "Partly cloudy" },
+    3:  { icon: "Cloudy", desc: "Overcast" },
+    45: { icon: "Fog",    desc: "Foggy" },
+    48: { icon: "IceFog", desc: "Icy fog" },
+    51: { icon: "Drizzle", desc: "Light drizzle" },
+    53: { icon: "Drizzle", desc: "Drizzle" },
+    55: { icon: "H.Drizl", desc: "Heavy drizzle" },
+    61: { icon: "Rain",   desc: "Light rain" },
+    63: { icon: "Rain",   desc: "Rain" },
+    65: { icon: "H.Rain", desc: "Heavy rain" },
+    71: { icon: "Snow",   desc: "Light snow" },
+    73: { icon: "Snow",   desc: "Snow" },
+    75: { icon: "H.Snow", desc: "Heavy snow" },
+    77: { icon: "Sleet",  desc: "Snow grains" },
+    80: { icon: "Shower", desc: "Rain showers" },
+    81: { icon: "H.Shwr", desc: "Heavy showers" },
+    82: { icon: "Storm",  desc: "Violent showers" },
+    85: { icon: "SnoShwr", desc: "Snow showers" },
+    86: { icon: "H.SnoSh", desc: "Heavy snow showers" },
+    95: { icon: "Thunder", desc: "Thunderstorm" },
+    96: { icon: "Th+Hail", desc: "Thunderstorm w/ hail" },
+    99: { icon: "Th+Hail", desc: "Thunderstorm w/ heavy hail" }
 };
 
 function wmoLookup(code) {
@@ -1032,7 +1033,7 @@ function wmoLookup(code) {
     if (code >= 80 && code <= 84) return WMO[81];
     if (code >= 85 && code <= 89) return WMO[85];
     if (code >= 90 && code <= 99) return WMO[95];
-    return { icon: "🌡️", desc: "Unknown" };
+    return { icon: "?", desc: "Unknown" };
 }
 
 // =============================================================

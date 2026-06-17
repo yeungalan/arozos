@@ -1,0 +1,95 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "speedtest/label/your_speed": "Your internet speed:",
+                "speedtest/label/download": "Download",
+                "speedtest/label/latency": "Latency",
+                "speedtest/label/upload": "Upload",
+                "speedtest/btn/go": "Go",
+                "speedtest/btn/go_again": "Go again",
+                "speedtest/msg/testing": "Testing your internet speed...",
+                "speedtest/btn/testing": "Testing...",
+                "speedtest/label/ms": "ms"
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "speedtest/label/your_speed": "您的網際網路速度：",
+                "speedtest/label/download": "下載",
+                "speedtest/label/latency": "延遲",
+                "speedtest/label/upload": "上傳",
+                "speedtest/btn/go": "開始",
+                "speedtest/btn/go_again": "再測一次",
+                "speedtest/msg/testing": "正在測試網際網路速度...",
+                "speedtest/btn/testing": "測試中...",
+                "speedtest/label/ms": "毫秒"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "speedtest/label/your_speed": "您的網絡速度：",
+                "speedtest/label/download": "下載",
+                "speedtest/label/latency": "延遲",
+                "speedtest/label/upload": "上傳",
+                "speedtest/btn/go": "開始",
+                "speedtest/btn/go_again": "再測一次",
+                "speedtest/msg/testing": "正在測試網絡速度...",
+                "speedtest/btn/testing": "測試中...",
+                "speedtest/label/ms": "毫秒"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "speedtest/label/your_speed": "您的网络速度：",
+                "speedtest/label/download": "下载",
+                "speedtest/label/latency": "延迟",
+                "speedtest/label/upload": "上传",
+                "speedtest/btn/go": "开始",
+                "speedtest/btn/go_again": "再测一次",
+                "speedtest/msg/testing": "正在测试网络速度...",
+                "speedtest/btn/testing": "测试中...",
+                "speedtest/label/ms": "毫秒"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "speedtest/label/your_speed": "インターネット速度：",
+                "speedtest/label/download": "ダウンロード",
+                "speedtest/label/latency": "レイテンシ",
+                "speedtest/label/upload": "アップロード",
+                "speedtest/btn/go": "開始",
+                "speedtest/btn/go_again": "もう一度",
+                "speedtest/msg/testing": "インターネット速度をテスト中...",
+                "speedtest/btn/testing": "テスト中...",
+                "speedtest/label/ms": "ms"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "speedtest/label/your_speed": "인터넷 속도:",
+                "speedtest/label/download": "다운로드",
+                "speedtest/label/latency": "지연 시간",
+                "speedtest/label/upload": "업로드",
+                "speedtest/btn/go": "시작",
+                "speedtest/btn/go_again": "다시 측정",
+                "speedtest/msg/testing": "인터넷 속도를 측정 중...",
+                "speedtest/btn/testing": "측정 중...",
+                "speedtest/label/ms": "ms"
+            }
+        }
+    }
+}
