@@ -6,6 +6,7 @@
 <title>Reminders</title>
 <script src="../script/jquery.min.js"></script>
 <script src="../script/ao_module.js"></script>
+<script src="../script/applocale.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -228,19 +229,19 @@ select.dt-inp{cursor:pointer}
     <div class="sb-scroll">
       <div class="search-wrap">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input id="searchInp" placeholder="Search" autocomplete="off" oninput="onSearch(this.value)">
+        <input id="searchInp" placeholder="Search" locale="reminders/placeholder/search" autocomplete="off" oninput="onSearch(this.value)">
       </div>
       <div class="smart-grid" id="smartGrid"></div>
-      <div class="sb-h"><span>My Lists</span></div>
+      <div class="sb-h"><span locale="reminders/section/my_lists">My Lists</span></div>
       <div id="listList"></div>
     </div>
     <div class="sb-foot">
       <button class="foot-btn" onclick="openListModal(null)">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Add List
+        <span locale="reminders/btn/add_list">Add List</span>
       </button>
       <div class="foot-spacer"></div>
-      <button class="icon-btn" id="darkBtn" title="Toggle appearance" onclick="toggleDark()"></button>
+      <button class="icon-btn" id="darkBtn" title="Toggle appearance" locale="reminders/btn/toggle_appearance" onclick="toggleDark()"></button>
     </div>
   </aside>
   <div id="scrim" onclick="closeSidebar()"></div>
@@ -252,9 +253,9 @@ select.dt-inp{cursor:pointer}
         <button class="icon-btn menu-btn" onclick="openSidebar()" style="margin:2px 0 0 -4px">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
         </button>
-        <div id="mainTitle">Reminders</div>
+        <div id="mainTitle" locale="reminders/title">Reminders</div>
         <div id="mainCount">0</div>
-        <button class="mh-add" id="addBtn" title="New Reminder" onclick="quickAdd()">
+        <button class="mh-add" id="addBtn" title="New Reminder" locale="reminders/btn/new" onclick="quickAdd()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div>
@@ -271,16 +272,16 @@ select.dt-inp{cursor:pointer}
 <div class="pop-back" id="popBack" onclick="closeDetail()"></div>
 <div id="detail">
   <div class="dt-hd">
-    <input id="dtTitle" placeholder="Title" autocomplete="off">
+    <input id="dtTitle" placeholder="Title" locale="reminders/placeholder/title" autocomplete="off">
     <button class="dt-flag" id="dtFlag" title="Flag" onclick="dtToggleFlag()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
     </button>
   </div>
   <div class="dt-body">
-    <textarea id="dtNotes" placeholder="Notes" rows="1"></textarea>
+    <textarea id="dtNotes" placeholder="Notes" locale="reminders/label/notes" rows="1"></textarea>
     <div class="dt-card">
       <div class="dt-line">
-        <span class="dl-lbl">On a Day</span>
+        <span class="dl-lbl" locale="reminders/label/on_a_day">On a Day</span>
         <label class="dt-sw"><input type="checkbox" id="dtOnDay" onchange="dtToggleDay()"><span class="dt-sw-tk"></span></label>
       </div>
       <div class="dt-sub" id="dtDateSub" style="display:none">
@@ -288,7 +289,7 @@ select.dt-inp{cursor:pointer}
         <input type="date" class="dt-inp dt-flex" id="dtDate" onchange="dtChanged()">
       </div>
       <div class="dt-line">
-        <span class="dl-lbl">At a Time</span>
+        <span class="dl-lbl" locale="reminders/label/at_a_time">At a Time</span>
         <label class="dt-sw"><input type="checkbox" id="dtOnTime" onchange="dtToggleTime()"><span class="dt-sw-tk"></span></label>
       </div>
       <div class="dt-sub" id="dtTimeSub" style="display:none">
@@ -298,55 +299,55 @@ select.dt-inp{cursor:pointer}
     </div>
     <div class="dt-card">
       <div class="dt-line">
-        <span class="dl-lbl">Priority</span>
+        <span class="dl-lbl" locale="reminders/label/priority">Priority</span>
         <select class="dt-inp" id="dtPrio" onchange="dtChanged()">
-          <option value="0">None</option>
-          <option value="1">Low</option>
-          <option value="2">Medium</option>
-          <option value="3">High</option>
+          <option value="0" locale="reminders/priority/none">None</option>
+          <option value="1" locale="reminders/priority/low">Low</option>
+          <option value="2" locale="reminders/priority/medium">Medium</option>
+          <option value="3" locale="reminders/priority/high">High</option>
         </select>
       </div>
       <div class="dt-line">
-        <span class="dl-lbl">Repeat</span>
+        <span class="dl-lbl" locale="reminders/label/repeat">Repeat</span>
         <select class="dt-inp" id="dtRepeat" onchange="dtChanged()">
-          <option value="">Never</option>
-          <option value="FREQ=DAILY">Daily</option>
-          <option value="FREQ=WEEKLY">Weekly</option>
-          <option value="FREQ=MONTHLY">Monthly</option>
-          <option value="FREQ=YEARLY">Yearly</option>
+          <option value="" locale="reminders/repeat/never">Never</option>
+          <option value="FREQ=DAILY" locale="reminders/repeat/daily">Daily</option>
+          <option value="FREQ=WEEKLY" locale="reminders/repeat/weekly">Weekly</option>
+          <option value="FREQ=MONTHLY" locale="reminders/repeat/monthly">Monthly</option>
+          <option value="FREQ=YEARLY" locale="reminders/repeat/yearly">Yearly</option>
         </select>
       </div>
       <div class="dt-line">
-        <span class="dl-lbl">List</span>
+        <span class="dl-lbl" locale="reminders/label/list">List</span>
         <select class="dt-inp" id="dtList" onchange="dtChanged()"></select>
       </div>
       <div class="dt-sub">
         <span class="ds-ic" style="background:var(--c-gray)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></span>
-        <input class="dt-url" id="dtUrl" placeholder="Add URL" autocomplete="off" oninput="dtChanged()">
+        <input class="dt-url" id="dtUrl" placeholder="Add URL" locale="reminders/placeholder/url" autocomplete="off" oninput="dtChanged()">
       </div>
     </div>
   </div>
   <div class="dt-foot">
-    <button class="dt-del" onclick="dtDelete()">Delete</button>
-    <button class="dt-done" onclick="closeDetail()">Done</button>
+    <button class="dt-del" onclick="dtDelete()" locale="reminders/btn/delete">Delete</button>
+    <button class="dt-done" onclick="closeDetail()" locale="reminders/btn/done">Done</button>
   </div>
 </div>
 
 <!-- list create / edit modal -->
 <div class="modal-back" id="listModal">
   <div class="modal">
-    <h3 id="lmHd">New List</h3>
+    <h3 id="lmHd" locale="reminders/modal/new_list">New List</h3>
     <div class="lm-preview" id="lmPrev"></div>
-    <input class="lm-name" id="lmName" placeholder="List Name" autocomplete="off" oninput="lmRenderPreview()">
-    <div class="lm-sec-t">Color</div>
+    <input class="lm-name" id="lmName" placeholder="List Name" locale="reminders/placeholder/list_name" autocomplete="off" oninput="lmRenderPreview()">
+    <div class="lm-sec-t" locale="reminders/label/color">Color</div>
     <div class="swatches" id="lmSwatches"></div>
-    <div class="lm-sec-t">Icon</div>
+    <div class="lm-sec-t" locale="reminders/label/icon">Icon</div>
     <div class="iconpick" id="lmIcons"></div>
     <div class="modal-foot">
-      <button class="m-cancel" onclick="closeListModal()">Cancel</button>
-      <button class="m-ok" onclick="lmSave()">Done</button>
+      <button class="m-cancel" onclick="closeListModal()" locale="reminders/btn/cancel">Cancel</button>
+      <button class="m-ok" onclick="lmSave()" locale="reminders/btn/done">Done</button>
     </div>
-    <button class="m-del" id="lmDel" onclick="lmDelete()" style="display:none">Delete List</button>
+    <button class="m-del" id="lmDel" onclick="lmDelete()" style="display:none" locale="reminders/btn/delete_list">Delete List</button>
   </div>
 </div>
 
@@ -422,9 +423,9 @@ function isOverdue(rm){
 function fmtDateChip(rm){
   if(!rm.dueDate) return '';
   var due=parseYmd(rm.dueDate), d=dayDiff(rm.dueDate, todayStr()), label;
-  if(d===0) label='Today';
-  else if(d===1) label='Tomorrow';
-  else if(d===-1) label='Yesterday';
+  if(d===0) label=(applocale?applocale.getString('reminders/list/today','Today'):'Today');
+  else if(d===1) label=(applocale?applocale.getString('reminders/date/tomorrow','Tomorrow'):'Tomorrow');
+  else if(d===-1) label=(applocale?applocale.getString('reminders/date/yesterday','Yesterday'):'Yesterday');
   else { label=DAYS_SHORT[due.getDay()]+', '+MONTHS_SHORT[due.getMonth()]+' '+due.getDate(); if(due.getFullYear()!==new Date().getFullYear()) label+=', '+due.getFullYear(); }
   if(rm.dueTime) label+=' '+fmtTime(rm.dueTime);
   return label;
@@ -439,7 +440,7 @@ function repeatSelectVal(rrule){
   return ['DAILY','WEEKLY','MONTHLY','YEARLY'].indexOf(f)>=0 ? ('FREQ='+f) : '';
 }
 function repeatLabel(rrule){
-  return { DAILY:'Daily', WEEKLY:'Weekly', MONTHLY:'Monthly', YEARLY:'Yearly' }[rruleFreq(rrule)] || (rrule?'Repeats':'');
+  var lmap={ DAILY:(applocale?applocale.getString('reminders/repeat/daily','Daily'):'Daily'), WEEKLY:(applocale?applocale.getString('reminders/repeat/weekly','Weekly'):'Weekly'), MONTHLY:(applocale?applocale.getString('reminders/repeat/monthly','Monthly'):'Monthly'), YEARLY:(applocale?applocale.getString('reminders/repeat/yearly','Yearly'):'Yearly') }; return lmap[rruleFreq(rrule)] || (rrule?'Repeats':'');
 }
 // Advance a YYYY-MM-DD string to the next occurrence for the given RRULE.
 function nextOccurrence(dateStr, rrule){
@@ -497,19 +498,20 @@ function render(){ renderSidebar(); renderMain(); }
 function renderSidebar(){
   // smart cards
   var g='';
+  var SMART_LOCALE_KEYS={ today:'reminders/list/today', scheduled:'reminders/list/scheduled', all:'reminders/list/all', flagged:'reminders/list/flagged' };
   SMART.forEach(function(s){
     var active=(S.sel.type==='smart'&&S.sel.id===s.id)?' active':'';
     g+='<button class="smart-card'+active+'" onclick="selectSmart(\''+s.id+'\')">'
       +'<div class="sc-top"><span class="sc-ic" style="background:'+colorVar(s.color)+'">'
       +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+s.icon+'</svg></span>'
       +'<span class="sc-count">'+smartCount(s.id)+'</span></div>'
-      +'<div class="sc-label">'+s.label+'</div></button>';
+      +'<div class="sc-label">'+(applocale?applocale.getString(SMART_LOCALE_KEYS[s.id]||'',s.label):s.label)+'</div></button>';
   });
   // completed (wide)
   var cActive=(S.sel.type==='smart'&&S.sel.id==='completed')?' active':'';
   g+='<button class="smart-card wide'+cActive+'" onclick="selectSmart(\'completed\')">'
     +'<span class="sc-ic" style="width:24px;height:24px;background:var(--c-gray)">'+CHECK_SVG+'</span>'
-    +'<span class="sc-label">Completed</span><span class="sc-count">'+smartCount('completed')+'</span></button>';
+    +'<span class="sc-label" locale="reminders/list/completed">'+(applocale?applocale.getString('reminders/list/completed','Completed'):'Completed')+'</span><span class="sc-count">'+smartCount('completed')+'</span></button>';
   byId('smartGrid').innerHTML=g;
 
   // my lists
@@ -525,13 +527,13 @@ function renderSidebar(){
       +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>'
       +'</div>';
   });
-  if(!ls.length) h='<div style="color:var(--text3);font-size:13px;padding:6px 8px">No lists yet</div>';
+  if(!ls.length) h='<div style="color:var(--text3);font-size:13px;padding:6px 8px" locale="reminders/msg/no_lists">'+(applocale?applocale.getString('reminders/msg/no_lists','No lists yet'):'No lists yet')+'</div>';
   byId('listList').innerHTML=h;
 }
 
 // Resolve the current selection -> {title, color, reminders[]}
 function currentTitle(){
-  if(S.sel.type==='smart'){ if(S.sel.id==='completed') return 'Completed'; var s=SMART.filter(function(x){return x.id===S.sel.id;})[0]; return s?s.label:''; }
+  if(S.sel.type==='smart'){ if(S.sel.id==='completed') return (applocale?applocale.getString('reminders/list/completed','Completed'):'Completed'); var s=SMART.filter(function(x){return x.id===S.sel.id;})[0]; if(!s) return ''; var sk={ today:'reminders/list/today', scheduled:'reminders/list/scheduled', all:'reminders/list/all', flagged:'reminders/list/flagged' }; return applocale?applocale.getString(sk[s.id]||'',s.label):s.label; }
   var l=listById(S.sel.id); return l?l.name:'';
 }
 function currentColor(){
@@ -541,7 +543,7 @@ function currentColor(){
 
 function renderMain(){
   var color=currentColor();
-  byId('mainTitle').textContent= S.search ? 'Search' : currentTitle();
+  byId('mainTitle').textContent= S.search ? (applocale?applocale.getString('reminders/placeholder/search','Search'):'Search') : currentTitle();
   byId('mainTitle').style.color= S.search ? 'var(--text)' : colorVar(color);
 
   // header count + sub line
@@ -559,7 +561,7 @@ function renderMain(){
   if(S.sel.type==='list' && !S.search){
     var doneN=S.reminders.filter(function(r){ return r.listId===S.sel.id && r.completed; }).length;
     subL.innerHTML='<b>'+doneN+'</b> Completed'+(doneN?' <span class="mh-clear" onclick="clearCompleted()">&nbsp;Clear</span>':'');
-    showBtn.textContent=S.showCompleted?'Hide':'Show';
+    showBtn.textContent=S.showCompleted?(applocale?applocale.getString('reminders/btn/hide','Hide'):'Hide'):(applocale?applocale.getString('reminders/btn/show','Show'):'Show');
     showBtn.style.display=doneN?'block':'none';
     subL.style.display='block';
   } else { subL.style.display='none'; showBtn.style.display='none'; }
@@ -656,10 +658,10 @@ function groupByDaypart(items){
   });
   var sortT=function(a,b){ return (a.dueTime||'').localeCompare(b.dueTime||''); };
   var out=[];
-  if(buckets.none.length)      out.push({ label:'All-Day',   dot:true, items:orderTree(buckets.none), showList:true });
-  if(buckets.morning.length)   out.push({ label:'Morning',   dot:true, items:buckets.morning.sort(sortT), showList:true });
-  if(buckets.afternoon.length) out.push({ label:'Afternoon', dot:true, items:buckets.afternoon.sort(sortT), showList:true });
-  if(buckets.tonight.length)   out.push({ label:'Tonight',   dot:true, items:buckets.tonight.sort(sortT), showList:true });
+  if(buckets.none.length)      out.push({ label:(applocale?applocale.getString('reminders/group/all_day','All-Day'):'All-Day'),   dot:true, items:orderTree(buckets.none), showList:true });
+  if(buckets.morning.length)   out.push({ label:(applocale?applocale.getString('reminders/group/morning','Morning'):'Morning'),   dot:true, items:buckets.morning.sort(sortT), showList:true });
+  if(buckets.afternoon.length) out.push({ label:(applocale?applocale.getString('reminders/group/afternoon','Afternoon'):'Afternoon'), dot:true, items:buckets.afternoon.sort(sortT), showList:true });
+  if(buckets.tonight.length)   out.push({ label:(applocale?applocale.getString('reminders/group/tonight','Tonight'):'Tonight'),   dot:true, items:buckets.tonight.sort(sortT), showList:true });
   return out;
 }
 function groupByDate(items){
@@ -671,10 +673,10 @@ function groupByDate(items){
     var d=dayDiff(k,t);
     var bucket=map[k].sort(function(a,b){ return (a.dueTime||'').localeCompare(b.dueTime||''); });
     if(d<0){ overdue=overdue.concat(bucket); return; }
-    var due=parseYmd(k), label= d===0?'Today':d===1?'Tomorrow':DAYS_LONG[due.getDay()]+', '+MONTHS_SHORT[due.getMonth()]+' '+due.getDate();
+    var due=parseYmd(k), label= d===0?(applocale?applocale.getString('reminders/list/today','Today'):'Today'):d===1?(applocale?applocale.getString('reminders/date/tomorrow','Tomorrow'):'Tomorrow'):DAYS_LONG[due.getDay()]+', '+MONTHS_SHORT[due.getMonth()]+' '+due.getDate();
     out.push({ label:label, dot:true, items:bucket, showList:true });
   });
-  if(overdue.length) out.unshift({ label:'Overdue', dot:true, overdue:true, items:overdue, showList:true });
+  if(overdue.length) out.unshift({ label:(applocale?applocale.getString('reminders/group/overdue','Overdue'):'Overdue'), dot:true, overdue:true, items:overdue, showList:true });
   return out;
 }
 
@@ -694,7 +696,7 @@ function rowHtml(rm, showList){
     +'<button class="rm-check" data-act="check"><span style="pointer-events:none">'+CHECK_SVG+'</span></button>'
     +'<div class="rm-body">'
       +'<div class="rm-titleline">'+prio
-        +'<input class="rm-title" data-act="title" value="'+escHtml(rm.title)+'" placeholder="New Reminder">'
+        +'<input class="rm-title" data-act="title" value="'+escHtml(rm.title)+'" placeholder="'+(applocale?applocale.getString('reminders/placeholder/new_reminder','New Reminder'):'New Reminder')+'">'
         +'<span class="rm-flag">'+iconFlag()+'</span>'
       +'</div>'+notes+meta
     +'</div>'
@@ -705,9 +707,9 @@ function iconFlag(){ return '<svg viewBox="0 0 24 24" fill="currentColor" stroke
 
 function emptyState(){
   var t,s;
-  if(S.search){ t='No Results'; s='No reminders match “'+escHtml(S.search)+'”'; }
-  else { t='No Reminders'; s=(S.sel.type==='smart'&&S.sel.id==='completed')?'Completed reminders will appear here':'Tap + to add a reminder'; }
-  return '<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5 5-5.5"/></svg>'
+  if(S.search){ t=(applocale?applocale.getString('reminders/msg/no_results','No Results'):'No Results'); s='No reminders match “'+escHtml(S.search)+'”'; }
+  else { t=(applocale?applocale.getString('reminders/msg/no_reminders','No Reminders'):'No Reminders'); s=(S.sel.type==='smart'&&S.sel.id==='completed')?'Completed reminders will appear here':(applocale?applocale.getString('reminders/msg/tap_to_add','Tap + to add a reminder'):'Tap + to add a reminder'); }
+  returneturn '<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5 5-5.5"/></svg>'
     +'<div class="e-t">'+t+'</div><div class="e-s">'+s+'</div></div>';
 }
 
@@ -739,7 +741,7 @@ function makeReminder(over){
   return rm;
 }
 function quickAdd(){
-  if(!S.lists.length){ snack('Create a list first'); openListModal(null); return; }
+  if(!S.lists.length){ snack(applocale?applocale.getString('reminders/msg/create_list_first','Create a list first'):'Create a list first'); openListModal(null); return; }
   var rm=makeReminder(null);
   S.reminders.push(rm); persistReminder(rm); render();
   focusTitle(rm.id);
@@ -918,7 +920,7 @@ function autoGrow(el){ el.style.height='auto'; el.style.height=Math.max(34,el.sc
 var LM={ id:null, color:'blue', icon:'list' };
 function openListModal(id){
   var editing=!!id;
-  byId('lmHd').textContent=editing?'List Info':'New List';
+  byId('lmHd').textContent=editing?(applocale?applocale.getString('reminders/modal/edit_list','List Info'):'List Info'):(applocale?applocale.getString('reminders/modal/new_list','New List'):'New List');
   byId('lmDel').style.display=editing?'block':'none';
   if(editing){ var l=listById(id); LM={ id:id, color:l.color, icon:l.icon }; byId('lmName').value=l.name; }
   else { LM={ id:null, color:'blue', icon:'list' }; byId('lmName').value=''; }
@@ -934,7 +936,7 @@ function lmPickColor(c){ LM.color=c; document.querySelectorAll('#lmSwatches .sw'
 function lmPickIcon(k){ LM.icon=k; document.querySelectorAll('#lmIcons .ip').forEach(function(e){ e.classList.toggle('sel',e.dataset.k===k); }); lmRenderPreview(); }
 function lmRenderPreview(){ var p=byId('lmPrev'); p.style.background=colorVar(LM.color); p.innerHTML=iconSvg(LM.icon,34); }
 function lmSave(){
-  var name=byId('lmName').value.trim()||'New List';
+  var name=byId('lmName').value.trim()||(applocale?applocale.getString('reminders/modal/new_list','New List'):'New List');
   if(LM.id){ var l=listById(LM.id); l.name=name; l.color=LM.color; l.icon=LM.icon; persistList(l); }
   else { var nl={ id:genId('ls'), name:name, color:LM.color, icon:LM.icon, order:Date.now() }; S.lists.push(nl); persistList(nl); S.sel={type:'list',id:nl.id}; }
   closeListModal(); render();
