@@ -1,0 +1,131 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "notes/title": "Notes",
+                "notes/placeholder/search": "Search",
+                "notes/btn/new": "New Note (Ctrl+N)",
+                "notes/msg/empty_state": "Select a note or create a new one",
+                "notes/btn/back": "Back to notes",
+                "notes/btn/download": "Export as .txt",
+                "notes/btn/delete": "Delete note",
+                "notes/placeholder/editor": "Start writing...",
+                "notes/btn/theme": "Toggle theme",
+                "notes/confirm/delete": "Delete this note?",
+                "notes/msg/saved": "Note saved",
+                "notes/msg/no_results": "No results",
+                "notes/msg/no_notes": "No notes yet",
+                "notes/title/default": "New Note",
+                "notes/msg/loading": "Loading..."
+            }
+        },
+        "zh-tw": {
+            "name": "Traditional Chinese (Taiwan)",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "notes/title": "便條紙",
+                "notes/placeholder/search": "搜尋",
+                "notes/btn/new": "新增便條 (Ctrl+N)",
+                "notes/msg/empty_state": "選擇一則便條或新增一則",
+                "notes/btn/back": "返回便條列表",
+                "notes/btn/download": "匯出為 .txt",
+                "notes/btn/delete": "刪除便條",
+                "notes/placeholder/editor": "開始書寫…",
+                "notes/btn/theme": "切換主題",
+                "notes/confirm/delete": "確定刪除此便條？",
+                "notes/msg/saved": "便條已儲存",
+                "notes/msg/no_results": "無符合結果",
+                "notes/msg/no_notes": "尚無便條",
+                "notes/title/default": "新便條",
+                "notes/msg/loading": "載入中…"
+            }
+        },
+        "zh-hk": {
+            "name": "Traditional Chinese (Hong Kong)",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "notes/title": "便條紙",
+                "notes/placeholder/search": "搜尋",
+                "notes/btn/new": "新增便條 (Ctrl+N)",
+                "notes/msg/empty_state": "選擇一則便條或新增一則",
+                "notes/btn/back": "返回便條列表",
+                "notes/btn/download": "匯出為 .txt",
+                "notes/btn/delete": "刪除便條",
+                "notes/placeholder/editor": "開始書寫…",
+                "notes/btn/theme": "切換主題",
+                "notes/confirm/delete": "確定刪除此便條？",
+                "notes/msg/saved": "便條已儲存",
+                "notes/msg/no_results": "無符合結果",
+                "notes/msg/no_notes": "暫無便條",
+                "notes/title/default": "新便條",
+                "notes/msg/loading": "載入中…"
+            }
+        },
+        "zh-cn": {
+            "name": "Simplified Chinese",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "notes/title": "便签",
+                "notes/placeholder/search": "搜索",
+                "notes/btn/new": "新建便签 (Ctrl+N)",
+                "notes/msg/empty_state": "选择一则便签或新建一则",
+                "notes/btn/back": "返回便签列表",
+                "notes/btn/download": "导出为 .txt",
+                "notes/btn/delete": "删除便签",
+                "notes/placeholder/editor": "开始书写…",
+                "notes/btn/theme": "切换主题",
+                "notes/confirm/delete": "确定删除此便签？",
+                "notes/msg/saved": "便签已保存",
+                "notes/msg/no_results": "无匹配结果",
+                "notes/msg/no_notes": "暂无便签",
+                "notes/title/default": "新建便签",
+                "notes/msg/loading": "加载中…"
+            }
+        },
+        "ja-jp": {
+            "name": "Japanese",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "notes/title": "メモ",
+                "notes/placeholder/search": "検索",
+                "notes/btn/new": "新規メモ (Ctrl+N)",
+                "notes/msg/empty_state": "メモを選択するか、新しく作成してください",
+                "notes/btn/back": "メモ一覧に戻る",
+                "notes/btn/download": ".txt としてエクスポート",
+                "notes/btn/delete": "メモを削除",
+                "notes/placeholder/editor": "書き始める…",
+                "notes/btn/theme": "テーマ切替",
+                "notes/confirm/delete": "このメモを削除しますか？",
+                "notes/msg/saved": "メモを保存しました",
+                "notes/msg/no_results": "結果なし",
+                "notes/msg/no_notes": "メモはまだありません",
+                "notes/title/default": "新規メモ",
+                "notes/msg/loading": "読み込み中…"
+            }
+        },
+        "ko-kr": {
+            "name": "Korean",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "notes/title": "메모",
+                "notes/placeholder/search": "검색",
+                "notes/btn/new": "새 메모 (Ctrl+N)",
+                "notes/msg/empty_state": "메모를 선택하거나 새로 만드세요",
+                "notes/btn/back": "메모 목록으로 돌아가기",
+                "notes/btn/download": ".txt로 내보내기",
+                "notes/btn/delete": "메모 삭제",
+                "notes/placeholder/editor": "작성을 시작하세요…",
+                "notes/btn/theme": "테마 전환",
+                "notes/confirm/delete": "이 메모를 삭제하시겠습니까?",
+                "notes/msg/saved": "메모가 저장되었습니다",
+                "notes/msg/no_results": "결과 없음",
+                "notes/msg/no_notes": "메모가 없습니다",
+                "notes/title/default": "새 메모",
+                "notes/msg/loading": "불러오는 중…"
+            }
+        }
+    }
+}

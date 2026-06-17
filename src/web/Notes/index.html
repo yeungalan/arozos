@@ -6,6 +6,7 @@
     <title>Notes</title>
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
+    <script src="../script/applocale.js"></script>
     <!--
         Backend AGI scripts (server-side, user:/Document/Notes/):
           Notes/backend/init.agi    - init dir + return metadata
@@ -360,22 +361,22 @@
     <!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
     <div class="sidebar">
         <div class="sidebar-header">
-            <span class="sidebar-title">Notes</span>
+            <span class="sidebar-title" locale="notes/title">Notes</span>
             <div class="sidebar-header-actions">
-                <button class="icon-btn" id="themeToggle" title="Toggle theme">
+                <button class="icon-btn" id="themeToggle" title="Toggle theme" locale-title="notes/btn/theme">
                     <img id="themeIcon" src="img/theme_white.svg" alt="theme">
                 </button>
             </div>
         </div>
 
         <div class="search-box">
-            <input class="search-input" id="searchInput" type="text" placeholder="&#128269; Search">
+            <input class="search-input" id="searchInput" type="text" placeholder="Search" locale-placeholder="notes/placeholder/search">
         </div>
 
         <div class="note-list" id="noteList"></div>
 
         <div class="new-note-bar">
-            <button class="new-note-btn" id="newNoteBtn" title="New Note (Ctrl+N)">
+            <button class="new-note-btn" id="newNoteBtn" title="New Note (Ctrl+N)" locale-title="notes/btn/new">
                 <img id="newNoteIcon" src="img/edit_white.svg" alt="new note">
             </button>
         </div>
@@ -386,28 +387,35 @@
 
         <!-- Shown when no note is selected -->
         <div class="empty-state" id="emptyState">
-            <div class="empty-state-icon">&#128221;</div>
-            <div class="empty-state-text">Select a note or create a new one</div>
+            <div class="empty-state-icon">
+                <svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="8" y="6" width="36" height="42" rx="4" stroke="currentColor" stroke-width="3" fill="none"/>
+                    <line x1="16" y1="18" x2="36" y2="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                    <line x1="16" y1="26" x2="36" y2="26" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                    <line x1="16" y1="34" x2="28" y2="34" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                </svg>
+            </div>
+            <div class="empty-state-text" locale="notes/msg/empty_state">Select a note or create a new one</div>
         </div>
 
         <!-- Shown when a note is active -->
         <div class="editor-content" id="editorContent">
             <div class="editor-header">
                 <div style="display:flex;align-items:center;gap:6px;">
-                    <button class="icon-btn back-btn" id="backBtn" title="Back to notes">&#8592;</button>
+                    <button class="icon-btn back-btn" id="backBtn" title="Back to notes" locale-title="notes/btn/back">&#8592;</button>
                     <span class="editor-date" id="editorDate"></span>
                 </div>
                 <div class="editor-actions">
-                    <button class="icon-btn" id="downloadNoteBtn" title="Export as .txt">
+                    <button class="icon-btn" id="downloadNoteBtn" title="Export as .txt" locale-title="notes/btn/download">
                         <img id="downloadIcon" src="img/download_white.svg" alt="download">
                     </button>
-                    <button class="icon-btn delete-btn" id="deleteNoteBtn" title="Delete note">
+                    <button class="icon-btn delete-btn" id="deleteNoteBtn" title="Delete note" locale-title="notes/btn/delete">
                         <img id="deleteIcon" src="img/delete_white.svg" alt="delete">
                     </button>
                 </div>
             </div>
             <div class="editor-area">
-                <textarea class="note-textarea" id="noteTextarea" placeholder="Start writing&#x2026;"></textarea>
+                <textarea class="note-textarea" id="noteTextarea" placeholder="Start writing&#x2026;" locale-placeholder="notes/placeholder/editor"></textarea>
             </div>
         </div>
 
@@ -518,7 +526,7 @@
                 var line = lines[i].trim();
                 if (line.length > 0) return line;
             }
-            return 'New Note';
+            return applocale ? applocale.getString('notes/title/default', 'New Note') : 'New Note';
         }
 
         function escHtml(str) {
@@ -564,17 +572,20 @@
             if (visible.length === 0) {
                 var msg = document.createElement('div');
                 msg.className   = 'note-list-empty';
-                msg.textContent = query ? 'No results' : 'No notes yet';
+                msg.textContent = query
+                    ? (applocale ? applocale.getString('notes/msg/no_results', 'No results') : 'No results')
+                    : (applocale ? applocale.getString('notes/msg/no_notes', 'No notes yet') : 'No notes yet');
                 listEl.appendChild(msg);
                 return;
             }
 
+            var defaultTitle = applocale ? applocale.getString('notes/title/default', 'New Note') : 'New Note';
             visible.forEach(function (note) {
                 var item = document.createElement('div');
                 item.className  = 'note-item' + (note.id === activeId ? ' active' : '');
                 item.dataset.id = note.id;
                 item.innerHTML  =
-                    '<div class="note-item-title">' + escHtml(note.title || 'New Note') + '</div>' +
+                    '<div class="note-item-title">' + escHtml(note.title || defaultTitle) + '</div>' +
                     '<div class="note-item-meta">'  + escHtml(formatDate(note.updatedAt)) + '</div>';
                 item.addEventListener('click', function () { selectNote(note.id); });
                 listEl.appendChild(item);
@@ -623,13 +634,13 @@
                 textarea.disabled      = true;
                 textarea.style.opacity = '0.4';
                 textarea.value         = '';
-                textarea.placeholder   = 'Loading\u2026';
+                textarea.placeholder   = applocale ? applocale.getString('notes/msg/loading', 'Loading…') : 'Loading…';
             }
             renderEditor();
 
             apiRead(id, function (content) {
                 if (activeId !== id) return; // user switched away
-                textarea.placeholder = 'Start writing\u2026';
+                textarea.placeholder = applocale ? applocale.getString('notes/placeholder/editor', 'Start writing…') : 'Start writing…';
                 renderEditor(content);
             });
         }
@@ -637,7 +648,8 @@
         function createNote() {
             var id   = generateId();
             var ts   = Date.now();
-            var stub = { id: id, title: 'New Note', updatedAt: ts };
+            var defaultTitle = applocale ? applocale.getString('notes/title/default', 'New Note') : 'New Note';
+            var stub = { id: id, title: defaultTitle, updatedAt: ts };
             notes.unshift(stub);
             activeId = id;
             renderNoteList();
@@ -651,7 +663,8 @@
 
         function deleteActiveNote() {
             if (!activeId) return;
-            if (!confirm('Delete this note?')) return;
+            var confirmMsg = applocale ? applocale.getString('notes/confirm/delete', 'Delete this note?') : 'Delete this note?';
+            if (!confirm(confirmMsg)) return;
 
             var deletedId = activeId;
             notes = notes.filter(function (n) { return n.id !== deletedId; });
@@ -709,7 +722,7 @@
             var note = notes.find(function (n) { return n.id === activeId; });
             if (note) { note.title = getTitle(content); note.updatedAt = ts; }
             apiWrite(activeId, content, ts);
-            showSnackbar('Note saved');
+            showSnackbar(applocale ? applocale.getString('notes/msg/saved', 'Note saved') : 'Note saved');
         }
 
         // ── Export / download current note as .txt ─────────────────────────────
@@ -764,7 +777,7 @@
         });
 
         // ── Boot ───────────────────────────────────────────────────────────────
-        (function init() {
+        function startApp() {
             // Step 1: query system theme from server so detection works in both
             // virtual-desktop and standalone modes. "darkTheme" → dark, else white.
             ao_module_getSystemThemeColor(function (themeColor) {
@@ -789,7 +802,16 @@
                     }
                 });
             });
-        })();
+        }
+
+        if (typeof applocale !== 'undefined' && applocale) {
+            applocale.init('locale/notes.json', function() {
+                applocale.translate();
+                startApp();
+            });
+        } else {
+            startApp();
+        }
     </script>
 </body>
 </html>
