@@ -987,7 +987,7 @@ document.addEventListener('keydown',function(e){
 window.addEventListener('resize',function(){ if(byId('detail').classList.contains('open')) positionDetail(null); });
 
 // ══ BOOT ══════════════════════════════════════════════════════════════
-function boot(){
+function startApp(){
   restoreUI();
   applyDark(S.dark);
   if(typeof ao_module_setWindowTitle==='function'){ try{ ao_module_setWindowTitle('Reminders'); }catch(e){} }
@@ -997,7 +997,15 @@ function boot(){
     render();
   });
 }
-boot();
+
+if (typeof applocale !== 'undefined' && applocale) {
+  applocale.init('locale/reminders.json', function() {
+    applocale.translate();
+    startApp();
+  });
+} else {
+  startApp();
+}
 </script>
 </body>
 </html>
