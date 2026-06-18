@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
+    <script src="../script/applocale.js"></script>
     <title>Paint</title>
     <style>
         body{
@@ -73,6 +74,12 @@
               
             }
         }
+    }
+
+    if (typeof applocale !== 'undefined' && applocale) {
+        applocale.init('locale/paint.json', function() {
+            applocale.translate();
+        });
     }
 
     //Check if there are any file loading from ao_module

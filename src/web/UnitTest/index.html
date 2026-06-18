@@ -9,6 +9,7 @@
         <script src="../script/jquery.min.js"></script>
         <script src="../script/ao_module.js"></script>
         <script src="../script/semantic/semantic.min.js"></script>
+        <script src="../script/applocale.js"></script>
         <title>Unit Test</title>
         <style>
             body{
@@ -25,56 +26,64 @@
         </style>
     </head>
     <body>
-	<br><br>
-		<div class="ui text container">
-			<h3>AGI Unit Testing Module</h3>
-            <button class="ui button" onclick="openGateway();">Open AGI Gateway (No File)</button>
-            <button class="ui button" onclick="runtest();">Run Unit Test</button>
-            <a class="ui button" href="wstest.html">Open WebSocket Test</a>
-            <a class="ui blue button" href="backend.html">Open Backend Unit Test</a>
+    <br><br>
+        <div class="ui text container">
+            <h3 locale="page_title">AGI Unit Testing Module</h3>
+            <button class="ui button" onclick="openGateway();" locale="btn_open_gateway">Open AGI Gateway (No File)</button>
+            <button class="ui button" onclick="runtest();" locale="btn_run_test">Run Unit Test</button>
+            <a class="ui button" href="wstest.html" locale="btn_websocket_test">Open WebSocket Test</a>
+            <a class="ui blue button" href="backend.html" locale="btn_backend_test">Open Backend Unit Test</a>
             <div class="ui divider"></div>
-            <p>Test Results</p>
+            <p locale="test_results">Test Results</p>
             <table class="ui celled table">
                 <thead>
-                  <tr><th>Script</th>
-                  <th>Results</th>
-                  <th>Status</th>
+                  <tr><th locale="col_script">Script</th>
+                  <th locale="col_results">Results</th>
+                  <th locale="col_status">Status</th>
                 </tr></thead>
                 <tbody id="results">
-                 
+
                 </tbody>
               </table>
-		</div>
+        </div>
         <br><br>
        <script>
            function openGateway(){
                 window.open("../system/ajgi/interface");
            }
 
-			function runtest(){
-				$("#results").html("");
-				//Get a list of test to be run
-				ao_module_agirun("UnitTest/list.agi",{testdata: "Hello World"}, function(data){
+            function runtest(){
+                $("#results").html("");
+                //Get a list of test to be run
+                ao_module_agirun("UnitTest/list.agi",{testdata: "Hello World"}, function(data){
                     data.forEach(test => {
                         let scriptname = test.split("/").pop();
                         let thisScriptPath = JSON.parse(JSON.stringify(test));
                         ao_module_agirun(test, {foo: "Hello", bar: "World"}, function(data){
                             //Success callback
+                            var successLabel = (typeof applocale !== 'undefined' && applocale) ? applocale.getString("status_success") : "Success";
                             $("#results").append(`<tr class="positive">
                                 <td data-label="">${scriptname}</td>
                                 <td data-label="">${JSON.stringify(data)}</td>
-                                <td data-label="">Success</td>
+                                <td data-label="">${successLabel}</td>
                             </tr>`);
                         }, function(){
+                            var failedLabel = (typeof applocale !== 'undefined' && applocale) ? applocale.getString("status_failed") : "Failed";
                             $("#results").append(`<tr class="negative">
                                 <td data-label="">${scriptname}</td>
                                 <td data-label=""><a href="../system/ajgi/interface?script=${thisScriptPath}" target="_blank">Open Debug Interface</a></td>
-                                <td data-label="">Failed</td>
+                                <td data-label="">${failedLabel}</td>
                             </tr>`);
                         }, 10000);
                     });
-				})
-			}
-	   </script>
+                })
+            }
+
+            if (typeof applocale !== 'undefined' && applocale) {
+                applocale.init('locale/unittest.json', function() {
+                    applocale.translate();
+                });
+            }
+       </script>
     </body>
 </html>

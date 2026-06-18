@@ -5,6 +5,7 @@
         <link rel="stylesheet" href="../script/semantic/semantic.min.css">
         <script src="../script/jquery.min.js"></script>
         <script src="../script/ao_module.js"></script>
+        <script src="../script/applocale.js"></script>
         <style>
             body{
                 padding-top:40px;
@@ -21,7 +22,7 @@
                 <div class="five wide column">
                     <div class="ui statistic">
                         <div id="hour" class="value">00</div>
-                        <div class="label">Hours</div>
+                        <div class="label" locale="hours">Hours</div>
                     </div><br>
                     <div class="ui icon tiny buttons">
                         <button class="ui button" onClick="adjustValue('hour',-1);"><i class="minus icon"></i></button>
@@ -32,7 +33,7 @@
                 <div class="five wide column">
                     <div class="ui statistic">
                         <div id="min" class="value">00</div>
-                        <div class="label">Minutes</div>
+                        <div class="label" locale="minutes">Minutes</div>
                     </div><br>
                      <div class="ui icon tiny buttons">
                         <button class="ui button" onClick="adjustValue('min',-1);"><i class="minus icon"></i></button>
@@ -43,7 +44,7 @@
                 <div class="five wide column">
                     <div class="ui statistic">
                         <div id="sec" class="value">00</div>
-                        <div class="label">Seconds</div>
+                        <div class="label" locale="seconds">Seconds</div>
                     </div><br>
                      <div class="ui icon tiny buttons">
                         <button class="ui button" onClick="adjustValue('sec',-1);"><i class="minus icon"></i></button>
@@ -208,7 +209,13 @@
             }
             
             function time(){
-                return Math.floor(Date.now() / 1000);    
+                return Math.floor(Date.now() / 1000);
+            }
+
+            if (typeof applocale !== 'undefined' && applocale) {
+                applocale.init('locale/timer.json', function() {
+                    applocale.translate();
+                });
             }
         </script>
     </body>

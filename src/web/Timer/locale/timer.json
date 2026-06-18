@@ -1,0 +1,65 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "app_title": "Timer",
+                "hours": "Hours",
+                "minutes": "Minutes",
+                "seconds": "Seconds"
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "app_title": "計時器",
+                "hours": "小時",
+                "minutes": "分鐘",
+                "seconds": "秒"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "app_title": "計時器",
+                "hours": "小時",
+                "minutes": "分鐘",
+                "seconds": "秒"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "app_title": "计时器",
+                "hours": "小时",
+                "minutes": "分钟",
+                "seconds": "秒"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "app_title": "タイマー",
+                "hours": "時間",
+                "minutes": "分",
+                "seconds": "秒"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "app_title": "타이머",
+                "hours": "시간",
+                "minutes": "분",
+                "seconds": "초"
+            }
+        }
+    }
+}

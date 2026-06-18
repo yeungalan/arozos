@@ -123,6 +123,7 @@
     </style>
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
+    <script src="../script/applocale.js"></script>
 </head>
 <body class="light-mode">
     <!-- Cat Background -->
@@ -143,7 +144,7 @@
         <div class="toggle-label">
             <div class="ui toggle checkbox" id="catModeToggle">
                 <input type="checkbox" name="catMode">
-                <label>Cat Mode</label>
+                <label locale="cat_mode">Cat Mode</label>
             </div>
         </div>
     </div>
@@ -247,6 +248,12 @@
         // Update clock immediately and then every second
         updateClock();
         setInterval(updateClock, 1000);
+
+        if (typeof applocale !== 'undefined' && applocale) {
+            applocale.init('locale/clock.json', function() {
+                applocale.translate();
+            });
+        }
     </script>
 </body>
 </html>
