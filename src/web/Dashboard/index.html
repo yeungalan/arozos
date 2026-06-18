@@ -774,11 +774,11 @@
         </div>
         <div class="minitool-net-row">
             <div class="minitool-net-item">
-                <span class="minitool-net-label">↓ Download</span>
+                <span class="minitool-net-label" locale="dashboard/label/download">↓ Download</span>
                 <span class="minitool-net-val" id="netRxVal">—</span>
             </div>
             <div class="minitool-net-item">
-                <span class="minitool-net-label">↑ Upload</span>
+                <span class="minitool-net-label" locale="dashboard/label/upload">↑ Upload</span>
                 <span class="minitool-net-val" id="netTxVal">—</span>
             </div>
         </div>
@@ -793,20 +793,20 @@
 
     <!-- Pinned Apps -->
     <div class="section-header">
-        <span class="section-title">Pinned Apps</span>
+        <span class="section-title" locale="dashboard/section/pinned_apps">Pinned Apps</span>
         <div class="section-line"></div>
     </div>
     <div class="pinned-grid" id="pinnedGrid">
-        <span class="pinned-empty" id="pinnedEmpty">No pinned apps yet.</span>
+        <span class="pinned-empty" id="pinnedEmpty" locale="dashboard/msg/no_pinned_apps">No pinned apps yet.</span>
         <button class="add-pin-btn" id="addPinBtn" onclick="openAddPinModal()">
             <span class="add-pin-plus">+</span>
-            <span>Add</span>
+            <span locale="dashboard/btn/add">Add</span>
         </button>
     </div>
 
     <!-- Applications by Category -->
     <div class="section-header" style="margin-top:28px;">
-        <span class="section-title">Applications</span>
+        <span class="section-title" locale="dashboard/section/applications">Applications</span>
         <div class="section-line"></div>
     </div>
     <div class="cat-tabs" id="catTabs">
@@ -820,7 +820,7 @@
     <div class="widgets-row">
         <div id="calendarSection">
             <div class="section-header">
-                <span class="section-title">Calendar</span>
+                <span class="section-title" locale="dashboard/section/calendar">Calendar</span>
                 <div class="section-line"></div>
             </div>
             <div class="calendar-widget" id="calendarWidget">
@@ -830,7 +830,7 @@
 
         <div id="storageSection">
             <div class="section-header">
-                <span class="section-title">Storage</span>
+                <span class="section-title" locale="dashboard/section/storage">Storage</span>
                 <div class="section-line"></div>
             </div>
             <div class="storage-widget" id="storageWidget">
@@ -841,22 +841,22 @@
 
     <!-- System -->
     <div class="section-header" style="margin-top:28px;">
-        <span class="section-title">System</span>
+        <span class="section-title" locale="dashboard/section/system">System</span>
         <div class="section-line"></div>
     </div>
     <div class="system-grid">
         <div class="system-card" onclick="openSystemSettings()">
             <div class="sys-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
             <div>
-                <div class="sys-name">System Settings</div>
-                <div class="sys-desc">ArozOS system configuration</div>
+                <div class="sys-name" locale="dashboard/card/system_settings">System Settings</div>
+                <div class="sys-desc" locale="dashboard/card/system_settings_desc">ArozOS system configuration</div>
             </div>
         </div>
         <div class="system-card" onclick="openDashboardSettings()">
             <div class="sys-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h1v6H9zm5 0h1v6h-1z"/></svg></div>
             <div>
-                <div class="sys-name">Dashboard Settings</div>
-                <div class="sys-desc">Customize widgets &amp; theme</div>
+                <div class="sys-name" locale="dashboard/card/dashboard_settings">Dashboard Settings</div>
+                <div class="sys-desc" locale="dashboard/card/dashboard_settings_desc">Customize widgets &amp; theme</div>
             </div>
         </div>
     </div>
@@ -871,36 +871,36 @@
 
         <!-- Theme Selector -->
         <div class="form-group">
-            <label>Theme</label>
+            <label locale="dashboard/label/theme">Theme</label>
             <div class="theme-grid" id="themeGrid"><!-- built by JS --></div>
         </div>
 
         <!-- Weather settings -->
         <div class="form-group">
-            <label>Location Name</label>
-            <input type="text" id="cfg_cityName" placeholder="e.g. London" maxlength="100">
+            <label locale="dashboard/label/location_name">Location Name</label>
+            <input type="text" id="cfg_cityName" placeholder="e.g. London" locale-placeholder="dashboard/placeholder/location_name" maxlength="100">
         </div>
         <div class="form-row">
             <div class="form-group">
-                <label>Latitude</label>
+                <label locale="dashboard/label/latitude">Latitude</label>
                 <input type="number" id="cfg_latitude" step="0.0001" min="-90" max="90" placeholder="51.5074">
-                <p class="hint">Range: −90 to 90</p>
+                <p class="hint" locale="dashboard/hint/latitude">Range: -90 to 90</p>
             </div>
             <div class="form-group">
-                <label>Longitude</label>
+                <label locale="dashboard/label/longitude">Longitude</label>
                 <input type="number" id="cfg_longitude" step="0.0001" min="-180" max="180" placeholder="-0.1278">
-                <p class="hint">Range: −180 to 180</p>
+                <p class="hint" locale="dashboard/hint/longitude">Range: -180 to 180</p>
             </div>
         </div>
         <div class="form-group">
-            <label>Temperature Unit</label>
+            <label locale="dashboard/label/temp_unit">Temperature Unit</label>
             <select id="cfg_tempUnit">
-                <option value="celsius">Celsius (°C)</option>
-                <option value="fahrenheit">Fahrenheit (°F)</option>
+                <option value="celsius" locale="dashboard/temp_unit/celsius">Celsius (°C)</option>
+                <option value="fahrenheit" locale="dashboard/temp_unit/fahrenheit">Fahrenheit (°F)</option>
             </select>
         </div>
         <div class="toggle-row">
-            <span class="toggle-label">Show Weather Widget</span>
+            <span class="toggle-label" locale="dashboard/label/show_weather">Show Weather Widget</span>
             <label class="toggle">
                 <input type="checkbox" id="cfg_showWeather">
                 <span class="toggle-slider"></span>
@@ -908,8 +908,8 @@
         </div>
         <div class="toggle-row">
             <span class="toggle-label">
-                Show File-Handler Apps
-                <small>Apps that require a file to be passed in (e.g. PDF Viewer, STL Viewer)</small>
+                <span locale="dashboard/label/show_file_handler_apps">Show File-Handler Apps</span>
+                <small locale="dashboard/desc/file_handler_apps">Apps that require a file to be passed in (e.g. PDF Viewer, STL Viewer)</small>
             </span>
             <label class="toggle">
                 <input type="checkbox" id="cfg_showHiddenApps">
@@ -917,29 +917,29 @@
             </label>
         </div>
         <div class="toggle-row">
-            <span class="toggle-label">Show System Monitor</span>
+            <span class="toggle-label" locale="dashboard/label/show_system_monitor">Show System Monitor</span>
             <label class="toggle">
                 <input type="checkbox" id="cfg_showSysInfo">
                 <span class="toggle-slider"></span>
             </label>
         </div>
         <div class="toggle-row">
-            <span class="toggle-label">Show Calendar</span>
+            <span class="toggle-label" locale="dashboard/label/show_calendar">Show Calendar</span>
             <label class="toggle">
                 <input type="checkbox" id="cfg_showCalendar">
                 <span class="toggle-slider"></span>
             </label>
         </div>
         <div class="toggle-row">
-            <span class="toggle-label">Show Storage Overview</span>
+            <span class="toggle-label" locale="dashboard/label/show_storage">Show Storage Overview</span>
             <label class="toggle">
                 <input type="checkbox" id="cfg_showStorage">
                 <span class="toggle-slider"></span>
             </label>
         </div>
         <div class="modal-actions">
-            <button class="btn-primary" onclick="saveDashSettings()">Save Changes</button>
-            <button class="btn-secondary" onclick="closeModal('dashSettingsModal')">Cancel</button>
+            <button class="btn-primary" onclick="saveDashSettings()" locale="dashboard/btn/save">Save Changes</button>
+            <button class="btn-secondary" onclick="closeModal('dashSettingsModal')" locale="dashboard/btn/cancel">Cancel</button>
         </div>
     </div>
 </div>
@@ -949,7 +949,7 @@
     <div class="modal">
         <button class="modal-close" onclick="closeModal('addPinModal')">✕</button>
         <div class="modal-title" locale="dashboard/modal/pin_app">Pin an Application</div>
-        <input type="text" class="pin-search" id="pinSearchInput" placeholder="Search applications…" oninput="filterPinList(this.value)">
+        <input type="text" class="pin-search" id="pinSearchInput" placeholder="Search applications..." locale-placeholder="dashboard/placeholder/search_apps" oninput="filterPinList(this.value)">
         <div class="pin-app-list" id="pinAppList">
             <div class="empty-msg">Loading…</div>
         </div>
@@ -1040,14 +1040,25 @@ function wmoLookup(code) {
 //  INIT
 // =============================================================
 $(document).ready(function() {
-    startClock();
-    buildThemeGrid();
-    loadSettings(); // kicks off everything else after settings arrive
+    function startApp() {
+        startClock();
+        buildThemeGrid();
+        loadSettings(); // kicks off everything else after settings arrive
 
-    // Close modal when clicking overlay background
-    $(".modal-overlay").on("click", function(e) {
-        if (e.target === this) $(this).removeClass("active");
-    });
+        // Close modal when clicking overlay background
+        $(".modal-overlay").on("click", function(e) {
+            if (e.target === this) $(this).removeClass("active");
+        });
+    }
+
+    if (typeof applocale !== 'undefined' && applocale) {
+        applocale.init('locale/dashboard.json', function() {
+            applocale.translate();
+            startApp();
+        });
+    } else {
+        startApp();
+    }
 });
 
 // =============================================================
@@ -1366,10 +1377,10 @@ function loadStorage() {
 
 function renderStorage(disks) {
     if (!disks || disks.length === 0) {
-        document.getElementById("storageWidget").innerHTML = '<div class="empty-msg">No disk information available.</div>';
+        document.getElementById("storageWidget").innerHTML = '<div class="empty-msg">' + (applocale ? applocale.getString('dashboard/msg/no_disk_info', 'No disk information available.') : 'No disk information available.') + '</div>';
         return;
     }
-    var html = '<div class="storage-section-title">&#128190; Volumes</div>';
+    var html = '<div class="storage-section-title">' + (applocale ? applocale.getString('dashboard/label/volumes', 'Volumes') : 'Volumes') + '</div>';
     disks.forEach(function(disk) {
         if (!disk.Volume || disk.Volume <= 0) return;
         var pct = Math.min(100, Math.round(disk.Used / disk.Volume * 100));
@@ -1405,7 +1416,7 @@ function loadModules() {
         renderPinnedApps();
         renderAppGrid("all");
     }, function() {
-        document.getElementById("appGrid").innerHTML = '<div class="empty-msg">Could not load applications.</div>';
+        document.getElementById("appGrid").innerHTML = '<div class="empty-msg">' + (applocale ? applocale.getString('dashboard/msg/load_error', 'Could not load applications.') : 'Could not load applications.') + '</div>';
     });
 }
 
@@ -1429,7 +1440,7 @@ function renderPinnedApps() {
         card.className = "pinned-app";
         card.title = mod.Name;
         card.innerHTML =
-            '<button class="pinned-unpin-btn" title="Unpin" onclick="unpinApp(\'' + ejs(mod.Name) + '\');event.stopPropagation();">✕</button>' +
+            '<button class="pinned-unpin-btn" title="' + (applocale ? applocale.getString('dashboard/btn/unpin', 'Unpin') : 'Unpin') + '" onclick="unpinApp(\'' + ejs(mod.Name) + '\');event.stopPropagation();">&#x2715;</button>' +
             '<img src="' + aesc(iconUrl) + '" onerror="this.src=\'' + ao_root + 'img/system/service.png\'" alt="">' +
             '<span class="pinned-app-name">' + hesc(mod.Name) + '</span>';
         card.addEventListener("click", (function(m) { return function() { launchModule(m); }; })(mod));
@@ -1477,7 +1488,7 @@ function renderAppGrid(activeGroup) {
     _sortedGroups = Object.keys(_groups).sort();
 
     // Build tabs
-    var tabsHtml = '<button class="cat-tab' + (_currentGroup === "all" ? " active" : "") + '" data-g="all" onclick="switchGroup(\'all\',this)">All</button>';
+    var tabsHtml = '<button class="cat-tab' + (_currentGroup === "all" ? " active" : "") + '" data-g="all" onclick="switchGroup(\'all\',this)">' + (applocale ? applocale.getString('dashboard/category/all', 'All') : 'All') + '</button>';
     _sortedGroups.forEach(function(g) {
         tabsHtml += '<button class="cat-tab' + (_currentGroup === g ? " active" : "") + '" data-g="' + aesc(g) + '" onclick="switchGroup(\'' + ejs(g) + '\',this)">' + hesc(g) + '</button>';
     });
@@ -1533,7 +1544,7 @@ function showGroupApps(group) {
             var mod = findModule(this.dataset.module);
             var requireFilePassing = mod.StartDir.trim() == "";
             if (mod && requireFilePassing) {
-                alert("This application requires a file to be opened via the File Manager.");
+                alert(applocale ? applocale.getString('dashboard/msg/requires_file', 'This application requires a file to be opened via the File Manager.') : 'This application requires a file to be opened via the File Manager.');
                 return;
             }
             launchModule(mod);
@@ -1586,7 +1597,7 @@ function openAddPinModal() {
             '<div><div class="pin-item-name">' + hesc(mod.Name) + '</div><div class="pin-item-group">' + hesc(mod.Group || "") + '</div></div>' +
             '</div>';
     });
-    document.getElementById("pinAppList").innerHTML = html || '<div class="empty-msg">No applications found.</div>';
+    document.getElementById("pinAppList").innerHTML = html || '<div class="empty-msg">' + (applocale ? applocale.getString('dashboard/msg/no_apps', 'No applications found.') : 'No applications found.') + '</div>';
     document.getElementById("pinSearchInput").value = "";
     openModal("addPinModal");
 }

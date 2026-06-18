@@ -7,6 +7,7 @@
     <meta name="theme-color" content="#141414">
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
+    <script src="../script/applocale.js"></script>
     <title>Speed Test</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; }
@@ -230,14 +231,14 @@
 <div class="wrap">
 
     <!-- Phase label -->
-    <div class="phase-label" id="phaseLabel">Your internet speed:</div>
+    <div class="phase-label" id="phaseLabel" locale="speedtest/label/your_speed">Your internet speed:</div>
 
     <!-- Big download number -->
     <div class="hero">
         <div class="hero-num" id="heroNum">—</div>
         <div class="hero-right">
             <div class="hero-unit"     id="heroUnit"></div>
-            <div class="hero-sublabel" id="heroSub">Download</div>
+            <div class="hero-sublabel" id="heroSub" locale="speedtest/label/download">Download</div>
         </div>
     </div>
 
