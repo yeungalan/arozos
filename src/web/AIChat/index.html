@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
 <script src="../script/jquery.min.js"></script>
 <script src="../script/ao_module.js"></script>
+<script src="../script/applocale.js"></script>
 <style>
     :root{
         --bg:#17171a; --panel:#1f1f24; --panel-2:#26262c; --panel-3:#2e2e36;
@@ -259,20 +260,20 @@
     <aside class="sidebar" id="sidebar">
         <div class="sb-head">
             <img src="img/icon.svg" alt="">
-            <div class="name">AI Chat<small>OpenAI-compatible</small></div>
+            <div class="name" locale="aichat/title">AI Chat<small locale="aichat/subtitle">OpenAI-compatible</small></div>
         </div>
         <button class="new-chat" onclick="newChat()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-            New Chat
+            <span locale="aichat/btn/new_chat">New Chat</span>
         </button>
         <div class="chat-list" id="chatList"></div>
         <div class="sb-foot">
             <div class="status"><span class="dot" id="connDot"></span><span id="connText">Checking…</span></div>
             <div>
-                <button class="icon-btn" title="Toggle theme" onclick="toggleTheme()">
+                <button class="icon-btn" title="Toggle theme" locale-title="aichat/btn/theme" onclick="toggleTheme()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
                 </button>
-                <button class="icon-btn" title="Settings" onclick="openDrawer()">
+                <button class="icon-btn" title="Settings" locale-title="aichat/btn/settings" onclick="openDrawer()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 7 2.6h.1A1.6 1.6 0 0 0 8.8 1V1a2 2 0 1 1 4 0v.1A1.6 1.6 0 0 0 17 2.6a1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7h.1a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.4 1.1z"/></svg>
                 </button>
             </div>
@@ -282,14 +283,14 @@
     <!-- Main -->
     <section class="main">
         <div class="topbar">
-            <button class="icon-btn menu-btn" title="Conversations" onclick="toggleSidebar()">
+            <button class="icon-btn menu-btn" title="Conversations" locale-title="aichat/btn/conversations" onclick="toggleSidebar()">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
             </button>
             <div class="model-pick">
-                <span class="lab">Model</span>
+                <span class="lab" locale="aichat/label/model">Model</span>
                 <select class="model-input" id="modelSelect" onchange="onModelChange()"></select>
                 <datalist id="modelList"></datalist>
-                <button class="icon-btn" title="Reload models" onclick="loadModels()">
+                <button class="icon-btn" title="Reload models" locale-title="aichat/btn/reload_models" onclick="loadModels()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>
                 </button>
             </div>
@@ -303,14 +304,14 @@
             <div class="attachments" id="attachments" style="display:none;"></div>
             <div class="composer">
                 <div class="composer-box">
-                    <button class="attach-btn" id="attachBtn" onclick="pickFiles()" title="Attach file (image or text document)">
+                    <button class="attach-btn" id="attachBtn" onclick="pickFiles()" title="Attach file" locale-title="aichat/btn/attach">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                     </button>
-                    <textarea id="composer" rows="1" placeholder="Send a message…"></textarea>
+                    <textarea id="composer" rows="1" placeholder="Send a message…" locale-placeholder="aichat/placeholder/message"></textarea>
                     <button class="stop-btn" id="stopBtn" onclick="stopGenerating()">
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg> Stop
                     </button>
-                    <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="Send">
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="Send" locale-title="aichat/btn/send">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
                     </button>
                 </div>
@@ -321,36 +322,36 @@
         <!-- Settings drawer -->
         <div class="scrim" id="scrim" onclick="closeDrawer()"></div>
         <div class="drawer" id="drawer">
-            <h3>Settings <button class="icon-btn" onclick="closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></h3>
+            <h3><span locale="aichat/drawer/title">Settings</span> <button class="icon-btn" onclick="closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></h3>
             <div class="drawer-body">
                 <div class="field">
-                    <label>System Prompt</label>
-                    <textarea id="setSystem" placeholder="You are a helpful assistant."></textarea>
-                    <div class="desc">Sent as the first message to steer the model's behaviour.</div>
+                    <label locale="aichat/label/system_prompt">System Prompt</label>
+                    <textarea id="setSystem" placeholder="You are a helpful assistant." locale-placeholder="aichat/placeholder/system"></textarea>
+                    <div class="desc" locale="aichat/desc/system">Sent as the first message to steer the model's behaviour.</div>
                 </div>
                 <div class="field">
-                    <label>Temperature</label>
+                    <label locale="aichat/label/temperature">Temperature</label>
                     <div class="range-row">
                         <input type="range" id="setTempRange" min="0" max="2" step="0.1">
                         <span class="range-val" id="tempVal">0.7</span>
                     </div>
-                    <div class="desc">Higher = more creative, lower = more focused.</div>
+                    <div class="desc" locale="aichat/desc/temperature">Higher = more creative, lower = more focused.</div>
                 </div>
                 <div class="field">
-                    <label>Max Tokens</label>
-                    <input type="number" id="setMaxTokens" min="0" step="1" placeholder="(model default)">
-                    <div class="desc">Maximum tokens to generate. Leave blank for the model default.</div>
+                    <label locale="aichat/label/max_tokens">Max Tokens</label>
+                    <input type="number" id="setMaxTokens" min="0" step="1" placeholder="(model default)" locale-placeholder="aichat/placeholder/max_tokens">
+                    <div class="desc" locale="aichat/desc/max_tokens">Maximum tokens to generate. Leave blank for the model default.</div>
                 </div>
                 <div class="field">
-                    <label>Model</label>
+                    <label locale="aichat/label/model">Model</label>
                     <input type="text" id="setModel" list="modelList" placeholder="e.g. gpt-4o-mini">
                 </div>
                 <div class="field">
-                    <label>Theme</label>
-                    <select id="setTheme"><option value="dark">Dark</option><option value="light">Light</option></select>
+                    <label locale="aichat/label/theme">Theme</label>
+                    <select id="setTheme"><option value="dark" locale="aichat/theme/dark">Dark</option><option value="light" locale="aichat/theme/light">Light</option></select>
                 </div>
                 <div class="field">
-                    <button class="danger-btn" onclick="clearAll()">Delete all conversations</button>
+                    <button class="danger-btn" onclick="clearAll()" locale="aichat/btn/delete_all">Delete all conversations</button>
                 </div>
             </div>
         </div>
@@ -387,7 +388,8 @@ function currentConv(){ return state.conversations.find(function(c){ return c.id
 /* ─────────────────────────────────────────────────────────────
    Boot
    ───────────────────────────────────────────────────────────── */
-$(document).ready(function(){
+function startApp(){
+
     load();
     applyTheme(state.settings.theme);
     if(state.conversations.length === 0){ newChat(); } else {
@@ -398,7 +400,8 @@ $(document).ready(function(){
     renderSidebar();
     renderMessages();
     loadModels();
-});
+
+};
 
 /* ─────────────────────────────────────────────────────────────
    Models / connectivity
@@ -855,6 +858,15 @@ function legacyCopy(text){
 }
 
 function scrollBottom(){ var m = document.getElementById("messages"); m.scrollTop = m.scrollHeight; }
+
+
+/* ── Locale init ── */
+if(typeof applocale !== 'undefined' && applocale){
+    applocale.init('locale/aichat.json', function(){
+        applocale.translate();
+        startApp();
+    });
+} else {
+    startApp();
+}
 </script>
-</body>
-</html>
