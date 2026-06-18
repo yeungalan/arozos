@@ -9,6 +9,7 @@
 		<script src="../script/jquery.min.js"></script>
 		<script src="../script/ao_module.js"></script>
 		<script src="../script/semantic/semantic.min.js"></script>
+		<script src="../script/applocale.js"></script>
 		<link rel="icon" type="image/png" href="img/module_icon.png">
 		<link rel="manifest" crossorigin="use-credentials" href="manifest.json">
 		<title>Browser</title>
@@ -140,12 +141,12 @@
 					</button>
 				</div>
 				<div class="ui rightMenuItem">
-					<button class="ui tiny icon button" title="Open in new Window" onclick="openInNewWindow();">
+					<button class="ui tiny icon button" title="Open in new Window" locale-title="open_in_new_window" onclick="openInNewWindow();">
 						<i class="grey external icon"></i>
 					</button>
 				</div>
 				<div class="ui rightMenuItem">
-					<button class="ui tiny icon button sidebarToggle" title="Download Manager" onclick="toggleDownloadManager(this);">
+					<button class="ui tiny icon button sidebarToggle" title="Download Manager" locale-title="download_manager" onclick="toggleDownloadManager(this);">
 						<i class="grey download icon"></i>
 					</button>
 				</div>
@@ -164,16 +165,16 @@
 		  <div id="downloadManager" class="sidebar" style="display:none;">
 			<div class="ui container">
 				<div id="downloadDropper" allowdrop="true" ondrop="drop(event)" ondragstart="return false;" onclick="event.preventDefault(); openURLEnter();" ondblclick="event.preventDefault();event.stopImmediatePropagation();" ondragover="allowDrop(event);" draggable="false">
-					<p style="margin-top: 3em;">Drop a link, image into this area; or click this area to enter a URL for download</p>
+					<p style="margin-top: 3em;" locale="drop_link_hint">Drop a link, image into this area; or click this area to enter a URL for download</p>
 				</div>
 				<div class="ui action fluid input" id="iframeMode" style="display:none;">
-					<input type="text" id="manualInputURL" placeholder="Copy link here to download">
+					<input type="text" id="manualInputURL" placeholder="Copy link here to download" locale-placeholder="copy_link_here">
 					<button class="ui icon green basic button" onclick="downloadFromManualInputURL();"><i class="ui download icon"></i></button>
 				</div>
 			</div>
 			
 			<div class="ui divider"></div>
-			<p>Downloaded Files</p>
+			<p locale="downloaded_files">Downloaded Files</p>
 			<div class="ui list" id="downloadList" style="min-height: 300px;">
 				
 			</div>
@@ -182,9 +183,9 @@
 			<div class="ui yellow message">
 				<i class="close icon"></i>
 				<div class="header">
-					<i class="remove icon"></i>Not Recommended Way of Usage
+					<i class="remove icon"></i><span locale="not_recommended">Not Recommended Way of Usage</span>
 				</div>
-				<p>Please use your native browser windows instead of this iframe browser for maximum website compatibility.</p>
+				<p locale="not_recommended_msg">Please use your native browser windows instead of this iframe browser for maximum website compatibility.</p>
 			</div>
 		  </div>
 		<script>
@@ -627,6 +628,13 @@
 						callback(true, location);
 					}
 				}, undefined, 5000)
+			}
+		</script>
+		<script>
+			if (typeof applocale !== 'undefined' && applocale) {
+				applocale.init('locale/browser.json', function() {
+					applocale.translate();
+				});
 			}
 		</script>
 	</body>

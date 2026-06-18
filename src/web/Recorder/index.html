@@ -48,27 +48,27 @@
             </div>
             <div id="audioTab" class="ui bottom attached basic segment uitab" style="margin-bottom: 0px;">
                 <button id="record" class="ui red button" onclick="startRecording();">
-                <i class="ui circle icon"></i> <span locale="recorder/btn-record">Record</span>
+                <i class="ui circle icon"></i> <span locale="record">Record</span>
                 </button>
                 <button id="stop" class="ui disabled button" onclick="stopRecording();">
-                <i class="ui stop icon"></i> <span locale="recorder/btn-stop">Stop</span>
+                <i class="ui stop icon"></i> <span locale="stop">Stop</span>
                 </button>
                 <button class="ui button" onclick="openStorageFolder();">
-                <i class="ui folder open icon"></i> <span locale="recorder/btn-open-folder">Open Folder</span>
+                <i class="ui folder open icon"></i> <span locale="open_folder">Open Folder</span>
                 </button>
             </div>
             <div id="videoTab" class="ui bottom attached basic segment uitab" style="display:none; margin-bottom: 0px;">
                 <button id="capture" class="ui red button" onclick="startVideoCapture();">
-                    <i class="ui circle icon"></i> <span locale="recorder/btn-capture">Capture</span>
+                    <i class="ui circle icon"></i> <span locale="capture">Capture</span>
                 </button>
                 <button id="vidstop" class="ui disabled button" onclick="stopVideoCapture()">
-                    <i class="ui stop icon"></i> <span locale="recorder/btn-stop-video">Stop</span>
+                    <i class="ui stop icon"></i> <span locale="stop">Stop</span>
                 </button>
                 <button class="ui button" onclick="openStorageFolder();">
-                    <i class="ui folder open icon"></i> <span locale="recorder/btn-open-folder-video">Open Folder</span>
+                    <i class="ui folder open icon"></i> <span locale="open_folder">Open Folder</span>
                 </button>
                 <br>
-                <small locale="recorder/websocket-note">Notes: This function require websocket upload to be enabled.</small>
+                <small locale="websocket_note">Notes: This function require websocket upload to be enabled.</small>
                 <br>
                 <!--
                 <div class="ui selection fluid dropdown" style="margin-top: 0.4em;">
@@ -81,20 +81,20 @@
                     </div>
                 </div>
             -->
-
+                
             </div>
             <div id="settingTab" class="ui bottom attached basic segment uitab" style="display:none; margin-bottom: 0px;">
-                <p locale="recorder/select-output-folder" style="margin-bottom: 4px;">Select Output Folder</p>
+                <p style="margin-bottom: 4px;" locale="select_output_folder">Select Output Folder</p>
                 <div class="ui icon fluid input">
                   <input id="saveFolder" type="text" placeholder="user:/Document/Capture/" value="user:/Document/Capture/">
                   <i class="folder open link icon" onclick="selectSaveFolder();"></i>
                 </div>
             </div>
             <div class="statusbar">
-                <span locale="recorder/status-label">Status:</span> <span id="status" locale="recorder/status-ready">Ready</span>
+                Status: <span id="status">Ready</span>
             </div>
         </div>
-
+        
         <script>
             //Define the basic context for the recorder
             var audio_context;
@@ -144,7 +144,7 @@
                     recordCounter++;
                     updateStatus("Recording T: " + secondsToHms(recordCounter))
                 }, 1000);
-            }
+            }   
 
             function stopRecording(){
                 recorder && recorder.stop();
@@ -160,7 +160,7 @@
                     //Convert the blob to a file object
                     var fileName = new Date().toLocaleDateString().split("/").join("-") + "_" +  new Date().toLocaleTimeString(undefined, {hour12: false}).split(":").join("-") + ".wav"
                     var fileObjcet = ao_module_utils.blobToFile(blob, fileName, blob.type)
-
+                    
                     console.log(fileObjcet);
                     //Upload the file to server
                     ao_module_uploadFile(fileObjcet, $("#saveFolder").val(), function(resp){
@@ -170,12 +170,12 @@
                         }else{
                             updateStatus("Saved as " + fileName)
                         }
-
+                       
                         console.log(resp);
                     }, undefined, function(){
                         updateStatus("File Saving Failed")
                     });
-                });
+                }); 
             }
 
             function renderWAV(callback){
@@ -190,7 +190,7 @@
                 var m = Math.floor(d % 3600 / 60);
                 var s = Math.floor(d % 3600 % 60);
 
-
+    
                 return (h+"").padStart(2, '0') + ":" + (m+"").padStart(2, '0') + ":" + (s+"").padStart(2, '0');
             }
 
@@ -243,7 +243,7 @@
                         navigator.mozGetUserMedia ||
                         navigator.msGetUserMedia);
                     window.URL = window.URL || window.webkitURL;
-
+                    
                     audio_context = new AudioContext;
                     console.log('Audio context set up.');
                     console.log('navigator.getUserMedia ' + (navigator.getUserMedia ? 'available.' : 'not present!'));
@@ -251,7 +251,7 @@
                     console.log(e);
                     alert('No web audio support in this browser!');
                 }
-
+                
                 try{
                     navigator.getUserMedia({audio: true}, startUserMedia, function(e) {
                         $("#status").text("Browser rejected audio recording request")
@@ -265,12 +265,12 @@
                 }
 
                 audioContextWorking=true;
-
+              
             };
 
             function downloadBlob(blob, name = 'file.txt') {
                 if (
-                window.navigator &&
+                window.navigator && 
                 window.navigator.msSaveOrOpenBlob
                 ) return window.navigator.msSaveOrOpenBlob(blob);
 
@@ -284,10 +284,10 @@
 
                 // this is necessary as link.click() does not work on the latest firefox
                 link.dispatchEvent(
-                new MouseEvent('click', {
-                    bubbles: true,
-                    cancelable: true,
-                    view: window
+                new MouseEvent('click', { 
+                    bubbles: true, 
+                    cancelable: true, 
+                    view: window 
                 })
                 );
 
@@ -304,40 +304,9 @@
 
             */
 
-
+        
             var websocket;
             var videCaptureRecorder;
-
-            // CRC32 lookup table and helpers (IEEE polynomial, matches Go's hash/crc32 package)
-            const crc32Table = (() => {
-                const t = new Uint32Array(256);
-                for (let i = 0; i < 256; i++) {
-                    let c = i;
-                    for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-                    t[i] = c;
-                }
-                return t;
-            })();
-            function crc32UpdateState(state, bytes) {
-                for (let i = 0; i < bytes.length; i++)
-                    state = (state >>> 8) ^ crc32Table[(state ^ bytes[i]) & 0xFF];
-                return state;
-            }
-            function crc32Hex(bytes) {
-                return ((crc32UpdateState(0xFFFFFFFF, bytes) ^ 0xFFFFFFFF) >>> 0).toString(16).padStart(8, '0');
-            }
-
-            // Chunk queue state for ordered, ack-gated WebSocket upload
-            const WS_CHUNK_TIMEOUT_MS = 30000;
-            const WS_MAX_CHUNK_RETRIES = 3;
-            var wsChunkQueue        = [];
-            var wsIsProcessingChunk = false;
-            var wsChunkIndex        = 0;
-            var wsRunningCRC32State = 0xFFFFFFFF;
-            var wsChunkCRC32Committed = {};
-            var wsChunkRetryCount   = 0;
-            var wsChunkTimeoutTimer = null;
-            var wsRecordingStopped  = false;
 
             function getWebsocketUploadEndpoint(){
                 return getWebSocketEndpoint() + "/system/file_system/lowmemUpload?filename=" + encodeURIComponent(getVideoFilename()) + "&path=" + encodeURIComponent($("#saveFolder").val());
@@ -360,7 +329,7 @@
                     }else{
                         port = "443";
                     }
-
+                    
                 }
                 let wsept = (protocol + window.location.hostname + ":" + port);
                 return wsept;
@@ -385,58 +354,12 @@
                 videCaptureRecorder.camera.stop();
                 videCaptureRecorder = null;
             }
-
+          
 
             function startVideoCapture() {
                 this.disabled = true;
-
-                // Reset all chunk queue state for a fresh recording session
-                wsChunkQueue          = [];
-                wsIsProcessingChunk   = false;
-                wsChunkIndex          = 0;
-                wsRunningCRC32State   = 0xFFFFFFFF;
-                wsChunkCRC32Committed = {};
-                wsChunkRetryCount     = 0;
-                wsChunkTimeoutTimer   = null;
-                wsRecordingStopped    = false;
-
                 websocket = new WebSocket(getWebsocketUploadEndpoint());
-
-                websocket.onmessage = async function(event) {
-                    var data = event.data;
-                    if (data === "next") {
-                        clearTimeout(wsChunkTimeoutTimer);
-                        wsChunkRetryCount = 0;
-                        wsChunkQueue.shift(); // remove the acknowledged chunk
-                        wsIsProcessingChunk = false;
-                        processNextWsChunk();
-                    } else if (data === "OK") {
-                        updateStatus("Capture Saved");
-                    } else {
-                        try {
-                            var resp = JSON.parse(data);
-                            if (resp.retryChunk !== undefined) {
-                                clearTimeout(wsChunkTimeoutTimer);
-                                if (wsChunkRetryCount < WS_MAX_CHUNK_RETRIES && wsChunkQueue.length > 0) {
-                                    wsChunkRetryCount++;
-                                    console.warn("[Recorder] Server requested retry for chunk " + resp.retryChunk);
-                                    let top = wsChunkQueue[0];
-                                    await sendWsChunk(top.index, top.blob);
-                                }
-                            } else if (resp.error !== undefined) {
-                                updateStatus("Upload Failed: " + resp.error);
-                            }
-                        } catch(ex) {
-                            console.log(data, ex);
-                        }
-                    }
-                };
-
-                websocket.onerror = function(error) {
-                    console.error("[Recorder] WebSocket error:", error);
-                    clearTimeout(wsChunkTimeoutTimer);
-                    updateStatus("Upload Error – check console");
-                };
+                //websocket.binaryType = 'blob';
 
                 captureCamera(function(camera) {
 
@@ -446,9 +369,7 @@
                         timeSlice: 100,
                         getNativeBlob: true,
                         ondataavailable: function(blob) {
-                            var currentIndex = wsChunkIndex++;
-                            wsChunkQueue.push({index: currentIndex, blob: blob});
-                            processNextWsChunk();
+                            websocket.send(blob);
                         }
                     });
 
@@ -468,101 +389,36 @@
                 });
             }
 
-            async function sendWsChunk(id, blob) {
-                let arrayBuffer;
-                try {
-                    arrayBuffer = await blob.arrayBuffer();
-                } catch(e) {
-                    console.error("[Recorder] Failed to read chunk " + id + ": " + e);
-                    wsIsProcessingChunk = false;
-                    return;
-                }
-
-                let bytes = new Uint8Array(arrayBuffer);
-
-                // Update full-file running CRC32 only on first attempt per chunk
-                if (!wsChunkCRC32Committed[id]) {
-                    wsRunningCRC32State = crc32UpdateState(wsRunningCRC32State, bytes);
-                    wsChunkCRC32Committed[id] = true;
-                }
-
-                let chunkCRCHex = crc32Hex(bytes);
-                websocket.send(JSON.stringify({index: id, checksum: chunkCRCHex}));
-                websocket.send(arrayBuffer);
-
-                // Start ack timeout; retry on expiry
-                clearTimeout(wsChunkTimeoutTimer);
-                wsChunkTimeoutTimer = setTimeout(function() {
-                    if (wsChunkRetryCount < WS_MAX_CHUNK_RETRIES) {
-                        wsChunkRetryCount++;
-                        console.warn("[Recorder] Chunk " + id + " ACK timeout – retry " + wsChunkRetryCount + "/" + WS_MAX_CHUNK_RETRIES);
-                        sendWsChunk(id, blob);
-                    } else {
-                        console.error("[Recorder] Chunk " + id + " failed after max retries");
-                        wsIsProcessingChunk = false;
-                    }
-                }, WS_CHUNK_TIMEOUT_MS);
-            }
-
-            function processNextWsChunk() {
-                if (wsIsProcessingChunk || wsChunkQueue.length === 0) {
-                    // If recording has stopped and all chunks are drained, send the done signal
-                    if (wsRecordingStopped && !wsIsProcessingChunk && wsChunkQueue.length === 0) {
-                        sendWsDoneSignal();
-                    }
-                    return;
-                }
-                wsIsProcessingChunk = true;
-                var top = wsChunkQueue[0]; // peek – shift happens only after "next" ack
-                sendWsChunk(top.index, top.blob);
-            }
-
-            function sendWsDoneSignal() {
-                var finalCRC32Hex = ((wsRunningCRC32State ^ 0xFFFFFFFF) >>> 0).toString(16).padStart(8, '0');
-                websocket.send(JSON.stringify({done: true, totalChunks: wsChunkIndex, fileChecksum: finalCRC32Hex}));
-                updateStatus("Saving...");
-            }
 
             function stopVideoCapture(){
                 videCaptureRecorder.stopRecording(stopRecordingCallback);
-                // Don't send "done" immediately – wait for the chunk queue to drain
-                wsRecordingStopped = true;
-                if (!wsIsProcessingChunk && wsChunkQueue.length === 0) {
-                    sendWsDoneSignal();
-                }
+                websocket.send("done");
                 clearInterval(recordTimer);
-                updateStatus("Capturing Stopped – Saving...");
+                updateStatus("Capturing Stopped");
                 $(".item.tab").removeClass("disabled");
                 $("#vidstop").addClass("disabled");
                 $("#capture").removeClass("disabled");
             }
 
-            function startApp() {
-                //On window load, adjust the floatWindow settings
-                //Disable window resizing
-                ao_module_setFixedWindowSize();
-
-                $(".dropdown").dropdown();
-
-                //Check if there are previous saved path. If yes, update save target
-                var previousSavePath = localStorage.getItem("recorder-savepath");
-                if (previousSavePath != null){
-                    $("#saveFolder").val(previousSavePath);
-                }
-
-                //Create save dir if not exists
-                createSaveDirIfNotExists();
+        </script>
+        <script>
+        function startApp() {
+            ao_module_setFixedWindowSize();
+            $(".dropdown").dropdown();
+            var previousSavePath = localStorage.getItem("recorder-savepath");
+            if (previousSavePath != null){
+                $("#saveFolder").val(previousSavePath);
             }
-
-            if (typeof applocale !== 'undefined' && applocale) {
-                applocale.init('locale/recorder.json', function() {
-                    applocale.translate();
-                    startApp();
-                });
-            } else {
+            createSaveDirIfNotExists();
+        }
+        if (typeof applocale !== 'undefined' && applocale) {
+            applocale.init('locale/recorder.json', function() {
+                applocale.translate();
                 startApp();
-            }
-
+            });
+        } else {
+            startApp();
+        }
         </script>
     </body>
 </html>
