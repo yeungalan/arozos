@@ -11,6 +11,7 @@
         <script src="../script/semantic/semantic.min.js"></script>
         <script src="js/recorder.js"></script>
         <script src="js/RecordRTC.js"></script>
+        <script src="../script/applocale.js"></script>
         <title>Recorder</title>
         <style>
             body{
@@ -47,27 +48,27 @@
             </div>
             <div id="audioTab" class="ui bottom attached basic segment uitab" style="margin-bottom: 0px;">
                 <button id="record" class="ui red button" onclick="startRecording();">
-                <i class="ui circle icon"></i> Record
+                <i class="ui circle icon"></i> <span locale="record">Record</span>
                 </button>
                 <button id="stop" class="ui disabled button" onclick="stopRecording();">
-                <i class="ui stop icon"></i> Stop
+                <i class="ui stop icon"></i> <span locale="stop">Stop</span>
                 </button>
                 <button class="ui button" onclick="openStorageFolder();">
-                <i class="ui folder open icon"></i> Open Folder
+                <i class="ui folder open icon"></i> <span locale="open_folder">Open Folder</span>
                 </button>
             </div>
             <div id="videoTab" class="ui bottom attached basic segment uitab" style="display:none; margin-bottom: 0px;">
                 <button id="capture" class="ui red button" onclick="startVideoCapture();">
-                    <i class="ui circle icon"></i> Capture
+                    <i class="ui circle icon"></i> <span locale="capture">Capture</span>
                 </button>
                 <button id="vidstop" class="ui disabled button" onclick="stopVideoCapture()">
-                    <i class="ui stop icon"></i> Stop
+                    <i class="ui stop icon"></i> <span locale="stop">Stop</span>
                 </button>
                 <button class="ui button" onclick="openStorageFolder();">
-                    <i class="ui folder open icon"></i> Open Folder
+                    <i class="ui folder open icon"></i> <span locale="open_folder">Open Folder</span>
                 </button>
                 <br>
-                <small>Notes: This function require websocket upload to be enabled.</small>
+                <small locale="websocket_note">Notes: This function require websocket upload to be enabled.</small>
                 <br>
                 <!--
                 <div class="ui selection fluid dropdown" style="margin-top: 0.4em;">
@@ -83,7 +84,7 @@
                 
             </div>
             <div id="settingTab" class="ui bottom attached basic segment uitab" style="display:none; margin-bottom: 0px;">
-                <p style="margin-bottom: 4px;">Select Output Folder</p>
+                <p style="margin-bottom: 4px;" locale="select_output_folder">Select Output Folder</p>
                 <div class="ui icon fluid input">
                   <input id="saveFolder" type="text" placeholder="user:/Document/Capture/" value="user:/Document/Capture/">
                   <i class="folder open link icon" onclick="selectSaveFolder();"></i>
@@ -101,21 +102,6 @@
             var recordTimer;
             var recordCounter = 0;
 
-            //On window load, adjust the floatWindow settings
-            //Disable window resizing
-            ao_module_setFixedWindowSize();
-
-            $(".dropdown").dropdown();
-
-            //Check if there are previous saved path. If yes, update save target
-            var previousSavePath = localStorage.getItem("recorder-savepath");
-            if (previousSavePath != null){
-                $("#saveFolder").val(previousSavePath);
-            }
-
-            //Create save dir if not exists
-            createSaveDirIfNotExists();
-            
             function opentab(tabName, object){
                 if ($(object).hasClass('disabled')){
                     return;
@@ -414,6 +400,25 @@
                 $("#capture").removeClass("disabled");
             }
 
+        </script>
+        <script>
+        function startApp() {
+            ao_module_setFixedWindowSize();
+            $(".dropdown").dropdown();
+            var previousSavePath = localStorage.getItem("recorder-savepath");
+            if (previousSavePath != null){
+                $("#saveFolder").val(previousSavePath);
+            }
+            createSaveDirIfNotExists();
+        }
+        if (typeof applocale !== 'undefined' && applocale) {
+            applocale.init('locale/recorder.json', function() {
+                applocale.translate();
+                startApp();
+            });
+        } else {
+            startApp();
+        }
         </script>
     </body>
 </html>

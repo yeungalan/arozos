@@ -9,6 +9,7 @@
 		<script src="../script/jquery.min.js"></script>
 		<script src="../script/semantic/semantic.min.js"></script>
 		<script src="../script/ao_module.js"></script>
+		<script src="../script/applocale.js"></script>
 
 		<link rel="manifest" crossorigin="use-credentials" href="manifest.json">
 		<title>Camera</title>
@@ -159,17 +160,17 @@
 		<canvas id="canvas" style="display:none;"></canvas>
 		<div id="controls">
 			<div class="zoombarcontainer">
-				<input id="zoombar" type="range" min="1" max="100" value="50">
+				<input id="zoombar" type="range" min="1" max="100" value="50" locale-title="zoom">
 			</div>
 			<div></div>
 			<div id="verticalUI">
 				<div class="cameraFunctionPanel">
-					<div class="ui button small icon basic camswitch" onclick="switchCamera();">
+					<div class="ui button small icon basic camswitch" onclick="switchCamera();" locale-title="switch_camera">
 						<img src="img/icons/camswitch.svg">
 					</div>
 				</div>
 				<div class="shutterContainer">
-					<div onclick="takePicture();" ontouchdown="takePicture();">
+					<div onclick="takePicture();" ontouchdown="takePicture();" locale-title="take_photo">
 						<img class="ui shutter image" src="img/shutter.png">
 					</div>
 				</div>
@@ -181,12 +182,12 @@
 			</div>
 			<div id="sidewayUI">
 				<div class="cameraFunctionPanel">
-					<div class="ui button small icon basic camswitch" onclick="switchCamera();">
+					<div class="ui button small icon basic camswitch" onclick="switchCamera();" locale-title="switch_camera">
 						<img src="img/icons/camswitch.svg">
 					</div>
 				</div>
 				<div class="shutterContainer">
-					<div onclick="takePicture();" ontouchdown="takePicture();">
+					<div onclick="takePicture();" ontouchdown="takePicture();" locale-title="take_photo">
 						<img class="ui shutter image" src="img/shutter.png">
 					</div>
 				</div>
@@ -197,8 +198,8 @@
 				</div>
 			</div>
 			<div id="albumn">
-				<div class="ablumnpreview" onclick="openImageView();">
-					<img class="ui fluid image latestPreview" src="img/module_icon.png"> 
+				<div class="ablumnpreview" onclick="openImageView();" locale-title="open_album">
+					<img class="ui fluid image latestPreview" src="img/module_icon.png">
 				</div>
 			</div>
 		</div>
@@ -212,14 +213,6 @@
 				isMobile = true;
 			}
 
-			$(document).ready(function(){
-				ao_module_agirun("Camera/backend/readydir.js", {savetarget: saveFolder}, function(){
-					//Folder structure ready
-					initcamera();
-				});
-				loadAblumnPreview();
-				initVideoDeviceConstraints();
-			});
 
 			function openImageView(){
 				window.location.href = "preview.html";
@@ -423,7 +416,24 @@
 				
 				});
 			}
-			
+
+		</script>
+		<script>
+			function startApp() {
+				ao_module_agirun("Camera/backend/readydir.js", {savetarget: saveFolder}, function(){
+					initcamera();
+				});
+				loadAblumnPreview();
+				initVideoDeviceConstraints();
+			}
+			if (typeof applocale !== 'undefined' && applocale) {
+				applocale.init('locale/camera.json', function() {
+					applocale.translate();
+					startApp();
+				});
+			} else {
+				startApp();
+			}
 		</script>
 	</body>
 </html>	

@@ -1,0 +1,12 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": { "name": "English (US)", "strings": { "take_photo": "Take Photo", "switch_camera": "Switch Camera", "open_album": "Open Album", "zoom": "Zoom" } },
+        "zh-tw": { "name": "繁體中文（台灣）", "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"", "strings": { "take_photo": "拍照", "switch_camera": "切換鏡頭", "open_album": "開啟相簿", "zoom": "縮放" } },
+        "zh-hk": { "name": "繁體中文（香港）", "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"", "strings": { "take_photo": "拍照", "switch_camera": "切換鏡頭", "open_album": "開啟相簿", "zoom": "縮放" } },
+        "zh-cn": { "name": "简体中文", "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"", "strings": { "take_photo": "拍照", "switch_camera": "切换摄像头", "open_album": "打开相册", "zoom": "缩放" } },
+        "ja-jp": { "name": "日本語", "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"", "strings": { "take_photo": "写真を撮る", "switch_camera": "カメラ切替", "open_album": "アルバムを開く", "zoom": "ズーム" } },
+        "ko-kr": { "name": "한국어", "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"", "strings": { "take_photo": "사진 촬영", "switch_camera": "카메라 전환", "open_album": "앨범 열기", "zoom": "확대/축소" } }
+    }
+}

@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
+    <script src="../script/applocale.js"></script>
     <title>Paint</title>
     <style>
         body{
@@ -75,29 +76,33 @@
         }
     }
 
-    //Check if there are any file loading from ao_module
+    </script>
+<script>
+function startApp() {
     var inputFiles = ao_module_loadInputFiles();
     if (inputFiles == null){
-        //Nothing is loaded. Use blank canvas
         painterroObject.show()
-    }else{
-        //Something is loaded. Use the first image to load
+    } else {
         var openingFile = inputFiles[0];
         var filename = openingFile.filename;
         saveFilename = filename;
         ao_module_setWindowTitle("Paint - " + saveFilename);
-
-        //Filter out the filepath to get its parent dir
         var filepath = openingFile.filepath;
         saveFilepath = filepath;
         saveFilepath = saveFilepath.split("/");
         saveFilepath.pop();
         saveFilepath = saveFilepath.join("/");
-
         painterroObject.show("../media?file=" + filepath);
     }
-    
-    
-    </script>
+}
+if (typeof applocale !== 'undefined' && applocale) {
+    applocale.init('locale/paint.json', function() {
+        applocale.translate();
+        startApp();
+    });
+} else {
+    startApp();
+}
+</script>
 </body>
 </html>
