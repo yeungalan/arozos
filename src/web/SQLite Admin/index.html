@@ -10,6 +10,10 @@
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
     <script src="../script/semantic/semantic.min.js"></script>
+<<<<<<< HEAD
+=======
+    <script src="../script/applocale.js"></script>
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
     <style>
         :root {
             --accent:   #4a6cf7;
@@ -506,8 +510,13 @@
         </svg>
         SQLite Admin
     </div>
+<<<<<<< HEAD
     <span id="db-path-label" class="db-path">No database selected</span>
     <button id="btn-open-db" class="primary">Open Database&hellip;</button>
+=======
+    <span id="db-path-label" class="db-path" locale="sqlite/no-db-selected">No database selected</span>
+    <button id="btn-open-db" class="primary" locale="sqlite/open-database">Open Database&hellip;</button>
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
 </div>
 
 <!-- Layout -->
@@ -515,9 +524,15 @@
 
     <!-- Sidebar -->
     <div id="sidebar">
+<<<<<<< HEAD
         <div id="sidebar-header">Tables</div>
         <div id="table-list">
             <div id="sidebar-empty">Open a <code>.sqlite</code> file to begin.</div>
+=======
+        <div id="sidebar-header" locale="sqlite/tables">Tables</div>
+        <div id="table-list">
+            <div id="sidebar-empty" locale="sqlite/open-sqlite-hint">Open a <code>.sqlite</code> file to begin.</div>
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
         </div>
     </div>
 
@@ -528,7 +543,11 @@
         <!-- Welcome screen (shown before any DB is open) -->
         <div id="welcome">
             <div id="not-supported-banner">
+<<<<<<< HEAD
                 <strong>SQLite not available on this platform</strong>
+=======
+                <strong locale="sqlite/sqlite-unavailable-title">SQLite not available on this platform</strong>
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
                 The SQLite library could not be loaded on this server. This feature requires a platform supported by the SQLite backend (linux/amd64, linux/arm64, darwin, windows/amd64, windows/arm64, and others). OpenWRT (linux/mipsle) and other embedded targets are not supported.
             </div>
             <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -536,7 +555,11 @@
                 <path d="M21 12c0 1.657-4.03 3-9 3s-9-1.343-9-3"/>
                 <path d="M3 5v14c0 1.657 4.03 3 9 3s9-1.343 9-3V5"/>
             </svg>
+<<<<<<< HEAD
             <h2>SQLite Admin</h2>
+=======
+            <h2 locale="sqlite/welcome-title">SQLite Admin</h2>
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
             <p>Click <strong>Open Database&hellip;</strong> to select a <code>.sqlite</code> file.</p>
         </div>
 
@@ -545,9 +568,15 @@
 
             <!-- Tab bar -->
             <div id="tab-bar">
+<<<<<<< HEAD
                 <button class="tab-btn active" data-tab="browse">Browse</button>
                 <button class="tab-btn" data-tab="structure">Structure</button>
                 <button class="tab-btn" data-tab="sql">SQL Editor</button>
+=======
+                <button class="tab-btn active" data-tab="browse" locale="sqlite/tab-browse">Browse</button>
+                <button class="tab-btn" data-tab="structure" locale="sqlite/tab-structure">Structure</button>
+                <button class="tab-btn" data-tab="sql" locale="sqlite/tab-sql">SQL Editor</button>
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
                 <span id="tab-title"></span>
             </div>
 
@@ -561,8 +590,13 @@
                         <option value="100">100 rows</option>
                         <option value="200">200 rows</option>
                     </select>
+<<<<<<< HEAD
                     <button id="btn-refresh">&#8635; Refresh</button>
                     <button id="btn-add-row" class="primary">+ Add Row</button>
+=======
+                    <button id="btn-refresh" locale="sqlite/btn-refresh">&#8635; Refresh</button>
+                    <button id="btn-add-row" class="primary" locale="sqlite/btn-add-row">+ Add Row</button>
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
                 </div>
                 <div id="table-wrapper">
                     <div id="browse-placeholder" style="padding:40px;text-align:center;color:var(--muted);">
@@ -586,10 +620,17 @@
                         <thead>
                             <tr>
                                 <th>#</th>
+<<<<<<< HEAD
                                 <th>Column</th>
                                 <th>Type</th>
                                 <th>Flags</th>
                                 <th>Default</th>
+=======
+                                <th locale="sqlite/col-column">Column</th>
+                                <th locale="sqlite/col-type">Type</th>
+                                <th locale="sqlite/col-flags">Flags</th>
+                                <th locale="sqlite/col-default">Default</th>
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
                             </tr>
                         </thead>
                         <tbody id="schema-tbody"></tbody>
@@ -618,8 +659,13 @@
         <h3 id="modal-title">Edit Row</h3>
         <div id="modal-fields"></div>
         <div class="modal-actions">
+<<<<<<< HEAD
             <button class="btn-cancel" id="modal-cancel">Cancel</button>
             <button class="btn-save" id="modal-save">Save</button>
+=======
+            <button class="btn-cancel" id="modal-cancel" locale="sqlite/modal-cancel">Cancel</button>
+            <button class="btn-save" id="modal-save" locale="sqlite/modal-save">Save</button>
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
         </div>
     </div>
 </div>
@@ -627,11 +673,19 @@
 <!-- Confirm Dialog (shared for row delete and table drop) -->
 <div id="confirm-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:900;align-items:center;justify-content:center;">
     <div class="modal-box" style="width:360px;">
+<<<<<<< HEAD
         <h3 id="confirm-title">Delete Row</h3>
         <p id="confirm-body" style="font-size:13px;color:var(--muted);margin:0 0 16px;">Are you sure you want to delete this row? This action cannot be undone.</p>
         <div class="modal-actions">
             <button class="btn-cancel" id="del-cancel">Cancel</button>
             <button class="btn-danger" id="del-confirm">Delete</button>
+=======
+        <h3 id="confirm-title" locale="sqlite/confirm-delete-title">Delete Row</h3>
+        <p id="confirm-body" style="font-size:13px;color:var(--muted);margin:0 0 16px;">Are you sure you want to delete this row? This action cannot be undone.</p>
+        <div class="modal-actions">
+            <button class="btn-cancel" id="del-cancel" locale="sqlite/modal-cancel">Cancel</button>
+            <button class="btn-danger" id="del-confirm" locale="sqlite/btn-delete">Delete</button>
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
         </div>
     </div>
 </div>
@@ -1360,6 +1414,21 @@ document.getElementById('modal-overlay').addEventListener('click', function(e) {
 document.getElementById('confirm-overlay').addEventListener('click', function(e) {
     if (e.target === this) closeConfirm();
 });
+<<<<<<< HEAD
+=======
+
+// ─── Locale init ──────────────────────────────────────────────────────────────
+function startApp() {
+    // App is fully initialized above; this function is a no-op placeholder
+    // so existing initialization (inline event listeners, etc.) still works.
+}
+
+if (typeof applocale !== 'undefined' && applocale) {
+    applocale.init('locale/sqlite.json', function() {
+        applocale.translate();
+    });
+}
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
 </script>
 </body>
 </html>

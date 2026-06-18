@@ -6,6 +6,10 @@
     <title>Productivity</title>
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
+<<<<<<< HEAD
+=======
+    <script src="../script/applocale.js"></script>
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -385,7 +389,11 @@ if (window.location.hash && window.location.hash.length > 1) {
     <nav id="sidebar">
         <div id="brand">
             <img src="img/module_icon.svg" alt="">
+<<<<<<< HEAD
             <span>Productivity</span>
+=======
+            <span locale="productivity/app-title">Productivity</span>
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
         </div>
         <div class="cat-section" id="catList"></div>
     </nav>
@@ -504,7 +512,11 @@ function backToGrid() {
 
 /* ── Sidebar render ── */
 function renderSidebar() {
+<<<<<<< HEAD
     var html = '<div class="cat-section-label">Categories</div>';
+=======
+    var html = '<div class="cat-section-label" locale="productivity/categories">Categories</div>';
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
     CATEGORIES.forEach(function(c) {
         html += '<div class="cat-item' + (c.id === currentCat ? ' active' : '') + '"' +
                 ' onclick="selectCat(\'' + c.id + '\')">' +
@@ -540,7 +552,11 @@ function showPanel(tool) {
     panel.className = 'open';
     panel.innerHTML =
         '<div class="tp-header">' +
+<<<<<<< HEAD
             '<button class="back-btn" onclick="backToGrid()">' +
+=======
+            '<button class="back-btn" onclick="backToGrid()" locale="productivity/back">' +
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
                 svgChevronLeft() + 'Back' +
             '</button>' +
             '<span class="tp-name">' + escHtml(tool.label) + '</span>' +
@@ -630,6 +646,7 @@ function svgX() {
 }
 
 /* ── Boot ── */
+<<<<<<< HEAD
 renderSidebar();
 if (CATEGORIES.length) selectCat(CATEGORIES[0].id);
 
@@ -643,6 +660,32 @@ ao_module_onThemeChanged(applyAozTheme);
 $.get(ao_root + 'system/file_system/preference?key=file_explorer/theme', function(data) {
     applyAozTheme(data === 'darkTheme' ? 'dark' : 'light');
 });
+=======
+function startApp() {
+    renderSidebar();
+    if (CATEGORIES.length) selectCat(CATEGORIES[0].id);
+
+    /* ── ArozOS system theme binding ── */
+    function applyAozTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+    }
+
+    ao_module_onThemeChanged(applyAozTheme);
+
+    $.get(ao_root + 'system/file_system/preference?key=file_explorer/theme', function(data) {
+        applyAozTheme(data === 'darkTheme' ? 'dark' : 'light');
+    });
+}
+
+if (typeof applocale !== 'undefined' && applocale) {
+    applocale.init('locale/productivity.json', function() {
+        applocale.translate();
+        startApp();
+    });
+} else {
+    startApp();
+}
+>>>>>>> worktree-agent-ad02e44b7922ef8c6
 </script>
 </body>
 </html>

@@ -8,6 +8,7 @@
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
     <script type="application/javascript" src="../script/clipboard.min.js"></script>
+    <script src="../script/applocale.js"></script>
     <title>Serverless</title>
     <style>
         /* ── Design tokens ────────────────────────────────── */
@@ -531,28 +532,28 @@
             <div class="app-icon">
                 <img style="width: 40px; border-radius: 0.4em;" src="img/function_icon.png">
             </div>
-            <span class="app-title">Serverless</span>
+            <span class="app-title" locale="serverless/app-title">Serverless</span>
         </div>
 
-        <span class="sidebar-section-label">Manage</span>
+        <span class="sidebar-section-label" locale="serverless/manage">Manage</span>
 
-        <a class="nav-item active" data-page="endpoints" onclick="navigate(this)">
+        <a class="nav-item active" data-page="endpoints" onclick="navigate(this)" locale="serverless/nav-endpoints">
             <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z"/></svg>
             Endpoints
         </a>
 
-        <a class="nav-item" data-page="statistics" onclick="navigate(this)">
+        <a class="nav-item" data-page="statistics" onclick="navigate(this)" locale="serverless/nav-statistics">
             <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg>
             Statistics
         </a>
 
-        <a class="nav-item" data-page="logs" onclick="navigate(this)">
+        <a class="nav-item" data-page="logs" onclick="navigate(this)" locale="serverless/nav-logs">
             <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
             Execution Logs
         </a>
 
         <div class="sidebar-divider"></div>
-        <span class="sidebar-section-label">About</span>
+        <span class="sidebar-section-label" locale="serverless/about">About</span>
         <a class="nav-item" style="color:var(--text-2);font-size:12.5px;pointer-events:none;">
             <svg viewBox="0 0 24 24" style="fill:var(--text-3)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
             AGI Runtime 3.0
@@ -566,8 +567,8 @@
         <div id="page-endpoints" class="page active">
             <div class="page-header">
                 <div>
-                    <h1>Endpoints</h1>
-                    <p>Serverless AGI scripts accessible via external REST calls</p>
+                    <h1 locale="serverless/endpoints-title">Endpoints</h1>
+                    <p locale="serverless/endpoints-desc">Serverless AGI scripts accessible via external REST calls</p>
                 </div>
                 <button class="btn btn-primary" onclick="showAddPanel()">
                     <svg viewBox="0 0 24 24" style="fill:#fff"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
@@ -578,30 +579,30 @@
             <!-- Global summary strip -->
             <div class="stat-strip" id="global-stats">
                 <div class="stat-card">
-                    <span class="sc-label">Endpoints</span>
+                    <span class="sc-label" locale="serverless/stat-endpoints">Endpoints</span>
                     <span class="sc-value c-accent" id="gs-count">—</span>
-                    <span class="sc-sub">registered</span>
+                    <span class="sc-sub" locale="serverless/stat-registered">registered</span>
                 </div>
                 <div class="stat-card">
-                    <span class="sc-label">Total Executions</span>
+                    <span class="sc-label" locale="serverless/stat-total-exec">Total Executions</span>
                     <span class="sc-value" id="gs-total">—</span>
-                    <span class="sc-sub">all time</span>
+                    <span class="sc-sub" locale="serverless/stat-all-time">all time</span>
                 </div>
                 <div class="stat-card">
-                    <span class="sc-label">Successful</span>
+                    <span class="sc-label" locale="serverless/stat-successful">Successful</span>
                     <span class="sc-value c-success" id="gs-ok">—</span>
-                    <span class="sc-sub">executions</span>
+                    <span class="sc-sub" locale="serverless/stat-executions">executions</span>
                 </div>
                 <div class="stat-card">
-                    <span class="sc-label">Failed</span>
+                    <span class="sc-label" locale="serverless/stat-failed">Failed</span>
                     <span class="sc-value c-danger" id="gs-fail">—</span>
-                    <span class="sc-sub">executions</span>
+                    <span class="sc-sub" locale="serverless/stat-executions">executions</span>
                 </div>
             </div>
 
             <!-- Add panel (hidden by default) -->
             <div class="add-panel" id="add-panel" style="display:none;">
-                <h3>Register New Endpoint</h3>
+                <h3 locale="serverless/add-panel-title">Register New Endpoint</h3>
                 <p style="font-size:12.5px;color:var(--text-2);margin-bottom:14px;">
                     Select an AGI/JS script to expose as an external REST endpoint.
                     The script will run with <strong>your user scope</strong>.
@@ -616,12 +617,12 @@
                     <button class="btn btn-secondary" onclick="hideAddPanel()">Cancel</button>
                 </div>
                 <p style="margin-top:12px;font-size:11.5px;color:var(--text-3);">
-                    ⚠️ Do not register scripts from unknown sources — they execute with your account privileges.
+                    Do not register scripts from unknown sources — they execute with your account privileges.
                 </p>
             </div>
 
             <!-- Endpoints list -->
-            <div class="section-heading" style="margin-bottom:10px;">Registered endpoints</div>
+            <div class="section-heading" style="margin-bottom:10px;" locale="serverless/registered-endpoints">Registered endpoints</div>
             <div class="endpoint-list" id="endpoint-list">
                 <div class="empty-state" id="ep-empty" style="display:none;">
                     <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z"/></svg>
@@ -635,8 +636,8 @@
         <div id="page-statistics" class="page">
             <div class="page-header">
                 <div>
-                    <h1>Statistics</h1>
-                    <p>Per-endpoint execution metrics</p>
+                    <h1 locale="serverless/statistics-title">Statistics</h1>
+                    <p locale="serverless/statistics-desc">Per-endpoint execution metrics</p>
                 </div>
                 <button class="btn btn-secondary" onclick="refreshAll()">
                     <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
@@ -650,8 +651,8 @@
         <div id="page-logs" class="page">
             <div class="page-header">
                 <div>
-                    <h1>Execution Logs</h1>
-                    <p>Last 10 successful and failed executions per endpoint</p>
+                    <h1 locale="serverless/logs-title">Execution Logs</h1>
+                    <p locale="serverless/logs-desc">Last 10 successful and failed executions per endpoint</p>
                 </div>
                 <button class="btn btn-secondary" onclick="refreshAll()">
                     <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
@@ -1153,8 +1154,19 @@ function escHtml(str) {
 /* ──────────────────────────────────────────────
    Bootstrap
 ────────────────────────────────────────────── */
-$(document).ready(function() {
+function startApp() {
     loadAll();
+}
+
+$(document).ready(function() {
+    if (typeof applocale !== 'undefined' && applocale) {
+        applocale.init('locale/serverless.json', function() {
+            applocale.translate();
+            startApp();
+        });
+    } else {
+        startApp();
+    }
 });
 </script>
 </body>

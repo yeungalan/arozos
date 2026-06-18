@@ -1,0 +1,77 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "webbuilder/app-title": "Web Builder",
+                "webbuilder/default-title": "(Default Title)",
+                "webbuilder/change-title": "Change Title",
+                "webbuilder/save": "Save",
+                "webbuilder/title-prompt": "Webpage Title",
+                "webbuilder/untitled": "untitled.html"
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "webbuilder/app-title": "網頁建置器",
+                "webbuilder/default-title": "（預設標題）",
+                "webbuilder/change-title": "更改標題",
+                "webbuilder/save": "儲存",
+                "webbuilder/title-prompt": "網頁標題",
+                "webbuilder/untitled": "untitled.html"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "webbuilder/app-title": "網頁建立器",
+                "webbuilder/default-title": "（預設標題）",
+                "webbuilder/change-title": "更改標題",
+                "webbuilder/save": "儲存",
+                "webbuilder/title-prompt": "網頁標題",
+                "webbuilder/untitled": "untitled.html"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "webbuilder/app-title": "网页构建器",
+                "webbuilder/default-title": "（默认标题）",
+                "webbuilder/change-title": "更改标题",
+                "webbuilder/save": "保存",
+                "webbuilder/title-prompt": "网页标题",
+                "webbuilder/untitled": "untitled.html"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "webbuilder/app-title": "ウェブビルダー",
+                "webbuilder/default-title": "（デフォルトタイトル）",
+                "webbuilder/change-title": "タイトルを変更",
+                "webbuilder/save": "保存",
+                "webbuilder/title-prompt": "ウェブページタイトル",
+                "webbuilder/untitled": "untitled.html"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "webbuilder/app-title": "웹 빌더",
+                "webbuilder/default-title": "(기본 제목)",
+                "webbuilder/change-title": "제목 변경",
+                "webbuilder/save": "저장",
+                "webbuilder/title-prompt": "웹 페이지 제목",
+                "webbuilder/untitled": "untitled.html"
+            }
+        }
+    }
+}
