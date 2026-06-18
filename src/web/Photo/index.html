@@ -13,6 +13,7 @@
     <script src="../script/jquery.min.js"></script>
     <script src="../script/semantic/semantic.min.js"></script>
     <script src="../script/ao_module.js"></script>
+    <script src="../script/applocale.js"></script>
     <script src="constants.js"></script>
     <script src="histogram.js"></script>
     <script src="search.js"></script>
@@ -1241,7 +1242,7 @@
                     <button class="close-btn info-panel-close" onclick="hideInfoPanel()">×</button>
                 </div>
                 <div class="info-panel">
-                    <h3>Photo Information</h3>
+                    <h3 locale="photo/viewer/info_title">Photo Information</h3>
                     <div class="photo-rating-row">
                         <div id="photo-rating-stars" class="photo-rating-stars">
                             <i class="photo-star">★</i>
@@ -1250,37 +1251,37 @@
                             <i class="photo-star">★</i>
                             <i class="photo-star">★</i>
                         </div>
-                        <span id="photo-rating-label" class="photo-rating-label">Rate</span>
+                        <span id="photo-rating-label" locale="photo/viewer/rate" class="photo-rating-label">Rate</span>
                     </div>
                     <table class="ui very basic compact table inverted">
                         <tbody>
                             <tr>
-                                <td><strong>Filename:</strong></td>
+                                <td><strong locale="photo/viewer/filename">Filename:</strong></td>
                                 <td><span id="info-filename"></span></td>
                             </tr>
                             <tr>
-                                <td><strong>Filepath:</strong></td>
+                                <td><strong locale="photo/viewer/filepath">Filepath:</strong></td>
                                 <td><span id="info-filepath"></span></td>
                             </tr>
                             <tr>
-                                <td><strong>Image Dimensions:</strong></td>
-                                <td><span id="info-dimensions">Loading...</span></td>
+                                <td><strong locale="photo/viewer/dimensions">Image Dimensions:</strong></td>
+                                <td><span id="info-dimensions" locale="photo/viewer/loading">Loading...</span></td>
                             </tr>
                         </tbody>
                     </table>
-                    <h4>EXIF Data</h4>
+                    <h4 locale="photo/viewer/exif">EXIF Data</h4>
                     <div id="exif-data">
                         <!-- Basic Information -->
                         <div id="basic-info-section" style="display: none;">
-                            <h5>Basic Information</h5>
+                            <h5 locale="photo/viewer/basic_info">Basic Information</h5>
                             <table class="ui very basic compact table inverted exif-section-table">
                                 <tbody>
-                                    <tr id="format-row" style="display: none;"><td>Format</td><td id="format-value"></td></tr>
+                                    <tr id="format-row" style="display: none;"><td locale="photo/viewer/format">Format</td><td id="format-value"></td></tr>
                                     <tr id="dimensions-row" style="display: none;"><td>Dimensions</td><td id="dimensions-value"></td></tr>
-                                    <tr id="pixels-row" style="display: none;"><td>Pixels</td><td id="pixels-value"></td></tr>
-                                    <tr id="color-space-row" style="display: none;"><td>Color Space</td><td id="color-space-value"></td></tr>
-                                    <tr id="shooting-time-row" style="display: none;"><td>Shooting Time</td><td id="shooting-time-value"></td></tr>
-                                    <tr id="software-row" style="display: none;"><td>Software</td><td id="software-value"></td></tr>
+                                    <tr id="pixels-row" style="display: none;"><td locale="photo/viewer/pixels">Pixels</td><td id="pixels-value"></td></tr>
+                                    <tr id="color-space-row" style="display: none;"><td locale="photo/viewer/color_space">Color Space</td><td id="color-space-value"></td></tr>
+                                    <tr id="shooting-time-row" style="display: none;"><td locale="photo/viewer/shooting_time">Shooting Time</td><td id="shooting-time-value"></td></tr>
+                                    <tr id="software-row" style="display: none;"><td locale="photo/viewer/software">Software</td><td id="software-value"></td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -1288,7 +1289,7 @@
 
                         <!-- Shooting Parameters -->
                         <div id="shooting-params-section" style="display: none;">
-                            <h5>Shooting Parameters</h5>
+                            <h5 locale="photo/viewer/shooting_params">Shooting Parameters</h5>
                             <div id="shooting-params-grid" class="ui grid">
                                 <div class="eight wide column" id="focal-length-row" style="display: none;">
                                     <div class="propertiesLabel">
@@ -1326,14 +1327,14 @@
 
                         <!-- Tone Analysis -->
                         <div id="tone-analysis-section" style="display: none;">
-                            <h5>Tone Analysis</h5>
+                            <h5 locale="photo/viewer/tone_analysis">Tone Analysis</h5>
                             <table class="ui very basic compact table inverted exif-section-table">
                                 <tbody>
-                                    <tr><td>Tone Type</td><td class="tone-type-value">Analyzing...</td></tr>
-                                    <tr><td>Brightness</td><td class="brightness-value">Analyzing...</td></tr>
-                                    <tr><td>Contrast</td><td class="contrast-value">Analyzing...</td></tr>
-                                    <tr><td>Shadow Ratio</td><td class="shadow-ratio-value">Analyzing...</td></tr>
-                                    <tr><td>Highlight Ratio</td><td class="highlight-ratio-value">Analyzing...</td></tr>
+                                    <tr><td locale="photo/viewer/tone_type">Tone Type</td><td class="tone-type-value" locale="photo/viewer/analyzing">Analyzing...</td></tr>
+                                    <tr><td locale="photo/viewer/brightness">Brightness</td><td class="brightness-value" locale="photo/viewer/analyzing">Analyzing...</td></tr>
+                                    <tr><td locale="photo/viewer/contrast">Contrast</td><td class="contrast-value" locale="photo/viewer/analyzing">Analyzing...</td></tr>
+                                    <tr><td locale="photo/viewer/shadow_ratio">Shadow Ratio</td><td class="shadow-ratio-value" locale="photo/viewer/analyzing">Analyzing...</td></tr>
+                                    <tr><td locale="photo/viewer/highlight_ratio">Highlight Ratio</td><td class="highlight-ratio-value" locale="photo/viewer/analyzing">Analyzing...</td></tr>
                                     <tr><td colspan="2"><canvas id="histogram-canvas" width="300" height="120" style="width: 100%; height: 120px; background: #222; margin: 10px 0; border-radius: 4px;"></canvas></td></tr>
                                 </tbody>
                             </table>
@@ -1342,13 +1343,13 @@
 
                         <!-- Device Information -->
                         <div id="device-info-section" style="display: none;">
-                            <h5>Device Information</h5>
+                            <h5 locale="photo/viewer/device_info">Device Information</h5>
                             <table class="ui very basic compact table inverted exif-section-table">
                                 <tbody>
-                                    <tr id="camera-row" style="display: none;"><td>Camera</td><td id="camera-value"></td></tr>
-                                    <tr id="lens-row" style="display: none;"><td>Lens</td><td id="lens-value"></td></tr>
-                                    <tr id="focal-length-device-row" style="display: none;"><td>Focal Length</td><td id="focal-length-device-value"></td></tr>
-                                    <tr id="max-aperture-row" style="display: none;"><td>Max Aperture</td><td id="max-aperture-value"></td></tr>
+                                    <tr id="camera-row" style="display: none;"><td locale="photo/viewer/camera">Camera</td><td id="camera-value"></td></tr>
+                                    <tr id="lens-row" style="display: none;"><td locale="photo/viewer/lens">Lens</td><td id="lens-value"></td></tr>
+                                    <tr id="focal-length-device-row" style="display: none;"><td locale="photo/viewer/focal_length">Focal Length</td><td id="focal-length-device-value"></td></tr>
+                                    <tr id="max-aperture-row" style="display: none;"><td locale="photo/viewer/max_aperture">Max Aperture</td><td id="max-aperture-value"></td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -1356,15 +1357,15 @@
 
                         <!-- Shooting Mode -->
                         <div id="shooting-mode-section" style="display: none;">
-                            <h5>Shooting Mode</h5>
+                            <h5 locale="photo/viewer/shooting_mode">Shooting Mode</h5>
                             <table class="ui very basic compact table inverted exif-section-table">
                                 <tbody>
-                                    <tr id="exposure-program-row" style="display: none;"><td>Exposure Program</td><td id="exposure-program-value"></td></tr>
-                                    <tr id="exposure-mode-row" style="display: none;"><td>Exposure Mode</td><td id="exposure-mode-value"></td></tr>
-                                    <tr id="metering-mode-row" style="display: none;"><td>Metering Mode</td><td id="metering-mode-value"></td></tr>
-                                    <tr id="white-balance-row" style="display: none;"><td>White Balance</td><td id="white-balance-value"></td></tr>
-                                    <tr id="flash-row" style="display: none;"><td>Flash</td><td id="flash-value"></td></tr>
-                                    <tr id="scene-capture-row" style="display: none;"><td>Scene Capture Type</td><td id="scene-capture-value"></td></tr>
+                                    <tr id="exposure-program-row" style="display: none;"><td locale="photo/viewer/exposure_program">Exposure Program</td><td id="exposure-program-value"></td></tr>
+                                    <tr id="exposure-mode-row" style="display: none;"><td locale="photo/viewer/exposure_mode">Exposure Mode</td><td id="exposure-mode-value"></td></tr>
+                                    <tr id="metering-mode-row" style="display: none;"><td locale="photo/viewer/metering_mode">Metering Mode</td><td id="metering-mode-value"></td></tr>
+                                    <tr id="white-balance-row" style="display: none;"><td locale="photo/viewer/white_balance">White Balance</td><td id="white-balance-value"></td></tr>
+                                    <tr id="flash-row" style="display: none;"><td locale="photo/viewer/flash">Flash</td><td id="flash-value"></td></tr>
+                                    <tr id="scene-capture-row" style="display: none;"><td locale="photo/viewer/scene_capture">Scene Capture Type</td><td id="scene-capture-value"></td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -1372,19 +1373,19 @@
 
                         <!-- Technical Parameters -->
                         <div id="technical-params-section" style="display: none;">
-                            <h5>Technical Parameters</h5>
+                            <h5 locale="photo/viewer/technical_params">Technical Parameters</h5>
                             <table class="ui very basic compact table inverted exif-section-table">
                                 <tbody>
-                                    <tr id="shutter-speed-tech-row" style="display: none;"><td>Shutter Speed</td><td id="shutter-speed-tech-value"></td></tr>
-                                    <tr id="aperture-value-row" style="display: none;"><td>Aperture Value</td><td id="aperture-value-value"></td></tr>
-                                    <tr id="focal-plane-res-row" style="display: none;"><td>Focal Plane Resolution</td><td id="focal-plane-res-value"></td></tr>
+                                    <tr id="shutter-speed-tech-row" style="display: none;"><td locale="photo/viewer/shutter_speed">Shutter Speed</td><td id="shutter-speed-tech-value"></td></tr>
+                                    <tr id="aperture-value-row" style="display: none;"><td locale="photo/viewer/aperture_value">Aperture Value</td><td id="aperture-value-value"></td></tr>
+                                    <tr id="focal-plane-res-row" style="display: none;"><td locale="photo/viewer/focal_plane_res">Focal Plane Resolution</td><td id="focal-plane-res-value"></td></tr>
                                 </tbody>
                             </table>
                         </div>
 
                         <!-- No EXIF data message -->
                         <div id="no-exif-message" style="display: none;">
-                            <p>No EXIF data available</p>
+                            <p locale="photo/viewer/no_exif">No EXIF data available</p>
                         </div>
                     </div>
                 </div>
@@ -1413,6 +1414,20 @@
 <script>
 
     //Calculate image size on document ready
+
+    function startApp() {
+        // app is initialized via Alpine's x-init="init()" on #main
+    }
+
+    if (typeof applocale !== 'undefined' && applocale) {
+        applocale.init('locale/photo.json', function() {
+            applocale.translate();
+            startApp();
+        });
+    } else {
+        startApp();
+    }
+
     $(window).on("resize ", function() {
         updateImageSizes();
         

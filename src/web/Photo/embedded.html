@@ -8,6 +8,7 @@
     <title>Photo Viewer</title>
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
+    <script src="../script/applocale.js"></script>
     <script src="constants.js"></script>
     <link rel="manifest" href="manifest.json">
     <style>
@@ -231,37 +232,37 @@
     <!-- Edit Panel -->
     <div id="editPanel">
         <button id="closeEditPanel" onclick="toggleEditPanel();">×</button>
-        <h2 style="margin-top: 0; font-size: 18px;">Edit Image</h2>
+        <h2 locale="photo/edit/title" style="margin-top: 0; font-size: 18px;">Edit Image</h2>
         
         <!-- Crop Section -->
         <div class="edit-section">
-            <h3>Crop Image</h3>
+            <h3 locale="photo/edit/crop">Crop Image</h3>
             <div class="button-group">
-                <button class="edit-button" onclick="startCrop();">Start Crop</button>
-                <button class="edit-button secondary" onclick="cancelCrop();">Cancel</button>
+                <button locale="photo/edit/start_crop" class="edit-button" onclick="startCrop();">Start Crop</button>
+                <button locale="photo/edit/cancel" class="edit-button secondary" onclick="cancelCrop();">Cancel</button>
             </div>
-            <button class="edit-button" style="margin-top: 10px; width: 100%;" onclick="applyCrop();">Apply Crop</button>
+            <button locale="photo/edit/apply_crop" class="edit-button" style="margin-top: 10px; width: 100%;" onclick="applyCrop();">Apply Crop</button>
         </div>
         
         <!-- Rotation Section -->
         <div class="edit-section">
-            <h3>Rotate</h3>
+            <h3 locale="photo/edit/rotate">Rotate</h3>
             <div class="button-group">
-                <button class="edit-button" onclick="rotateImage(-90);">↺ Left</button>
-                <button class="edit-button" onclick="rotateImage(90);">↻ Right</button>
+                <button locale="photo/edit/rotate_left" class="edit-button" onclick="rotateImage(-90);">↺ Left</button>
+                <button locale="photo/edit/rotate_right" class="edit-button" onclick="rotateImage(90);">↻ Right</button>
             </div>
         </div>
         
         <!-- Save Section -->
         <div class="edit-section">
-            <h3>Save</h3>
-            <button class="edit-button" style="width: 100%; margin-bottom: 10px;" onclick="saveToArozOS();">Save to ArozOS</button>
-            <button class="edit-button secondary" style="width: 100%;" onclick="downloadImage();">Download to Device</button>
+            <h3 locale="photo/edit/save">Save</h3>
+            <button locale="photo/edit/save_to_arozos" class="edit-button" style="width: 100%; margin-bottom: 10px;" onclick="saveToArozOS();">Save to ArozOS</button>
+            <button locale="photo/edit/download" class="edit-button secondary" style="width: 100%;" onclick="downloadImage();">Download to Device</button>
         </div>
         
         <!-- Reset Section -->
         <div class="edit-section">
-            <button class="edit-button secondary" style="width: 100%;" onclick="resetEdits();">Reset All Changes</button>
+            <button locale="photo/edit/reset" class="edit-button secondary" style="width: 100%;" onclick="resetEdits();">Reset All Changes</button>
         </div>
     </div>
     
@@ -790,6 +791,12 @@
             return window.matchMedia('(max--moz-device-pixel-ratio:0.99), (min--moz-device-pixel-ratio:1.01)').matches;
         }
 
+
+        if (typeof applocale !== 'undefined' && applocale) {
+            applocale.init('locale/photo.json', function() {
+                applocale.translate();
+            });
+        }
     </script>
 </body>
 

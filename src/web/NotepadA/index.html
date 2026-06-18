@@ -12,6 +12,7 @@
     <meta charset="UTF-8">
 	<script src="../script/jquery.min.js"></script>
 	<script src="../script/ao_module.js"></script>
+	<script src="../script/applocale.js"></script>
 	<title>ArOZ Onlineβ</title>
 	<style>
 	body{
@@ -180,15 +181,15 @@
 </head>
 <body>
 <div class="topbar">
-	<button onClick="startTooggleMenu(this);">File</button>
-	<button onClick="startTooggleMenu(this);">Edit</button>
-	<button onClick="startTooggleMenu(this);">Search</button>
-	<button onClick="startTooggleMenu(this);">Theme</button>
-	<button onClick="startTooggleMenu(this);">Font_Size</button>
-	<button onClick="startTooggleMenu(this);">About</button>
+	<button locale="notepad/menu/file" onClick="startTooggleMenu(this);">File</button>
+	<button locale="notepad/menu/edit" onClick="startTooggleMenu(this);">Edit</button>
+	<button locale="notepad/menu/search" onClick="startTooggleMenu(this);">Search</button>
+	<button locale="notepad/menu/theme" onClick="startTooggleMenu(this);">Theme</button>
+	<button locale="notepad/menu/fontsize" onClick="startTooggleMenu(this);">Font_Size</button>
+	<button locale="notepad/menu/about" onClick="startTooggleMenu(this);">About</button>
 </div>
 <div id="tabs" onClick="hideToggleMenu();">
-<div id="showList" onClick="showFullTabMenu();">⬇️ All Tabs</div>
+<div id="showList" onClick="showFullTabMenu();">⬇️ <span locale="notepad/tabs/alltabs">All Tabs</span></div>
 </div>
 <div id="tabList">
 </div>
@@ -199,8 +200,8 @@
 
 </div>
 <div id="aboutus" class="middleFloat" style="display:none;">
-	<h3>📝 NotepadA ArOZ Online In-System Text Editor</h3>
-	<p>Author: Toby Chui 2017-2022</p>
+	<h3><i class="edit icon"></i> <span locale="notepad/about/title">NotepadA ArOZ Online In-System Text Editor</span></h3>
+	<p locale="notepad/about/author">Author: Toby Chui 2017-2022</p>
 	<hr>
 	<p>This web based text editor for ArOZ Online System are made possible by the ace editor, jQuery and ArOZ Project. Part of the system are licensed under BSD License. Please refer to the individual license information under the library folder. <br><br><br>
  	Developed for ArOZ Online Beta and migrated to ArozOS</p>
@@ -231,34 +232,34 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</p>
 	<hr>
-	<button style="background-color:white;border: 1px solid #707070;" onClick="$('#aboutus').hide();">Close</button>
+	<button locale="notepad/about/close" style="background-color:white;border: 1px solid #707070;" onClick="$('#aboutus').hide();">Close</button>
 	<br><br><br><br><br>
 </div>
 
 <div id="saveAsSelectionMenu" class="middleFloat" style="display:none;">
     <table id="directoryList" style="width:100%;font-size:80%;">
-        <tr><th id="directoryPath">📂 /</th></tr>
+        <tr><th id="directoryPath">/</th></tr>
         <tr><td>Initializing...</td></tr>
     </table>
     <br>
     <hr>
-    Save Filename
+    <span locale="notepad/saveas/filename">Save Filename</span>
     <input id="saveAsFilename" style="width:100%;"></input>
     <hr>
-    <button style="background-color:white;border: 1px solid #707070;" onClick="saveToDirectory();">Save In Current Directory</button>
-    <button style="background-color:white;border: 1px solid #707070;" onClick="$('#saveAsSelectionMenu').hide();">Close</button>
+    <button locale="notepad/saveas/save" style="background-color:white;border: 1px solid #707070;" onClick="saveToDirectory();">Save In Current Directory</button>
+    <button locale="notepad/saveas/close" style="background-color:white;border: 1px solid #707070;" onClick="$('#saveAsSelectionMenu').hide();">Close</button>
    <br><br><br><br><br>
 </div>
 
 <div id="specialCharInsert" class="middleFloat" style="display:none;">
-	Insert Special Character
+	<span locale="notepad/specialchar/title">Insert Special Character</span>
 	<hr>
 	<br>
 	<div id="iscl" style="max-height:70%;left:0;right:0;overflow-y:scroll;overflow-wrap: break-word;">
 			
 	</div>
 	<hr>
-	<button style="background-color:white;border: 1px solid #707070;" onClick="$('#specialCharInsert').hide();">Close</button><p style="font-size:50%;display:inline-block;padding-left:20px;" id="scid">N/A</p>
+	<button locale="notepad/specialchar/close" style="background-color:white;border: 1px solid #707070;" onClick="$('#specialCharInsert').hide();">Close</button><p style="font-size:50%;display:inline-block;padding-left:20px;" id="scid">N/A</p>
 </div>
 <script>
 //Global variables
@@ -278,7 +279,7 @@ var insertTarget;
 var currentTabWidth = 0;
 var mainCodingWindow = true;
 var functionList = {
-	File: ["📄 New","📂 Open File","Run in FloatWindow","Open current directory","Reload","💾 Save","💾 Save As","Close All Tabs","🖨 Print","Exit"],
+	File: ["New","Open File","Run in FloatWindow","Open current directory","Reload","Save","Save As","Close All Tabs","Print","Exit"],
 	Edit: ["⤺ Undo","⤻ Redo","Open in New Tab", "Open tmp folder"],
 	Search:["Find / Replace"],
 	Theme:["ambiance","chaos","chrome","clouds","clouds_midnight","cobalt","crimson_editor","dawn","dracula","dreamweaver","eclipse","github","gob","gruvbox","idle_fingers","iplastic","katzenmilch","kr_theme","kuroir","merbivore","merbivore_soft","mono_industrial","monokai","pastel_on_dark","solarized_dark","solarized_light","sqlserver","terminal","textmate","tomorrow","tomorrow_night","tomorrow_night_blue","tomorrow_night_bright","tomorrow_night_eighties","twilight","vibrant_ink","xcode"],
@@ -289,7 +290,19 @@ var functionList = {
 //Init functions
 adjustCodeAreaHeight();
 bindListener();
-init();
+
+function startApp() {
+    init();
+}
+
+if (typeof applocale !== 'undefined' && applocale) {
+    applocale.init('locale/notepad.json', function() {
+        applocale.translate();
+        startApp();
+    });
+} else {
+    startApp();
+}
 
 //Start all NotepadA services
 function init(){
@@ -358,11 +371,11 @@ function initNotepadA(callback=undefined){
 				if (saved != previousSavedState){
 					previousSavedState = saved;
 					if (saved){
-						ao_module_setWindowTitle("NotepadA   	 📝 " + tab.attr("filename").replace("../../","/aor/"));
-						document.title = "NotepadA   	 📝 " + tab.attr("filename").replace("../../","/aor/");
+						ao_module_setWindowTitle("NotepadA   	 " + tab.attr("filename").replace("../../","/aor/"));
+						document.title = "NotepadA   	 " + tab.attr("filename").replace("../../","/aor/");
 					}else{
-						ao_module_setWindowTitle("NotepadA   	 *💾 📝 " + tab.attr("filename").replace("../../","/aor/"));
-						document.title = "NotepadA   	 *💾 📝 " + tab.attr("filename").replace("../../","/aor/");
+						ao_module_setWindowTitle("NotepadA   	 *" + tab.attr("filename").replace("../../","/aor/"));
+						document.title = "NotepadA   	 *" + tab.attr("filename").replace("../../","/aor/");
 					}
 				}
 				
@@ -535,7 +548,7 @@ function SetSaveAsPath(dirpath){
 		if (result.error !== undefined){
 			onsole.log(result);
 		}else{
-			$("#directoryList").html("<tr><th>📂 " + currentSaveAsPath + "</th></tr>");
+			$("#directoryList").html("<tr><th>" + currentSaveAsPath + "</th></tr>");
 			if (currentSaveAsPath.split("/").length >= 3){
 				//Not root
 				let parentPath = currentSaveAsPath.substr(0, currentSaveAsPath.length -1).split("/");
@@ -544,7 +557,7 @@ function SetSaveAsPath(dirpath){
 				$("#directoryList").append(`<tr><td class="selectable" foldername="${parentPath}" onClick="changeSaveAsPath(this);">⏎ ../</td></tr>`);
 			}
 			for (var i = 0; i < result.length; i++){
-					$("#directoryList").append('<tr><td class="selectable" foldername="'+result[i][0]+'"  onClick="changeSaveAsPath(this);"> 📂 '+result[i][1]+'</td></tr>');
+					$("#directoryList").append('<tr><td class="selectable" foldername="'+result[i][0]+'"  onClick="changeSaveAsPath(this);"> '+result[i][1]+'</td></tr>');
 			} 
 		}
 	})
@@ -558,13 +571,13 @@ function SetSaveAsPath(dirpath){
         $.ajax({url: "getDir.php?directory=" + currentSaveAsPath, success: function(result){
             if (result.includes("ERROR") == false){
                 //Update the current saveAs menu to latest directory
-                $("#directoryList").html("<tr><th>📂 " + currentSaveAsPath + "</th></tr>");
+                $("#directoryList").html("<tr><th>" + currentSaveAsPath + "</th></tr>");
                 if (currentSaveAsPath != "/" && currentSaveAsPath != "/media/"){
                     $("#directoryList").append('<tr><td class="selectable" foldername="../" onClick="changeSaveAsPath(this);">⏎ ../</td></tr>');
                 }
                 for (var i = 0; i < result.length; i++){
 					var decodedFilename = ao_module_codec.decodeHexFoldername(result[i][1]);
-                     $("#directoryList").append('<tr><td class="selectable" foldername="'+result[i][1]+'"  onClick="changeSaveAsPath(this);"> 📂 '+decodedFilename+'</td></tr>');
+                     $("#directoryList").append('<tr><td class="selectable" foldername="'+result[i][1]+'"  onClick="changeSaveAsPath(this);"> '+decodedFilename+'</td></tr>');
                 } 
                 
             }else{
@@ -576,13 +589,13 @@ function SetSaveAsPath(dirpath){
         $.ajax({url: "getDir.php?directory=" + currentSaveAsPath, success: function(result){
             if (result.includes("ERROR") == false){
                 //Update the current saveAs menu to latest directory
-                $("#directoryList").html("<tr><th>📂 " + currentSaveAsPath + "</th></tr>");
+                $("#directoryList").html("<tr><th>" + currentSaveAsPath + "</th></tr>");
                 if (currentSaveAsPath != "/" && currentSaveAsPath != "/media/"){
                     $("#directoryList").append('<tr><td class="selectable" foldername="../" onClick="changeSaveAsPath(this);">⏎ ../</td></tr>');
                 }
                 for (var i = 0; i < result.length; i++){
 					var decodedFilename = ao_module_codec.decodeHexFoldername(result[i][1]);
-                     $("#directoryList").append('<tr><td class="selectable" foldername="'+result[i][1]+'"  onClick="changeSaveAsPath(this);"> 📂 '+decodedFilename+'</td></tr>');
+                     $("#directoryList").append('<tr><td class="selectable" foldername="'+result[i][1]+'"  onClick="changeSaveAsPath(this);"> '+decodedFilename+'</td></tr>');
                 } 
                 
             }else{
@@ -1109,11 +1122,11 @@ function focusTab(tabid){
 	var targetFrame = $("#" + corrispondingCodingTab);
 	targetFrame.show();
 	if (selectedTab.attr("filename") != undefined){
-		ao_module_setWindowTitle("NotepadA   	 📝 " + selectedTab.attr("filename").replace("../../","/aor/"));
-		document.title = "NotepadA   	 📝 " + selectedTab.attr("filename").replace("../../","/aor/");
+		ao_module_setWindowTitle("NotepadA   	 " + selectedTab.attr("filename").replace("../../","/aor/"));
+		document.title = "NotepadA   	 " + selectedTab.attr("filename").replace("../../","/aor/");
 	}else{
-		ao_module_setWindowTitle("NotepadA   	 📝 newfile");
-		document.title = "NotepadA   	 📝 newfile";
+		ao_module_setWindowTitle("NotepadA   	 newfile");
+		document.title = "NotepadA   	 newfile";
 	}
 	
 }
