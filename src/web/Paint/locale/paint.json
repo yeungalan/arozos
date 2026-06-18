@@ -2,11 +2,46 @@
     "author": "tobychui",
     "version": "1.0",
     "keys": {
-        "en-us": { "name": "English (US)", "strings": { "app_title": "Paint", "untitled": "Untitled.png" } },
-        "zh-tw": { "name": "繁體中文（台灣）", "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"", "strings": { "app_title": "繪圖", "untitled": "未命名.png" } },
-        "zh-hk": { "name": "繁體中文（香港）", "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"", "strings": { "app_title": "繪圖", "untitled": "未命名.png" } },
-        "zh-cn": { "name": "简体中文", "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"", "strings": { "app_title": "画图", "untitled": "未命名.png" } },
-        "ja-jp": { "name": "日本語", "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"", "strings": { "app_title": "ペイント", "untitled": "無題.png" } },
-        "ko-kr": { "name": "한국어", "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"", "strings": { "app_title": "그림판", "untitled": "제목없음.png" } }
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "app_title": "Paint"
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "app_title": "繪圖"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "app_title": "繪圖"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "app_title": "绘图"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "app_title": "ペイント"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "app_title": "그림판"
+            }
+        }
     }
 }

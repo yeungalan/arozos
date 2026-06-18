@@ -7,6 +7,7 @@
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
     <script src="../script/applocale.js"></script>
+<<<<<<< HEAD
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -399,6 +400,8 @@
         #theme-dot:hover { opacity: .85; }
         body.dark #theme-dot { background: var(--text2); }
     </style>
+=======
+>>>>>>> worktree-agent-a1b47d6dcfc735a27
 </head>
 <body>
 <div id="app">
@@ -436,6 +439,7 @@
         </div>
     </div>
 
+<<<<<<< HEAD
     <!-- ═══ WORLD CLOCK ══════════════════════════════════════════════════ -->
     <div id="panel-world" class="tab-panel">
 
@@ -451,6 +455,14 @@
             </div>
             <div class="lc-time-wrap">
                 <span class="lc-time" id="lc-time">--:--</span><span class="lc-sec" id="lc-sec">:--</span>
+=======
+    <!-- Cat Mode Toggle -->
+    <div class="toggle-container cat-mode-toggle">
+        <div class="toggle-label">
+            <div class="ui toggle checkbox" id="catModeToggle">
+                <input type="checkbox" name="catMode">
+                <label locale="cat_mode">Cat Mode</label>
+>>>>>>> worktree-agent-a1b47d6dcfc735a27
             </div>
         </div>
 
@@ -935,6 +947,7 @@ var cdH=0, cdM=0, cdS=0;
 var cdRunning=false, cdTotalMs=0, cdTargetTs=0, cdRemMs=0;
 var cdTimer=null, cdAlarm=null;
 
+<<<<<<< HEAD
 function cdAdjust(unit, d){
     if (cdRunning) return;
     if (unit==='h'){ cdH=(cdH+d+24)%24; document.getElementById('cd-h').textContent=pad(cdH); }
@@ -1105,5 +1118,17 @@ if (typeof applocale !== 'undefined' && applocale) {
     wcLoad();
 }
 </script>
+=======
+        // Update clock immediately and then every second
+        updateClock();
+        setInterval(updateClock, 1000);
+
+        if (typeof applocale !== 'undefined' && applocale) {
+            applocale.init('locale/clock.json', function() {
+                applocale.translate();
+            });
+        }
+    </script>
+>>>>>>> worktree-agent-a1b47d6dcfc735a27
 </body>
 </html>

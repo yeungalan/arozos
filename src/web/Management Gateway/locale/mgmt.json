@@ -1,0 +1,65 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "app_title": "Management Gateway",
+                "switch_services": "Switch Services",
+                "logout": "Logout",
+                "logout_confirm": "Exiting Session. Confirm?"
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "app_title": "管理閘道",
+                "switch_services": "切換服務",
+                "logout": "登出",
+                "logout_confirm": "即將結束工作階段，確認？"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "app_title": "管理閘道",
+                "switch_services": "切換服務",
+                "logout": "登出",
+                "logout_confirm": "即將結束工作階段，確認？"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "app_title": "管理网关",
+                "switch_services": "切换服务",
+                "logout": "退出登录",
+                "logout_confirm": "即将退出会话，确认？"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "app_title": "管理ゲートウェイ",
+                "switch_services": "サービス切替",
+                "logout": "ログアウト",
+                "logout_confirm": "セッションを終了します。よろしいですか？"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "app_title": "관리 게이트웨이",
+                "switch_services": "서비스 전환",
+                "logout": "로그아웃",
+                "logout_confirm": "세션을 종료합니다. 확인하시겠습니까?"
+            }
+        }
+    }
+}

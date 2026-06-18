@@ -76,33 +76,35 @@
         }
     }
 
-    </script>
-<script>
-function startApp() {
+    if (typeof applocale !== 'undefined' && applocale) {
+        applocale.init('locale/paint.json', function() {
+            applocale.translate();
+        });
+    }
+
+    //Check if there are any file loading from ao_module
     var inputFiles = ao_module_loadInputFiles();
     if (inputFiles == null){
+        //Nothing is loaded. Use blank canvas
         painterroObject.show()
-    } else {
+    }else{
+        //Something is loaded. Use the first image to load
         var openingFile = inputFiles[0];
         var filename = openingFile.filename;
         saveFilename = filename;
         ao_module_setWindowTitle("Paint - " + saveFilename);
+
+        //Filter out the filepath to get its parent dir
         var filepath = openingFile.filepath;
         saveFilepath = filepath;
         saveFilepath = saveFilepath.split("/");
         saveFilepath.pop();
         saveFilepath = saveFilepath.join("/");
+
         painterroObject.show("../media?file=" + filepath);
     }
-}
-if (typeof applocale !== 'undefined' && applocale) {
-    applocale.init('locale/paint.json', function() {
-        applocale.translate();
-        startApp();
-    });
-} else {
-    startApp();
-}
-</script>
+    
+    
+    </script>
 </body>
 </html>

@@ -1,0 +1,107 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "page_title": "AGI Unit Testing Module",
+                "btn_open_gateway": "Open AGI Gateway (No File)",
+                "btn_run_test": "Run Unit Test",
+                "btn_websocket_test": "Open WebSocket Test",
+                "btn_backend_test": "Open Backend Unit Test",
+                "test_results": "Test Results",
+                "col_script": "Script",
+                "col_results": "Results",
+                "col_status": "Status",
+                "status_success": "Success",
+                "status_failed": "Failed"
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "page_title": "AGI 單元測試模組",
+                "btn_open_gateway": "開啟 AGI 閘道（無檔案）",
+                "btn_run_test": "執行單元測試",
+                "btn_websocket_test": "開啟 WebSocket 測試",
+                "btn_backend_test": "開啟後端單元測試",
+                "test_results": "測試結果",
+                "col_script": "腳本",
+                "col_results": "結果",
+                "col_status": "狀態",
+                "status_success": "成功",
+                "status_failed": "失敗"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "page_title": "AGI 單元測試模組",
+                "btn_open_gateway": "開啟 AGI 閘道（無檔案）",
+                "btn_run_test": "執行單元測試",
+                "btn_websocket_test": "開啟 WebSocket 測試",
+                "btn_backend_test": "開啟後端單元測試",
+                "test_results": "測試結果",
+                "col_script": "腳本",
+                "col_results": "結果",
+                "col_status": "狀態",
+                "status_success": "成功",
+                "status_failed": "失敗"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "page_title": "AGI 单元测试模块",
+                "btn_open_gateway": "打开 AGI 网关（无文件）",
+                "btn_run_test": "运行单元测试",
+                "btn_websocket_test": "打开 WebSocket 测试",
+                "btn_backend_test": "打开后端单元测试",
+                "test_results": "测试结果",
+                "col_script": "脚本",
+                "col_results": "结果",
+                "col_status": "状态",
+                "status_success": "成功",
+                "status_failed": "失败"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "page_title": "AGI ユニットテストモジュール",
+                "btn_open_gateway": "AGI ゲートウェイを開く（ファイルなし）",
+                "btn_run_test": "ユニットテストを実行",
+                "btn_websocket_test": "WebSocket テストを開く",
+                "btn_backend_test": "バックエンドユニットテストを開く",
+                "test_results": "テスト結果",
+                "col_script": "スクリプト",
+                "col_results": "結果",
+                "col_status": "ステータス",
+                "status_success": "成功",
+                "status_failed": "失敗"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "page_title": "AGI 단위 테스트 모듈",
+                "btn_open_gateway": "AGI 게이트웨이 열기 (파일 없음)",
+                "btn_run_test": "단위 테스트 실행",
+                "btn_websocket_test": "WebSocket 테스트 열기",
+                "btn_backend_test": "백엔드 단위 테스트 열기",
+                "test_results": "테스트 결과",
+                "col_script": "스크립트",
+                "col_results": "결과",
+                "col_status": "상태",
+                "status_success": "성공",
+                "status_failed": "실패"
+            }
+        }
+    }
+}
