@@ -13,6 +13,7 @@
 	<link rel="icon" type="image/png" href="img/favicon.png" />
 	<!-- Handle native playback on Chrome Andoird-->
 	<script src="native.js"></script>
+	<script src="../script/applocale.js"></script>
 
 	<!-- Handle data saving local music cache on PWA-->
 	<script src="./dexie.js"></script>
@@ -48,14 +49,14 @@
 <div id="showmoreUIcover" style="position:fixed;left:0px;top:0px;width:100%;height:100%;background:rgba(30,30,30,0.7);z-index:95;display:none;" onClick="hideShowMoreMenu();"></div>
 <div id="showMoreUI" class="showMoreMenus" style="display:none;">
     <div class="ui large header whiteFont songTitle">N/A</div>
-    <div class="showMoreMenuItem" onClick="playFromShowMoreMenu();">Play</div>
-    <div class="showMoreMenuItem" onclick='addToPlaylistFromMoreMenu();'>Add to Playlist</div>
-    <div class="showMoreMenuItem playlistonly" onclick="removeFromPlylistFromMoreMenu();">Remove from current Playlist</div>
-    <div class="showMoreMenuItem" onClick="searchYoutubeViaShowMore();">Search on Youtube</div>
-    <div class="showMoreMenuItem">Edit Tag</div>
-    <div class="showMoreMenuItem">Share</div>
-    <div class="showMoreMenuItem" onClick="startRelatedSearch();">Related Search</div>
-    <div class="showMoreMenuItem" onClick="showFileInfo();">File Information</div>
+    <div class="showMoreMenuItem" locale="music/showmore-play" onClick="playFromShowMoreMenu();">Play</div>
+    <div class="showMoreMenuItem" locale="music/showmore-add-playlist" onclick='addToPlaylistFromMoreMenu();'>Add to Playlist</div>
+    <div class="showMoreMenuItem playlistonly" locale="music/showmore-remove-playlist" onclick="removeFromPlylistFromMoreMenu();">Remove from current Playlist</div>
+    <div class="showMoreMenuItem" locale="music/showmore-search-youtube" onClick="searchYoutubeViaShowMore();">Search on Youtube</div>
+    <div class="showMoreMenuItem" locale="music/showmore-edit-tag">Edit Tag</div>
+    <div class="showMoreMenuItem" locale="music/showmore-share">Share</div>
+    <div class="showMoreMenuItem" locale="music/showmore-related-search" onClick="startRelatedSearch();">Related Search</div>
+    <div class="showMoreMenuItem" locale="music/showmore-file-info" onClick="showFileInfo();">File Information</div>
     
     <div class="topRightCorner songID" align="center" style="margin-top:10px !important;padding-top:3px !important;">-1</div>
 </div>
@@ -65,9 +66,9 @@
 		<div class="sub header rawname whiteFont" style="word-break: break-all !important; font-size:80%;">Storage Name</div>
 	</div>
 	<div class="ui list whiteFont">
-		<div class="item whiteFont">Storage Location:   <span class="filepath" style="word-break:break-all;">N/A</span></div>
-		<div class="item whiteFont">File Size:   <span class="filesize">N/A</span></div>
-		<div class="item whiteFont">Last Modification Date:   <span class="filedate">N/A</span></div>
+		<div class="item whiteFont"><span locale="music/fileinfo-location">Storage Location:</span>   <span class="filepath" style="word-break:break-all;">N/A</span></div>
+		<div class="item whiteFont"><span locale="music/fileinfo-size">File Size:</span>   <span class="filesize">N/A</span></div>
+		<div class="item whiteFont"><span locale="music/fileinfo-date">Last Modification Date:</span>   <span class="filedate">N/A</span></div>
 	</div>
 </div>
 
@@ -80,7 +81,7 @@
 	<div class="leftsbObject sbSelectable sbPaddingIn" style="font-size:80%;" onClick="loadSongList();setStorage('viewingTab','music');">
 		<div class="ui header">
 			<i class="music tiny icon whiteFont"></i>
-			<div class="content whiteFont">
+			<div class="content whiteFont" locale="music/sidebar-music">
 				Music
 			</div>
 		</div>
@@ -88,7 +89,7 @@
 	<div class="leftsbObject sbSelectable sbPaddingIn" style="font-size:80%;" onClick="loadFolderView();setStorage('viewingTab','folder');">
 		<div class="ui header">
 			<i class="folder tiny icon whiteFont"></i>
-			<div class="content whiteFont">
+			<div class="content whiteFont" locale="music/sidebar-folder">
 				Folder
 			</div>
 		</div>
@@ -96,7 +97,7 @@
 	<div class="leftsbObject sbSelectable sbPaddingIn" style="font-size:80%;" onClick="loadPlaylistView(); setStorage('viewingTab','playlist');">
 		<div class="ui header">
 			<i class="align justify tiny icon whiteFont"></i>
-			<div class="content whiteFont">
+			<div class="content whiteFont" locale="music/sidebar-playlists">
 				Playlists
 			</div>
 		</div>
@@ -104,7 +105,7 @@
 	<div class="leftsbObject sbSelectable sbPaddingIn" style="font-size:80%;" onClick="loadNetworkView(); setStorage('viewingTab','network');">
 		<div class="ui header">
 			<i class="world tiny icon whiteFont"></i>
-			<div class="content whiteFont">
+			<div class="content whiteFont" locale="music/sidebar-network">
 				Network
 			</div>
 		</div>
@@ -122,7 +123,7 @@
 	<div class="leftsbObject sbSelectable sbPaddingIn" style="font-size:80%;border-top: 2px solid #4a4a4a;" onClick="loadSettingViews();">
 		<div class="ui header">
 			<i class="setting tiny icon whiteFont"></i>
-			<div class="content whiteFont">
+			<div class="content whiteFont" locale="music/sidebar-settings">
 				Settings
 			</div>
 		</div>
@@ -235,7 +236,7 @@
 					<i class="content icon"></i>
 				<i class="corner music icon" style='color:#333333'></i>
 				</i>
-				Now Playing
+				<span locale="music/nowplaying-header">Now Playing</span>
 				<div style="position:absolute;top:3px;right:5px;">
 					[ <span id="dropdownListSongCount">N/A</span> songs / <span id="dropdownListIDCount">N/A</span> MB ] <button onClick='$("#dropdownSonglist").slideUp();' style="cursor:pointer;"><i class="caret up icon whiteFont"></i></button>
 				</div>
@@ -252,16 +253,16 @@
 
  <!-- Timer control interface-->
  <div id="timerInterface" class="quickMenu">
-	<h4 class="whiteFont">Countdown Timer</h4>
+	<h4 class="whiteFont" locale="music/timer-title">Countdown Timer</h4>
 	<br>
 	<div id="timerSettingInterface" style="width:100%;" align="center">
 		<div>
 			<div class="ui statistic">
-				<div class="label whiteFont">hours</div>
+				<div class="label whiteFont" locale="music/timer-hours">hours</div>
 				<div id="timerHour" class="value whiteFont">0</div>
 			</div>
 			 <div class="ui statistic">
-				<div class="label whiteFont">minutes</div>
+				<div class="label whiteFont" locale="music/timer-minutes">minutes</div>
 				<div id="timerMinute" class="value whiteFont">0</div>
 			</div>
 		</div>
@@ -281,27 +282,27 @@
 	<div id="timerCountingInterface" style="width:100%; display:none;" align="center">
 		<div class="ui statistic">
 			<div id="remainingUI" class="value whiteFont">0:00:00</div>
-			<div class="label whiteFont">Remaining</div>
+			<div class="label whiteFont" locale="music/timer-remaining">Remaining</div>
 		</div>
 	</div>
 	<div class="ui divider"></div>
 	<div>
 		<div class="ui grid">
 			<div class="eight wide column">
-				Times up action
+				<span locale="music/timer-action">Times up action</span>
 			</div>
 			<div class="eight wide column">
 				<select id="stopMode" class="ui selection mini fluid dropdown">
-					<option>Fade Out & Stop</option>
-					<option>Stop Playing</option>
+					<option locale="music/timer-fade">Fade Out & Stop</option>
+					<option locale="music/timer-stop">Stop Playing</option>
 				</select>
 			</div>
 		</div>
 	</div>
 	<div style="width:100%;position:absolute;left:0px;bottom:20px;" align="right">
 		<div class="ui grid" >
-			<div class="eight wide column" style="padding-right: 0px;" align="center"><button class="greenBtn fluid" onClick='hideAllquickMenu();'>Close</button></div>
-			<div class="eight wide column"  style="padding-left: 0px;" align="center"><button class="greenBtn fluid" onClick="toggleCountDown(this);">Start</button></div>
+			<div class="eight wide column" style="padding-right: 0px;" align="center"><button class="greenBtn fluid" locale="music/timer-close" onClick='hideAllquickMenu();'>Close</button></div>
+			<div class="eight wide column"  style="padding-left: 0px;" align="center"><button class="greenBtn fluid" locale="music/timer-start" onClick="toggleCountDown(this);">Start</button></div>
 		</div> 
 	</div>
 </div>
@@ -323,12 +324,12 @@
 	<div style="">
 		<div class="ui relaxed list" style="padding:0px !important;">
 			<div id="settingMenuTitle" class="item whiteFont" style="margin-bottom: 1em;">N/A</div>
-			<div class="item selectable whiteFont" onclick="showPlaylistInterface(); $('#settingInterface').fadeOut('fast');"><i class="add icon" style="margin-right:5px;"></i> Add to playlist</div>
-			<div class="item selectable whiteFont" onClick="openInFileExplorer(); hideAllquickMenu();"><i class="folder open icon" style="margin-right:5px;"></i> Open in File Explorer</div>
-			<div class="item selectable whiteFont" onClick="searchOnYoutube(); hideAllquickMenu();"><i class="youtube play icon" style="margin-right:5px;"></i>Search on Youtube</div>
-			<div class="item selectable whiteFont" onClick="showFileInformation();"><i class="file icon" style="margin-right:5px;"></i> File Information</div>
+			<div class="item selectable whiteFont" onclick="showPlaylistInterface(); $('#settingInterface').fadeOut('fast');"><i class="add icon" style="margin-right:5px;"></i><span locale="music/settings-add-playlist"> Add to playlist</span></div>
+			<div class="item selectable whiteFont" onClick="openInFileExplorer(); hideAllquickMenu();"><i class="folder open icon" style="margin-right:5px;"></i><span locale="music/settings-open-explorer"> Open in File Explorer</span></div>
+			<div class="item selectable whiteFont" onClick="searchOnYoutube(); hideAllquickMenu();"><i class="youtube play icon" style="margin-right:5px;"></i><span locale="music/settings-search-youtube">Search on Youtube</span></div>
+			<div class="item selectable whiteFont" onClick="showFileInformation();"><i class="file icon" style="margin-right:5px;"></i><span locale="music/settings-file-info"> File Information</span></div>
 			<div class="ui divider"></div>
-			<div id="closeWebAppButton" class="item selectable whiteFont"  onClick="ao_module_close();"><i class="remove icon" style="margin-right:5px;"></i> Exit Application</div>
+			<div id="closeWebAppButton" class="item selectable whiteFont"  onClick="ao_module_close();"><i class="remove icon" style="margin-right:5px;"></i><span locale="music/settings-exit"> Exit Application</span></div>
 		</div>
 	</div>
 </div>
@@ -337,10 +338,10 @@
 <!-- Playlist interface-->
 <div id="playlistInterface" class="quickMenu">
 	<div class="ui header">
-		<span class="whiteFont">Add to Playlist</span>
+		<span class="whiteFont" locale="music/playlist-title">Add to Playlist</span>
 	</div>
 	<div class="playlist item selectable whiteFont" onclick="addToNewPlaylist();">
-		<i class="add icon whiteFont"></i> New Playlist
+		<i class="add icon whiteFont"></i><span locale="music/playlist-new"> New Playlist</span>
 	</div>
 	<!-- playlist list-->
 	<div id="existsingPlaylist" style="overflow-y: scroll; height: 50%; border: 1px solid white;">
@@ -350,10 +351,10 @@
 	</div>
 	<br>
 	<div style="width:100%;position:absolute;left:0px;bottom:0px; margin-bottom: 10px;" align="center">
-	<button class="greenBtn" onClick='hideAllquickMenu();'>Close</button>
+	<button class="greenBtn" locale="music/playlist-close" onClick='hideAllquickMenu();'>Close</button>
 	</div>
 	<div class="ui snackbar" id="succSnackBar">
-		<div class="content">
+		<div class="content" locale="music/playlist-action-done">
 			Action Completed
 		</div>
 	</div>
@@ -430,10 +431,10 @@
 	}
 
 
-	$(document).ready(function(){
+	function startApp() {
 		$("#leftSideBar").animate({left: $("#leftSideBar").width() * -1}, 300);
 		//Update 7-8-2019, default loading tab is handled over to the returnToPreviousState() function.
-		//loadSongList(); 
+		//loadSongList();
 		//Initiate the module's volume to the system's
 		syncSystemVol();
 		initAudioListeners();
@@ -443,13 +444,21 @@
         setTimeout(function(){
             $("#playerInterface").show(); //Only show this interface after it has been out of the working area.
         },500);
-        
+
         //Hide the exit application button if it is not in Virtual Desktop Mode
         if (!ao_module_virtualDesktop){
             $("#closeWebAppButton").hide();
         }
 		returnToPreviousState(); //Try to return to previous state using the window hash value
-	});
+	}
+	if (typeof applocale !== 'undefined' && applocale) {
+		applocale.init('locale/music.json', function() {
+			applocale.translate();
+			startApp();
+		});
+	} else {
+		startApp();
+	}
 
 	function returnToPreviousState(){
 		var inputFiles = ao_module_loadInputFiles();
