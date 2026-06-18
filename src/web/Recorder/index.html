@@ -11,6 +11,7 @@
         <script src="../script/semantic/semantic.min.js"></script>
         <script src="js/recorder.js"></script>
         <script src="js/RecordRTC.js"></script>
+        <script src="../script/applocale.js"></script>
         <title>Recorder</title>
         <style>
             body{
@@ -47,27 +48,27 @@
             </div>
             <div id="audioTab" class="ui bottom attached basic segment uitab" style="margin-bottom: 0px;">
                 <button id="record" class="ui red button" onclick="startRecording();">
-                <i class="ui circle icon"></i> Record
+                <i class="ui circle icon"></i> <span locale="recorder/btn-record">Record</span>
                 </button>
                 <button id="stop" class="ui disabled button" onclick="stopRecording();">
-                <i class="ui stop icon"></i> Stop
+                <i class="ui stop icon"></i> <span locale="recorder/btn-stop">Stop</span>
                 </button>
                 <button class="ui button" onclick="openStorageFolder();">
-                <i class="ui folder open icon"></i> Open Folder
+                <i class="ui folder open icon"></i> <span locale="recorder/btn-open-folder">Open Folder</span>
                 </button>
             </div>
             <div id="videoTab" class="ui bottom attached basic segment uitab" style="display:none; margin-bottom: 0px;">
                 <button id="capture" class="ui red button" onclick="startVideoCapture();">
-                    <i class="ui circle icon"></i> Capture
+                    <i class="ui circle icon"></i> <span locale="recorder/btn-capture">Capture</span>
                 </button>
                 <button id="vidstop" class="ui disabled button" onclick="stopVideoCapture()">
-                    <i class="ui stop icon"></i> Stop
+                    <i class="ui stop icon"></i> <span locale="recorder/btn-stop-video">Stop</span>
                 </button>
                 <button class="ui button" onclick="openStorageFolder();">
-                    <i class="ui folder open icon"></i> Open Folder
+                    <i class="ui folder open icon"></i> <span locale="recorder/btn-open-folder-video">Open Folder</span>
                 </button>
                 <br>
-                <small>Notes: This function require websocket upload to be enabled.</small>
+                <small locale="recorder/websocket-note">Notes: This function require websocket upload to be enabled.</small>
                 <br>
                 <!--
                 <div class="ui selection fluid dropdown" style="margin-top: 0.4em;">
@@ -80,20 +81,20 @@
                     </div>
                 </div>
             -->
-                
+
             </div>
             <div id="settingTab" class="ui bottom attached basic segment uitab" style="display:none; margin-bottom: 0px;">
-                <p style="margin-bottom: 4px;">Select Output Folder</p>
+                <p locale="recorder/select-output-folder" style="margin-bottom: 4px;">Select Output Folder</p>
                 <div class="ui icon fluid input">
                   <input id="saveFolder" type="text" placeholder="user:/Document/Capture/" value="user:/Document/Capture/">
                   <i class="folder open link icon" onclick="selectSaveFolder();"></i>
                 </div>
             </div>
             <div class="statusbar">
-                Status: <span id="status">Ready</span>
+                <span locale="recorder/status-label">Status:</span> <span id="status" locale="recorder/status-ready">Ready</span>
             </div>
         </div>
-        
+
         <script>
             //Define the basic context for the recorder
             var audio_context;
@@ -101,21 +102,6 @@
             var recordTimer;
             var recordCounter = 0;
 
-            //On window load, adjust the floatWindow settings
-            //Disable window resizing
-            ao_module_setFixedWindowSize();
-
-            $(".dropdown").dropdown();
-
-            //Check if there are previous saved path. If yes, update save target
-            var previousSavePath = localStorage.getItem("recorder-savepath");
-            if (previousSavePath != null){
-                $("#saveFolder").val(previousSavePath);
-            }
-
-            //Create save dir if not exists
-            createSaveDirIfNotExists();
-            
             function opentab(tabName, object){
                 if ($(object).hasClass('disabled')){
                     return;
@@ -158,7 +144,7 @@
                     recordCounter++;
                     updateStatus("Recording T: " + secondsToHms(recordCounter))
                 }, 1000);
-            }   
+            }
 
             function stopRecording(){
                 recorder && recorder.stop();
@@ -174,7 +160,7 @@
                     //Convert the blob to a file object
                     var fileName = new Date().toLocaleDateString().split("/").join("-") + "_" +  new Date().toLocaleTimeString(undefined, {hour12: false}).split(":").join("-") + ".wav"
                     var fileObjcet = ao_module_utils.blobToFile(blob, fileName, blob.type)
-                    
+
                     console.log(fileObjcet);
                     //Upload the file to server
                     ao_module_uploadFile(fileObjcet, $("#saveFolder").val(), function(resp){
@@ -184,12 +170,12 @@
                         }else{
                             updateStatus("Saved as " + fileName)
                         }
-                       
+
                         console.log(resp);
                     }, undefined, function(){
                         updateStatus("File Saving Failed")
                     });
-                }); 
+                });
             }
 
             function renderWAV(callback){
@@ -204,7 +190,7 @@
                 var m = Math.floor(d % 3600 / 60);
                 var s = Math.floor(d % 3600 % 60);
 
-    
+
                 return (h+"").padStart(2, '0') + ":" + (m+"").padStart(2, '0') + ":" + (s+"").padStart(2, '0');
             }
 
@@ -257,7 +243,7 @@
                         navigator.mozGetUserMedia ||
                         navigator.msGetUserMedia);
                     window.URL = window.URL || window.webkitURL;
-                    
+
                     audio_context = new AudioContext;
                     console.log('Audio context set up.');
                     console.log('navigator.getUserMedia ' + (navigator.getUserMedia ? 'available.' : 'not present!'));
@@ -265,7 +251,7 @@
                     console.log(e);
                     alert('No web audio support in this browser!');
                 }
-                
+
                 try{
                     navigator.getUserMedia({audio: true}, startUserMedia, function(e) {
                         $("#status").text("Browser rejected audio recording request")
@@ -279,12 +265,12 @@
                 }
 
                 audioContextWorking=true;
-              
+
             };
 
             function downloadBlob(blob, name = 'file.txt') {
                 if (
-                window.navigator && 
+                window.navigator &&
                 window.navigator.msSaveOrOpenBlob
                 ) return window.navigator.msSaveOrOpenBlob(blob);
 
@@ -298,10 +284,10 @@
 
                 // this is necessary as link.click() does not work on the latest firefox
                 link.dispatchEvent(
-                new MouseEvent('click', { 
-                    bubbles: true, 
-                    cancelable: true, 
-                    view: window 
+                new MouseEvent('click', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window
                 })
                 );
 
@@ -318,7 +304,7 @@
 
             */
 
-        
+
             var websocket;
             var videCaptureRecorder;
 
@@ -343,7 +329,7 @@
                     }else{
                         port = "443";
                     }
-                    
+
                 }
                 let wsept = (protocol + window.location.hostname + ":" + port);
                 return wsept;
@@ -368,7 +354,7 @@
                 videCaptureRecorder.camera.stop();
                 videCaptureRecorder = null;
             }
-          
+
 
             function startVideoCapture() {
                 this.disabled = true;
@@ -412,6 +398,32 @@
                 $(".item.tab").removeClass("disabled");
                 $("#vidstop").addClass("disabled");
                 $("#capture").removeClass("disabled");
+            }
+
+            function startApp() {
+                //On window load, adjust the floatWindow settings
+                //Disable window resizing
+                ao_module_setFixedWindowSize();
+
+                $(".dropdown").dropdown();
+
+                //Check if there are previous saved path. If yes, update save target
+                var previousSavePath = localStorage.getItem("recorder-savepath");
+                if (previousSavePath != null){
+                    $("#saveFolder").val(previousSavePath);
+                }
+
+                //Create save dir if not exists
+                createSaveDirIfNotExists();
+            }
+
+            if (typeof applocale !== 'undefined' && applocale) {
+                applocale.init('locale/recorder.json', function() {
+                    applocale.translate();
+                    startApp();
+                });
+            } else {
+                startApp();
             }
 
         </script>

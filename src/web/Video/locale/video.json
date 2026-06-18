@@ -1,0 +1,89 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "video/no-video-loaded": "No Video Loaded",
+                "video/playlist-na": "N/A",
+                "video/screen-size": "Screen Size",
+                "video/btn-normal": "Normal",
+                "video/btn-full-width": "Full Width",
+                "video/autoplay": "Autoplay",
+                "video/playlists": "PlayLists",
+                "video/playlist-videos": "PlayList Videos"
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "video/no-video-loaded": "未載入影片",
+                "video/playlist-na": "不適用",
+                "video/screen-size": "螢幕大小",
+                "video/btn-normal": "一般",
+                "video/btn-full-width": "全寬",
+                "video/autoplay": "自動播放",
+                "video/playlists": "播放清單",
+                "video/playlist-videos": "清單影片"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "video/no-video-loaded": "未載入影片",
+                "video/playlist-na": "不適用",
+                "video/screen-size": "熒幕大小",
+                "video/btn-normal": "一般",
+                "video/btn-full-width": "全寬",
+                "video/autoplay": "自動播放",
+                "video/playlists": "播放清單",
+                "video/playlist-videos": "清單影片"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "video/no-video-loaded": "未加载视频",
+                "video/playlist-na": "不适用",
+                "video/screen-size": "屏幕大小",
+                "video/btn-normal": "普通",
+                "video/btn-full-width": "全宽",
+                "video/autoplay": "自动播放",
+                "video/playlists": "播放列表",
+                "video/playlist-videos": "列表视频"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "video/no-video-loaded": "動画が読み込まれていません",
+                "video/playlist-na": "なし",
+                "video/screen-size": "画面サイズ",
+                "video/btn-normal": "標準",
+                "video/btn-full-width": "全幅",
+                "video/autoplay": "自動再生",
+                "video/playlists": "プレイリスト",
+                "video/playlist-videos": "リストの動画"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "video/no-video-loaded": "동영상이 로드되지 않음",
+                "video/playlist-na": "해당 없음",
+                "video/screen-size": "화면 크기",
+                "video/btn-normal": "보통",
+                "video/btn-full-width": "전체 너비",
+                "video/autoplay": "자동 재생",
+                "video/playlists": "재생 목록",
+                "video/playlist-videos": "목록 동영상"
+            }
+        }
+    }
+}

@@ -1,0 +1,107 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "agiforge/brand-subtitle": "natural language -> AGI script -> result",
+                "agiforge/model-label": "model",
+                "agiforge/autorun-label": "auto-run",
+                "agiforge/btn-new": "New",
+                "agiforge/empty-title": "What should we build?",
+                "agiforge/empty-desc": "Describe a task in plain language. AGI Forge writes an AGI script grounded in the live API reference, runs it on your ArozOS server, and hands back the output — including any file it generates.",
+                "agiforge/uses-ai-model": "Uses your configured AI model",
+                "agiforge/configure-link": "Configure endpoint & key",
+                "agiforge/placeholder": "Describe a task…  e.g. \"list the 10 largest files on my Desktop\"",
+                "agiforge/btn-send": "Send",
+                "agiforge/composer-hint": "Enter to send · Shift+Enter for a new line · generated scripts run on the server with your permissions"
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "agiforge/brand-subtitle": "自然語言 -> AGI 腳本 -> 結果",
+                "agiforge/model-label": "模型",
+                "agiforge/autorun-label": "自動執行",
+                "agiforge/btn-new": "新增",
+                "agiforge/empty-title": "我們要建立什麼？",
+                "agiforge/empty-desc": "以自然語言描述任務。AGI Forge 會根據即時 API 參考撰寫 AGI 腳本，在您的 ArozOS 伺服器上執行，並回傳結果——包括任何產生的檔案。",
+                "agiforge/uses-ai-model": "使用您設定的 AI 模型",
+                "agiforge/configure-link": "設定端點與金鑰",
+                "agiforge/placeholder": "描述一項任務……例如「列出我桌面上最大的 10 個檔案」",
+                "agiforge/btn-send": "傳送",
+                "agiforge/composer-hint": "Enter 傳送 · Shift+Enter 換行 · 產生的腳本將以您的權限在伺服器上執行"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "agiforge/brand-subtitle": "自然語言 -> AGI 腳本 -> 結果",
+                "agiforge/model-label": "模型",
+                "agiforge/autorun-label": "自動執行",
+                "agiforge/btn-new": "新增",
+                "agiforge/empty-title": "我們要建立甚麼？",
+                "agiforge/empty-desc": "以自然語言描述任務。AGI Forge 會根據即時 API 參考撰寫 AGI 腳本，在您的 ArozOS 伺服器上執行，並回傳結果——包括任何產生的檔案。",
+                "agiforge/uses-ai-model": "使用您設定的 AI 模型",
+                "agiforge/configure-link": "設定端點與金鑰",
+                "agiforge/placeholder": "描述一項任務……例如「列出我桌面上最大的 10 個檔案」",
+                "agiforge/btn-send": "傳送",
+                "agiforge/composer-hint": "Enter 傳送 · Shift+Enter 換行 · 產生的腳本將以您的權限在伺服器上執行"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "agiforge/brand-subtitle": "自然语言 -> AGI 脚本 -> 结果",
+                "agiforge/model-label": "模型",
+                "agiforge/autorun-label": "自动运行",
+                "agiforge/btn-new": "新建",
+                "agiforge/empty-title": "我们要构建什么？",
+                "agiforge/empty-desc": "用自然语言描述任务。AGI Forge 将根据实时 API 参考编写 AGI 脚本，在您的 ArozOS 服务器上运行，并返回结果——包括生成的任何文件。",
+                "agiforge/uses-ai-model": "使用您配置的 AI 模型",
+                "agiforge/configure-link": "配置端点与密钥",
+                "agiforge/placeholder": "描述一项任务……例如「列出我桌面上最大的 10 个文件」",
+                "agiforge/btn-send": "发送",
+                "agiforge/composer-hint": "Enter 发送 · Shift+Enter 换行 · 生成的脚本将以您的权限在服务器上运行"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "agiforge/brand-subtitle": "自然言語 -> AGI スクリプト -> 結果",
+                "agiforge/model-label": "モデル",
+                "agiforge/autorun-label": "自動実行",
+                "agiforge/btn-new": "新規",
+                "agiforge/empty-title": "何を作りますか？",
+                "agiforge/empty-desc": "タスクを自然言語で説明してください。AGI Forge はライブ API リファレンスに基づいて AGI スクリプトを作成し、あなたの ArozOS サーバーで実行して、生成されたファイルを含む結果を返します。",
+                "agiforge/uses-ai-model": "設定済みの AI モデルを使用",
+                "agiforge/configure-link": "エンドポイントとキーを設定",
+                "agiforge/placeholder": "タスクを説明してください……例：「デスクトップで最も大きい 10 個のファイルを一覧表示する」",
+                "agiforge/btn-send": "送信",
+                "agiforge/composer-hint": "Enter で送信 · Shift+Enter で改行 · 生成されたスクリプトはあなたの権限でサーバー上で実行されます"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "agiforge/brand-subtitle": "자연어 -> AGI 스크립트 -> 결과",
+                "agiforge/model-label": "모델",
+                "agiforge/autorun-label": "자동 실행",
+                "agiforge/btn-new": "새로 만들기",
+                "agiforge/empty-title": "무엇을 만들까요?",
+                "agiforge/empty-desc": "작업을 자연어로 설명하세요. AGI Forge가 실시간 API 참조를 기반으로 AGI 스크립트를 작성하고, ArozOS 서버에서 실행한 후 생성된 파일을 포함한 결과를 반환합니다.",
+                "agiforge/uses-ai-model": "설정된 AI 모델 사용",
+                "agiforge/configure-link": "엔드포인트 및 키 설정",
+                "agiforge/placeholder": "작업을 설명하세요……예: \"바탕 화면에서 가장 큰 파일 10개 나열하기\"",
+                "agiforge/btn-send": "전송",
+                "agiforge/composer-hint": "Enter 로 전송 · Shift+Enter 로 줄 바꿈 · 생성된 스크립트는 서버에서 사용자 권한으로 실행됩니다"
+            }
+        }
+    }
+}
