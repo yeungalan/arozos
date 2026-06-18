@@ -1,0 +1,107 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "clear": "Clear",
+                "reconnect": "Reconnect",
+                "docs": "Docs",
+                "help": "Help",
+                "connecting": "Connecting...",
+                "search_functions": "Search functions...",
+                "loading": "Loading...",
+                "loading_docs": "Loading documentation...",
+                "run": "Run",
+                "input_placeholder": "JavaScript / AGI...",
+                "file_loaded_banner": "File loaded — press Enter to run, or type a new command to cancel"
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "clear": "清除",
+                "reconnect": "重新連接",
+                "docs": "文件",
+                "help": "說明",
+                "connecting": "連接中...",
+                "search_functions": "搜尋函數...",
+                "loading": "載入中...",
+                "loading_docs": "載入文件中...",
+                "run": "執行",
+                "input_placeholder": "JavaScript / AGI...",
+                "file_loaded_banner": "已載入檔案 — 按 Enter 執行，或輸入新指令取消"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "clear": "清除",
+                "reconnect": "重新連接",
+                "docs": "文件",
+                "help": "說明",
+                "connecting": "連接中...",
+                "search_functions": "搜尋函數...",
+                "loading": "載入中...",
+                "loading_docs": "載入文件中...",
+                "run": "執行",
+                "input_placeholder": "JavaScript / AGI...",
+                "file_loaded_banner": "已載入檔案 — 按 Enter 執行，或輸入新指令取消"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "clear": "清除",
+                "reconnect": "重新連接",
+                "docs": "文档",
+                "help": "帮助",
+                "connecting": "连接中...",
+                "search_functions": "搜索函数...",
+                "loading": "加载中...",
+                "loading_docs": "加载文档中...",
+                "run": "执行",
+                "input_placeholder": "JavaScript / AGI...",
+                "file_loaded_banner": "文件已加载 — 按 Enter 执行，或输入新命令取消"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "clear": "クリア",
+                "reconnect": "再接続",
+                "docs": "ドキュメント",
+                "help": "ヘルプ",
+                "connecting": "接続中...",
+                "search_functions": "関数を検索...",
+                "loading": "読み込み中...",
+                "loading_docs": "ドキュメント読み込み中...",
+                "run": "実行",
+                "input_placeholder": "JavaScript / AGI...",
+                "file_loaded_banner": "ファイルを読み込みました — Enter で実行、または新しいコマンドを入力してキャンセル"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "clear": "지우기",
+                "reconnect": "재연결",
+                "docs": "문서",
+                "help": "도움말",
+                "connecting": "연결 중...",
+                "search_functions": "함수 검색...",
+                "loading": "로드 중...",
+                "loading_docs": "문서 로드 중...",
+                "run": "실행",
+                "input_placeholder": "JavaScript / AGI...",
+                "file_loaded_banner": "파일 로드됨 — Enter를 눌러 실행하거나 새 명령을 입력하여 취소"
+            }
+        }
+    }
+}

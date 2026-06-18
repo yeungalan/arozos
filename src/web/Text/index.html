@@ -6,6 +6,7 @@
     <title>Text</title>
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
+    <script src="../script/applocale.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -261,13 +262,13 @@
     <div id="toolbar">
 
         <!-- File operations -->
-        <button class="tb-btn" onclick="openFile()" title="Open file">
+        <button class="tb-btn" locale="open" onclick="openFile()" title="Open file">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
             </svg>
             Open
         </button>
-        <button class="tb-btn" onclick="saveFile()" title="Save  Ctrl+S">
+        <button class="tb-btn" locale="save" onclick="saveFile()" title="Save  Ctrl+S">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
                 <polyline points="17 21 17 13 7 13 7 21"/>
@@ -279,22 +280,22 @@
         <div class="tb-sep"></div>
 
         <!-- Font family -->
-        <span class="tb-label">Font</span>
+        <span class="tb-label" locale="font">Font</span>
         <select id="sel-font" class="tb-select" style="width:134px;" onchange="applyFont()" title="Font family">
-            <option value="system">System Default</option>
-            <option value="arial">Arial</option>
-            <option value="times">Times New Roman</option>
-            <option value="courier">Courier New</option>
-            <option value="georgia">Georgia</option>
-            <option value="verdana">Verdana</option>
-            <option value="trebuchet">Trebuchet MS</option>
-            <option value="comic">Comic Sans MS</option>
+            <option value="system" locale="font_system">System Default</option>
+            <option value="arial" locale="font_arial">Arial</option>
+            <option value="times" locale="font_times">Times New Roman</option>
+            <option value="courier" locale="font_courier">Courier New</option>
+            <option value="georgia" locale="font_georgia">Georgia</option>
+            <option value="verdana" locale="font_verdana">Verdana</option>
+            <option value="trebuchet" locale="font_trebuchet">Trebuchet MS</option>
+            <option value="comic" locale="font_comic">Comic Sans MS</option>
         </select>
 
         <div class="tb-sep"></div>
 
         <!-- Font size -->
-        <span class="tb-label">Size</span>
+        <span class="tb-label" locale="size">Size</span>
         <div class="tb-size-wrap">
             <button class="tb-size-btn" onclick="changeFontSize(-1)" title="Decrease font size">−</button>
             <span class="tb-size-val" id="font-size-lbl">14</span>
@@ -311,12 +312,12 @@
         <div class="tb-sep"></div>
 
         <!-- Line height -->
-        <span class="tb-label">Line</span>
+        <span class="tb-label" locale="line">Line</span>
         <select id="sel-lh" class="tb-select" style="width:84px;" onchange="applyLineHeight()" title="Line spacing">
-            <option value="1.2">Compact</option>
-            <option value="1.5">Normal</option>
-            <option value="1.6" selected>Relaxed</option>
-            <option value="2.0">Double</option>
+            <option value="1.2" locale="line_compact">Compact</option>
+            <option value="1.5" locale="line_normal">Normal</option>
+            <option value="1.6" selected locale="line_relaxed">Relaxed</option>
+            <option value="2.0" locale="line_double">Double</option>
         </select>
 
         <div class="tb-sep"></div>
@@ -337,13 +338,13 @@
             <svg id="icon-moon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
             </svg>
-            <span id="theme-lbl">Dark</span>
+            <span id="theme-lbl" locale="theme_dark">Dark</span>
         </button>
 
     </div>
 
     <!-- ── Editor ───────────────────────────────────────────────────────── -->
-    <textarea id="editor" placeholder="Start typing…" spellcheck="false"></textarea>
+    <textarea id="editor" placeholder="Start typing..." locale-placeholder="editor_placeholder" spellcheck="false"></textarea>
 
     <!-- ── Status bar ───────────────────────────────────────────────────── -->
     <div id="statusbar">
@@ -356,12 +357,12 @@
 <!-- ── Unsaved-changes dialog (in-iframe popup) ──────────────────────────── -->
 <div id="confirm-overlay">
     <div id="confirm-box">
-        <h3>Unsaved Changes</h3>
-        <p id="confirm-msg">Your changes haven't been saved. Save before closing?</p>
+        <h3 locale="unsaved_changes">Unsaved Changes</h3>
+        <p id="confirm-msg" locale="unsaved_msg">Your changes haven't been saved. Save before closing?</p>
         <div class="confirm-row">
-            <button class="cbtn cbtn-cancel"  onclick="dlgCancel()">Cancel</button>
-            <button class="cbtn cbtn-discard" onclick="dlgDiscard()">Discard</button>
-            <button class="cbtn cbtn-save"    onclick="dlgSave()">Save</button>
+            <button class="cbtn cbtn-cancel"  locale="cancel"   onclick="dlgCancel()">Cancel</button>
+            <button class="cbtn cbtn-discard" locale="discard"  onclick="dlgDiscard()">Discard</button>
+            <button class="cbtn cbtn-save"    locale="save_btn" onclick="dlgSave()">Save</button>
         </div>
     </div>
 </div>
@@ -390,7 +391,7 @@ var fontMap = {
 };
 
 // ── Init ──────────────────────────────────────────────────────────────────
-$(function(){
+function startApp(){
     // Restore font size from previous session
     var savedSize = parseInt(localStorage.getItem("text_fontSize"));
     if (savedSize && savedSize >= 8 && savedSize <= 72){
@@ -423,7 +424,16 @@ $(function(){
     });
 
     updateStatBar();
-});
+}
+
+if (typeof applocale !== 'undefined' && applocale) {
+    applocale.init('locale/text.json', function() {
+        applocale.translate();
+        startApp();
+    });
+} else {
+    $(function(){ startApp(); });
+}
 
 // ── File loading ──────────────────────────────────────────────────────────
 function loadFile(){
@@ -564,10 +574,10 @@ function toggleTheme(){
     $("body").toggleClass("dark", isDark);
     if (isDark){
         $("#icon-sun").hide(); $("#icon-moon").show();
-        $("#theme-lbl").text("Light");
+        $("#theme-lbl").text(applocale ? applocale.getString("theme_light") : "Light");
     } else {
         $("#icon-sun").show(); $("#icon-moon").hide();
-        $("#theme-lbl").text("Dark");
+        $("#theme-lbl").text(applocale ? applocale.getString("theme_dark") : "Dark");
     }
 }
 

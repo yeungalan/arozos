@@ -6,6 +6,10 @@
         <title>Terminal</title>
         <script src="../script/jquery.min.js"></script>
         <script src="../script/ao_module.js"></script>
+<<<<<<< HEAD
+=======
+        <script src="../script/applocale.js"></script>
+>>>>>>> worktree-agent-a9c7da56c7797e7e3
         <style>
             *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -157,6 +161,7 @@
             <!-- Toolbar -->
             <div class="toolbar">
                 <span class="tb-title">&#9654; AGI Terminal</span>
+<<<<<<< HEAD
                 <button class="tb-btn" onclick="clearOutput()">Clear</button>
                 <button class="tb-btn" onclick="reconnect()">Reconnect</button>
                 <button class="tb-btn" id="btnDocs" onclick="toggleDocs()">Docs</button>
@@ -164,6 +169,15 @@
                 <div class="conn-badge">
                     <span class="conn-dot connecting" id="connDot"></span>
                     <span id="connLabel">Connecting&hellip;</span>
+=======
+                <button class="tb-btn" onclick="clearOutput()" locale="clear">Clear</button>
+                <button class="tb-btn" onclick="reconnect()" locale="reconnect">Reconnect</button>
+                <button class="tb-btn" id="btnDocs" onclick="toggleDocs()" locale="docs">Docs</button>
+                <button class="tb-btn" onclick="showHelp()" locale="help">Help</button>
+                <div class="conn-badge">
+                    <span class="conn-dot connecting" id="connDot"></span>
+                    <span id="connLabel" locale="connecting">Connecting&hellip;</span>
+>>>>>>> worktree-agent-a9c7da56c7797e7e3
                 </div>
             </div>
 
@@ -177,13 +191,22 @@
                 <div class="docs-panel" id="docsPanel">
                     <div class="docs-search">
                         <input type="text" id="docsSearch" placeholder="Search functions&hellip;"
+<<<<<<< HEAD
                                oninput="filterDocs(this.value)" autocomplete="off" spellcheck="false">
+=======
+                               oninput="filterDocs(this.value)" autocomplete="off" spellcheck="false"
+                               locale-placeholder="search_functions">
+>>>>>>> worktree-agent-a9c7da56c7797e7e3
                     </div>
                     <div class="docs-tabs" id="docsTabs">
                         <button class="tb-btn" style="font-size:10px;color:var(--dim)">Loading&hellip;</button>
                     </div>
                     <div class="docs-list" id="docsList">
+<<<<<<< HEAD
                         <div class="docs-empty">Loading documentation&hellip;</div>
+=======
+                        <div class="docs-empty" locale="loading_docs">Loading documentation&hellip;</div>
+>>>>>>> worktree-agent-a9c7da56c7797e7e3
                     </div>
                 </div>
 
@@ -191,9 +214,13 @@
 
             <!-- Pending-file banner -->
             <div class="pending-banner" id="pendingBanner">
+<<<<<<< HEAD
                 &#9658; File loaded &mdash; press
                 <kbd style="background:#3c3c3c;padding:0 4px;border-radius:2px">Enter</kbd>
                 to run, or type a new command to cancel
+=======
+                &#9658; <span locale="file_loaded_banner">File loaded — press Enter to run, or type a new command to cancel</span>
+>>>>>>> worktree-agent-a9c7da56c7797e7e3
             </div>
 
             <!-- Input row -->
@@ -202,8 +229,14 @@
                 <input class="term-input" id="termInput" type="text"
                        autocomplete="off" autocorrect="off" spellcheck="false"
                        placeholder="JavaScript / AGI&hellip;"
+<<<<<<< HEAD
                        onkeydown="handleKey(event)">
                 <button class="run-btn" onclick="submitInput()">&#9654; Run</button>
+=======
+                       onkeydown="handleKey(event)"
+                       locale-placeholder="input_placeholder">
+                <button class="run-btn" onclick="submitInput()">&#9654; <span locale="run">Run</span></button>
+>>>>>>> worktree-agent-a9c7da56c7797e7e3
             </div>
 
         </div><!-- .shell -->
@@ -740,7 +773,11 @@
         }
 
         // ══ BOOT ══════════════════════════════════════════════════════════════
+<<<<<<< HEAD
         $(document).ready(function() {
+=======
+        function startApp() {
+>>>>>>> worktree-agent-a9c7da56c7797e7e3
             // Collect any .agi / .js files passed via URL hash from the file manager
             let filelist = ao_module_loadInputFiles();
             if (filelist != null){
@@ -751,10 +788,26 @@
                     }
                 });
             }
+<<<<<<< HEAD
         
             // Auto-connect
             connect();
         });
+=======
+
+            // Auto-connect
+            connect();
+        }
+
+        if (typeof applocale !== 'undefined' && applocale) {
+            applocale.init('locale/terminal.json', function() {
+                applocale.translate();
+                startApp();
+            });
+        } else {
+            startApp();
+        }
+>>>>>>> worktree-agent-a9c7da56c7797e7e3
         </script>
     </body>
 </html>

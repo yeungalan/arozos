@@ -7,6 +7,7 @@
     <meta name="theme-color" content="#0078d4">
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
+    <script src="../script/applocale.js"></script>
     <title>Zip File Manager</title>
     <style>
         /* ── CSS variables: light (default) ─────────────────── */
@@ -297,12 +298,12 @@
         <div class="toolbar-sep"></div>
 
         <button class="btn" id="btnExtractAll" title="Extract all files to a folder"
-                onclick="extractAll()" disabled>
+                onclick="extractAll()" disabled locale="extract_all">
             <img src="img/icons/extract.svg" alt="">
             Extract All
         </button>
         <button class="btn" id="btnExtractSel" title="Extract selected items to a folder"
-                onclick="extractSelected()" disabled>
+                onclick="extractSelected()" disabled locale="extract_selected">
             <img src="img/icons/extract.svg" alt="">
             Extract Selected
         </button>
@@ -313,15 +314,15 @@
 <div class="placeholder" id="placeholder">
             <img class="placeholder-icon"
                  src="../img/desktop/files_icon/default/file archive outline.png" alt="">
-            <div>Loading…</div>
+            <div locale="loading">Loading…</div>
         </div>
 
         <table class="file-table" id="fileTable" style="display:none;">
             <thead>
                 <tr>
                     <th><input type="checkbox" id="chkAll" onchange="toggleAll(this)"></th>
-                    <th>Name</th>
-                    <th class="col-size">Size</th>
+                    <th locale="col_name">Name</th>
+                    <th class="col-size" locale="col_size">Size</th>
                 </tr>
             </thead>
             <tbody id="fileBody"></tbody>
@@ -428,7 +429,7 @@
         };
 
         /* ── Init ───────────────────────────────────────────── */
-        (function init() {
+        function startApp() {
             // Apply current theme
             ao_module_getSystemThemeColor(function(themeStr) {
                 applyTheme(themeStr === "darkTheme" ? "dark" : "light");
@@ -444,7 +445,16 @@
             ao_module_setWindowTitle("Zip — " + zipFilename);
             document.getElementById("btnExtractAll").disabled = false;
             loadDirectory("");
-        })();
+        }
+
+        if (typeof applocale !== 'undefined' && applocale) {
+            applocale.init('locale/zip.json', function() {
+                applocale.translate();
+                startApp();
+            });
+        } else {
+            startApp();
+        }
 
         /* ── Directory loading ───────────────────────────────── */
         function loadDirectory(dir) {
