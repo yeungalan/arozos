@@ -1,0 +1,89 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "title": "Web Downloader",
+                "subtitle": "Copy and Paste URL to download",
+                "url_label": "URL",
+                "url_placeholder": "http://example.com/myfile.txt",
+                "save_location_label": "Save Location",
+                "filepath_placeholder": "user:/Download/",
+                "download_btn": "Download",
+                "status_ready": "Ready."
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "title": "網頁下載器",
+                "subtitle": "複製並貼上 URL 以下載",
+                "url_label": "URL",
+                "url_placeholder": "http://example.com/myfile.txt",
+                "save_location_label": "儲存位置",
+                "filepath_placeholder": "user:/Download/",
+                "download_btn": "下載",
+                "status_ready": "就緒。"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "title": "網頁下載器",
+                "subtitle": "複製並貼上 URL 以下載",
+                "url_label": "URL",
+                "url_placeholder": "http://example.com/myfile.txt",
+                "save_location_label": "儲存位置",
+                "filepath_placeholder": "user:/Download/",
+                "download_btn": "下載",
+                "status_ready": "就緒。"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "title": "网页下载器",
+                "subtitle": "复制并粘贴 URL 以下载",
+                "url_label": "URL",
+                "url_placeholder": "http://example.com/myfile.txt",
+                "save_location_label": "保存位置",
+                "filepath_placeholder": "user:/Download/",
+                "download_btn": "下载",
+                "status_ready": "就绪。"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "title": "ウェブダウンローダー",
+                "subtitle": "URLをコピー＆ペーストしてダウンロード",
+                "url_label": "URL",
+                "url_placeholder": "http://example.com/myfile.txt",
+                "save_location_label": "保存場所",
+                "filepath_placeholder": "user:/Download/",
+                "download_btn": "ダウンロード",
+                "status_ready": "準備完了。"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "title": "웹 다운로더",
+                "subtitle": "URL을 복사하여 붙여넣고 다운로드",
+                "url_label": "URL",
+                "url_placeholder": "http://example.com/myfile.txt",
+                "save_location_label": "저장 위치",
+                "filepath_placeholder": "user:/Download/",
+                "download_btn": "다운로드",
+                "status_ready": "준비."
+            }
+        }
+    }
+}
