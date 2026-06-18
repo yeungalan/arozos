@@ -7,6 +7,9 @@
 		<meta name="theme-color" content="#4b75ff">
         <link rel="stylesheet" href="../script/semantic/semantic.min.css">
         <link rel="stylesheet" href="css/style.css">
+		<script src="../script/jquery.min.js"></script>
+		<script src="../script/ao_module.js"></script>
+		<script src="../script/applocale.js"></script>
 
 		<link rel="manifest" crossorigin="use-credentials" href="manifest.json">
 		<title>On Screen Keyboard</title>
@@ -18,21 +21,30 @@
 		</style>
 	</head>
 	<body>
-		<script src="../script/jquery.min.js"></script>
-		<script src="../script/ao_module.js"></script>
-		
         <textarea class="use-keyboard-input"></textarea>
         <script src="js/keyboard.js"></script>
         <script src="onscreenkeyboard.js"></script>
 		<script>
+            var applocale = new NewAppLocale();
+
+            function startApp(){
+                applocale.init("locale/keyboard.json", function(){
+                    applocale.translate();
+                    var title = applocale.getString("window_title", "On-Screen Keyboard");
+                    ao_module_setWindowTitle(title);
+                });
+            }
+
+            $(document).ready(function(){
+                startApp();
+            });
+
 			//Initialize ao_module events
 			ao_module_setFixedWindowSize();
             ao_module_setWindowTitle("On-Screen Keyboard");
-            
+
 			//Pin the window to top layer
 			ao_module_setTopMost();
 		</script>
 	</body>
 </html>
-
-

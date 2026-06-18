@@ -1,0 +1,101 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "connection_code": "Connection code",
+                "waiting_hint": "Enter this code in Musicify on your phone or another device to start casting, or use Screen Share to stream your desktop to this display.",
+                "screen_share": "Screen Share",
+                "sender_disconnected": "Sender disconnected",
+                "reconnect_hint": "Enter the code above in Musicify to reconnect.",
+                "sender_connected": "1 sender connected",
+                "waiting_reconnect": "Waiting for reconnect...",
+                "waiting_sender": "Waiting for sender...",
+                "creating_room": "Creating room...",
+                "room": "Room"
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "connection_code": "連線代碼",
+                "waiting_hint": "在您的手機或其他裝置的 Musicify 中輸入此代碼以開始投放，或使用螢幕分享將您的桌面串流到此顯示器。",
+                "screen_share": "螢幕分享",
+                "sender_disconnected": "傳送端已中斷連線",
+                "reconnect_hint": "在 Musicify 中輸入上方代碼以重新連線。",
+                "sender_connected": "1 個傳送端已連線",
+                "waiting_reconnect": "等待重新連線...",
+                "waiting_sender": "等待傳送端...",
+                "creating_room": "建立房間中...",
+                "room": "房間"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "connection_code": "連線代碼",
+                "waiting_hint": "在您的手機或其他裝置的 Musicify 中輸入此代碼以開始投放，或使用螢幕共享將您的桌面串流到此顯示器。",
+                "screen_share": "螢幕共享",
+                "sender_disconnected": "發送端已中斷連線",
+                "reconnect_hint": "在 Musicify 中輸入上方代碼以重新連線。",
+                "sender_connected": "1 個發送端已連線",
+                "waiting_reconnect": "等待重新連線...",
+                "waiting_sender": "等待發送端...",
+                "creating_room": "建立房間中...",
+                "room": "房間"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "connection_code": "连接代码",
+                "waiting_hint": "在您的手机或其他设备的 Musicify 中输入此代码以开始投放，或使用屏幕共享将您的桌面流式传输到此显示器。",
+                "screen_share": "屏幕共享",
+                "sender_disconnected": "发送端已断开连接",
+                "reconnect_hint": "在 Musicify 中输入上方代码以重新连接。",
+                "sender_connected": "1 个发送端已连接",
+                "waiting_reconnect": "等待重新连接...",
+                "waiting_sender": "等待发送端...",
+                "creating_room": "正在创建房间...",
+                "room": "房间"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "connection_code": "接続コード",
+                "waiting_hint": "スマートフォンや他のデバイスの Musicify でこのコードを入力してキャストを開始するか、画面共有を使用してデスクトップをこのディスプレイにストリーミングしてください。",
+                "screen_share": "画面共有",
+                "sender_disconnected": "送信端が切断されました",
+                "reconnect_hint": "Musicify で上記のコードを入力して再接続してください。",
+                "sender_connected": "送信端 1 台が接続中",
+                "waiting_reconnect": "再接続を待っています...",
+                "waiting_sender": "送信端を待っています...",
+                "creating_room": "ルームを作成中...",
+                "room": "ルーム"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "connection_code": "연결 코드",
+                "waiting_hint": "휴대폰이나 다른 기기의 Musicify에서 이 코드를 입력하여 캐스팅을 시작하거나, 화면 공유를 사용하여 데스크톱을 이 디스플레이로 스트리밍하세요.",
+                "screen_share": "화면 공유",
+                "sender_disconnected": "발신자 연결이 끊어졌습니다",
+                "reconnect_hint": "재연결하려면 Musicify에 위의 코드를 입력하세요.",
+                "sender_connected": "발신자 1명 연결됨",
+                "waiting_reconnect": "재연결 대기 중...",
+                "waiting_sender": "발신자를 기다리는 중...",
+                "creating_room": "방을 만드는 중...",
+                "room": "방"
+            }
+        }
+    }
+}
