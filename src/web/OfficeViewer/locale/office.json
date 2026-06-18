@@ -1,0 +1,59 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "open_file": "Open File",
+                "office_viewer": "ArozOS Office Viewer",
+                "no_file_selected": "No file selected"
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "open_file": "開啟檔案",
+                "office_viewer": "ArozOS 文件檢視器",
+                "no_file_selected": "未選擇任何檔案"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "open_file": "開啟檔案",
+                "office_viewer": "ArozOS 文件檢視器",
+                "no_file_selected": "未選擇任何檔案"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "open_file": "打开文件",
+                "office_viewer": "ArozOS 文档查看器",
+                "no_file_selected": "未选择任何文件"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "open_file": "ファイルを開く",
+                "office_viewer": "ArozOS オフィスビューアー",
+                "no_file_selected": "ファイルが選択されていません"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "open_file": "파일 열기",
+                "office_viewer": "ArozOS 오피스 뷰어",
+                "no_file_selected": "선택된 파일 없음"
+            }
+        }
+    }
+}

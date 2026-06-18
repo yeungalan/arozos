@@ -9,6 +9,7 @@
 		<script src="../script/jquery.min.js"></script>
 		<script src="../script/ao_module.js"></script>
 		<script src="../script/semantic/semantic.min.js"></script>
+		<script src="../script/applocale.js"></script>
         <script src="message.js"></script>
 		<link rel="icon" type="image/png" href="img/module_icon.png">
 		<link rel="manifest" crossorigin="use-credentials" href="manifest.json">
@@ -23,13 +24,22 @@
 	<body>
         <br>
         <div class="ui container">
-            <button class="ui basic fluid button" onclick="openFileSelector();">Open File</button>
+            <button class="ui basic fluid button" onclick="openFileSelector();" locale="open_file">Open File</button>
             <div class="ui divider"></div>
-            ArozOS Office Viewer
+            <span locale="office_viewer">ArozOS Office Viewer</span>
         </div>
 		<script>
-            $(document).ready(function(){
+            var applocale = new NewAppLocale();
+
+            function startApp(){
+                applocale.init("locale/office.json", function(){
+                    applocale.translate();
+                });
                 openFileSelector();
+            }
+
+            $(document).ready(function(){
+                startApp();
             });
 
             function openFileSelector(){
@@ -40,7 +50,7 @@
 
             function fileSelected(filedata){
                 if (filedata.length == 0){
-                    alert("No file selected")
+                    alert(applocale.getString("no_file_selected", "No file selected"))
                 }else{
                     console.log(encodeURIComponent(JSON.stringify(filedata)));
                     ao_module_setWindowSize(1060, 680);

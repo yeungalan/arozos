@@ -8,6 +8,7 @@
     <script src="../script/jquery.min.js"></script>
     <script src="../script/semantic/semantic.min.js"></script>
     <script src="../script/ao_module.js"></script>
+    <script src="../script/applocale.js"></script>
     <title>FFmpeg Factory</title>
     <style>
         /* ── Design tokens (Notes-inspired minimal gray) ── */
@@ -455,7 +456,7 @@
     <div id="leftPanel">
         <div id="leftHeader">
             <i class="film icon hdr-icon"></i>
-            <span>New Conversion</span>
+            <span locale="new_conversion">New Conversion</span>
             <span class="hdr-spacer"></span>
             <button id="themeToggleBtn" onclick="toggleTheme()" title="Toggle dark / light mode">
                 <i class="moon icon" id="themeIcon"></i>
@@ -470,13 +471,13 @@
             <!-- Drop zone / system file browser -->
             <div id="dropZone" onclick="openSystemFileSelector()">
                 <i class="cloud upload alternate icon dz-icon"></i>
-                <div class="dz-label">Click to browse system files</div>
-                <div class="dz-sub">or drag &amp; drop a file here</div>
+                <div class="dz-label" locale="browse_system_files">Click to browse system files</div>
+                <div class="dz-sub" locale="drop_file_hint">or drag &amp; drop a file here</div>
             </div>
 
             <!-- Upload from local computer -->
             <button id="uploadBtn" onclick="openLocalUploader()">
-                <i class="laptop icon"></i> Upload from Computer
+                <i class="laptop icon"></i> <span locale="upload_from_computer">Upload from Computer</span>
             </button>
 
             <!-- Upload progress -->
@@ -499,14 +500,14 @@
             </div>
 
             <!-- Output format -->
-            <label class="ff-label">Output Format</label>
+            <label class="ff-label" locale="output_format">Output Format</label>
             <select id="outputFormat" class="ff-select" onchange="onFormatChange()">
                 <option value="">— select a file first —</option>
             </select>
 
             <!-- Audio options -->
             <div id="audioOptions" class="options-section" style="display:none">
-                <label class="ff-label">Sample Rate</label>
+                <label class="ff-label" locale="sample_rate">Sample Rate</label>
                 <select id="sampleRate" class="ff-select">
                     <option value="0">Original (unchanged)</option>
                     <option value="8000">8,000 Hz</option>
@@ -520,7 +521,7 @@
 
             <!-- Video options -->
             <div id="videoOptions" class="options-section" style="display:none">
-                <label class="ff-label">Resolution</label>
+                <label class="ff-label" locale="resolution">Resolution</label>
                 <select id="videoResolution" class="ff-select">
                     <option value="">Original (unchanged)</option>
                     <option value="144p">144p — Low bandwidth</option>
@@ -557,7 +558,7 @@
             </div>
 
             <button id="convertBtn" onclick="startConversion()" disabled>
-                <i class="play icon"></i> Convert
+                <i class="play icon"></i> <span locale="convert">Convert</span>
             </button>
         </div><!-- /leftBody -->
     </div><!-- /leftPanel -->
@@ -567,14 +568,14 @@
         <div id="rightHeader">
             <button class="mobile-nav-btn" id="mobileBackBtn" onclick="switchToConvert()" title="Back to conversion settings">&#8592;</button>
             <i class="list ul icon hdr-icon"></i>
-            Task Queue
+            <span locale="task_queue">Task Queue</span>
             <span id="taskCountBadge">0</span>
         </div>
         <div id="taskListWrap">
             <div id="emptyState">
                 <i class="film icon es-icon"></i>
-                <div class="es-title">No conversions yet</div>
-                <div class="es-sub">Select or upload a file on the left to get started.</div>
+                <div class="es-title" locale="no_conversions_yet">No conversions yet</div>
+                <div class="es-sub" locale="get_started_hint">Select or upload a file on the left to get started.</div>
             </div>
             <div id="taskList"></div>
         </div>
@@ -668,6 +669,11 @@ function safeJSON(data) {
 // ──────────────────────────────────────────────
 // Initialisation
 // ──────────────────────────────────────────────
+var applocale = new NewAppLocale();
+applocale.init("locale/ffmpeg.json", function(){
+    applocale.translate();
+});
+
 $(document).ready(function () {
     initTheme();
 

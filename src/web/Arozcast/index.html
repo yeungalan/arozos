@@ -9,6 +9,7 @@
     <script src="../script/alpine.min.js" defer></script>
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
+    <script src="../script/applocale.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -302,7 +303,7 @@
             <span class="brand-name">Arozcast</span>
         </div>
 
-        <div class="code-label">Connection code</div>
+        <div class="code-label" locale="connection_code">Connection code</div>
         <div class="code-display">
             <template x-for="d in codeDigits" :key="d.i">
                 <div class="code-digit" x-text="d.v"></div>
@@ -317,8 +318,8 @@
 
         <div class="disconnected-notice" x-show="senderState === 'disconnected'">
             <img src="./img/disconnected.svg" style="width:32px;height:32px;margin-bottom:12px;" alt="Disconnected">
-            <div style="font-size:15px;font-weight:600;color:var(--text);">Sender disconnected</div>
-            <div style="font-size:13px;color:var(--text2);margin-top:4px;">Enter the code above in Musicify to reconnect.</div>
+            <div style="font-size:15px;font-weight:600;color:var(--text);" locale="sender_disconnected">Sender disconnected</div>
+            <div style="font-size:13px;color:var(--text2);margin-top:4px;" locale="reconnect_hint">Enter the code above in Musicify to reconnect.</div>
         </div>
 
         <div class="peer-count">
@@ -413,6 +414,13 @@
 </div>
 
 <script>
+var applocale = new NewAppLocale();
+$(document).ready(function(){
+    applocale.init("locale/arozcast.json", function(){
+        applocale.translate();
+    });
+});
+
 function arozcastApp() {
     return {
         // State

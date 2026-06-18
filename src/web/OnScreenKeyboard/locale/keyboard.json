@@ -1,0 +1,53 @@
+{
+    "author": "tobychui",
+    "version": "1.0",
+    "keys": {
+        "en-us": {
+            "name": "English (US)",
+            "strings": {
+                "on_screen_keyboard": "On-Screen Keyboard",
+                "window_title": "On-Screen Keyboard"
+            }
+        },
+        "zh-tw": {
+            "name": "繁體中文（台灣）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "on_screen_keyboard": "螢幕鍵盤",
+                "window_title": "螢幕鍵盤"
+            }
+        },
+        "zh-hk": {
+            "name": "繁體中文（香港）",
+            "fontFamily": "\"Microsoft JhengHei\",\"SimHei\",\"Apple LiGothic Medium\",\"STHeiti\"",
+            "strings": {
+                "on_screen_keyboard": "螢幕鍵盤",
+                "window_title": "螢幕鍵盤"
+            }
+        },
+        "zh-cn": {
+            "name": "简体中文",
+            "fontFamily": "\"Microsoft YaHei\",\"SimHei\",\"STXihei\"",
+            "strings": {
+                "on_screen_keyboard": "屏幕键盘",
+                "window_title": "屏幕键盘"
+            }
+        },
+        "ja-jp": {
+            "name": "日本語",
+            "fontFamily": "\"Yu Gothic\",\"Meiryo\",\"Hiragino Sans\"",
+            "strings": {
+                "on_screen_keyboard": "スクリーンキーボード",
+                "window_title": "スクリーンキーボード"
+            }
+        },
+        "ko-kr": {
+            "name": "한국어",
+            "fontFamily": "\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"NanumGothic\"",
+            "strings": {
+                "on_screen_keyboard": "화면 키보드",
+                "window_title": "화면 키보드"
+            }
+        }
+    }
+}
