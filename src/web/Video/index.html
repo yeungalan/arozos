@@ -10,6 +10,7 @@
         <script src="../script/semantic/semantic.min.js"></script>
         <script src="../script/ao_module.js"></script>
         <script src="script/DPlayer.min.js"></script>
+        <script src="../script/applocale.js"></script>
 
         <link rel="manifest" crossorigin="use-credentials" href="manifest.json">
         <title>Video</title>
@@ -89,25 +90,25 @@
         <!-- PlayList-->
         <div class="ui container">
             <h3 class="ui header">
-                <span id="videoname">No Video Loaded</span>
-                <div class="sub header"><span id="playlistName">N/A</span> / <span id="ext">[no_media]</span></div>
+                <span id="videoname" locale="video/no-video-loaded">No Video Loaded</span>
+                <div class="sub header"><span id="playlistName" locale="video/playlist-na">N/A</span> / <span id="ext">[no_media]</span></div>
             </h3>
             <div class="ui segment">
-                <p><i class="expand icon"></i>Screen Size</p>
+                <p><i class="expand icon"></i><span locale="video/screen-size">Screen Size</span></p>
                 <!--
                     <button class="ui tiny button" onclick="setScreenSize('50%');">
                         Small
                     </button>
                  -->
                 <button class="ui tiny button" onclick="setScreenSize('70%'); previousScreenSize='70%';">
-                    Normal
+                    <span locale="video/btn-normal">Normal</span>
                 </button>
                 <button class="ui tiny button" onclick="setScreenSize('100%');previousScreenSize='100%';">
-                    Full Width
+                    <span locale="video/btn-full-width">Full Width</span>
                 </button>
                 <div class="ui toggle right floated checkbox">
                     <input id="autoplayToggle" type="checkbox" name="autoplay" onchange="setAutoplay(this);">
-                    <label>Autoplay</label>
+                    <label locale="video/autoplay">Autoplay</label>
                 </div>
             </div>
             
@@ -121,7 +122,7 @@
                 <div id="playList" class="ui accordion">
                     <div class="title">
                         <i class="dropdown icon"></i>
-                        <i class="list icon"></i> PlayLists
+                        <i class="list icon"></i> <span locale="video/playlists">PlayLists</span>
                     </div>
                     <div class="content">
                         <div id="playListSelector" class="ui relaxed divided list">
@@ -131,7 +132,7 @@
                     
                     <div class="title">
                         <i class="dropdown icon"></i>
-                        <i class="file icon"></i>PlayList Videos
+                        <i class="file icon"></i><span locale="video/playlist-videos">PlayList Videos</span>
                     </div>
                     <div class="content">
                         <div id="videolist" class="ui relaxed divided list">
@@ -153,18 +154,29 @@
             var previousScreenSize = "70%";
             $('.ui.dropdown').dropdown();
             
-            init();
-            initPlaylist();
+            function startApp() {
+                init();
+                initPlaylist();
 
-            //Check if there are file dropped into this interface. If yes, redirect to embedded
-            var infile = ao_module_loadInputFiles();
-            if (infile != null){
-                window.location.href = "embedded.html" + window.location.hash;
+                //Check if there are file dropped into this interface. If yes, redirect to embedded
+                var infile = ao_module_loadInputFiles();
+                if (infile != null){
+                    window.location.href = "embedded.html" + window.location.hash;
+                }
+
+                autoPlay = (ao_module_storage.loadStorage("Video","autoplay") == "true");
+                if (autoPlay){
+                    $("#autoplayToggle").attr("checked",true);
+                }
             }
 
-            autoPlay = (ao_module_storage.loadStorage("Video","autoplay") == "true");
-            if (autoPlay){
-                $("#autoplayToggle").attr("checked",true);
+            if (typeof applocale !== 'undefined' && applocale) {
+                applocale.init('locale/video.json', function() {
+                    applocale.translate();
+                    startApp();
+                });
+            } else {
+                startApp();
             }
 
             function init(){

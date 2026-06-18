@@ -15,6 +15,7 @@
 
     <!-- App path config (single source of truth for all API paths) -->
     <script src="backend/common.js"></script>
+    <script src="../script/applocale.js"></script>
 
 <style>
 /* ─── Reset & base ──────────────────────────────────────────────────────────── */
@@ -1141,18 +1142,18 @@ html, body {
     <!-- ─ Loading overlay ─────────────────────────────────────────────────── -->
     <div id="loading-overlay">
         <div class="spinner"></div>
-        <span>Loading library…</span>
+        <span locale="movie/loading">Loading library…</span>
     </div>
 
     <!-- ─ Top bar ─────────────────────────────────────────────────────────── -->
     <div id="topbar">
         <h1><img src="img/module_icon.png" width="22" height="22" alt="" style="vertical-align:middle;margin-right:6px;margin-top:-4px;"><span>Movie</span></h1>
         <div id="mode-tabs">
-            <button class="mode-tab active" id="tab-library" onclick="switchTab('library')">Library</button>
-            <button class="mode-tab" id="tab-folder" onclick="switchTab('folder')">Browse</button>
+            <button class="mode-tab active" id="tab-library" onclick="switchTab('library')" locale="movie/tab-library">Library</button>
+            <button class="mode-tab" id="tab-folder" onclick="switchTab('folder')" locale="movie/tab-browse">Browse</button>
         </div>
         <div id="search-wrap">
-            <input id="search-input" type="text" placeholder="Search…" autocomplete="off">
+            <input id="search-input" type="text" placeholder="Search…" autocomplete="off" locale="movie/search-placeholder">
         </div>
     </div>
 
@@ -1161,37 +1162,37 @@ html, body {
         <div id="library-status-bar">
             <div class="spinner-sm" id="library-spinner"></div>
             <span id="library-status-text"></span>
-            <button id="library-refresh-btn" onclick="refreshLibrary()" style="display:none">Refresh</button>
+            <button id="library-refresh-btn" onclick="refreshLibrary()" style="display:none" locale="movie/btn-refresh">Refresh</button>
         </div>
         <div id="library-scroll">
             <div id="no-content">
                 <div class="icon"><img src="img/icons/movie_white.svg" alt=""></div>
-                <div>No videos found. Place your videos in a <strong>Video/</strong> folder on any storage.</div>
+                <div locale="movie/no-videos">No videos found. Place your videos in a <strong>Video/</strong> folder on any storage.</div>
             </div>
             <div id="movies-section" style="display:none">
-                <div class="section-title">Movies</div>
+                <div class="section-title" locale="movie/section-movies">Movies</div>
                 <div id="movies-grid" class="album-grid"></div>
-                <div class="load-more-wrap"><button class="load-more-btn" id="movies-load-more" style="display:none" onclick="loadMoreSection('movies')">Load more</button></div>
+                <div class="load-more-wrap"><button class="load-more-btn" id="movies-load-more" style="display:none" onclick="loadMoreSection('movies')" locale="movie/btn-load-more">Load more</button></div>
             </div>
             <div id="collections-section" style="display:none">
-                <div class="section-title">Collections</div>
+                <div class="section-title" locale="movie/section-collections">Collections</div>
                 <div id="collections-grid" class="album-grid"></div>
-                <div class="load-more-wrap"><button class="load-more-btn" id="collections-load-more" style="display:none" onclick="loadMoreSection('collections')">Load more</button></div>
+                <div class="load-more-wrap"><button class="load-more-btn" id="collections-load-more" style="display:none" onclick="loadMoreSection('collections')" locale="movie/btn-load-more">Load more</button></div>
             </div>
             <div id="series-section" style="display:none">
-                <div class="section-title">TV / Shows</div>
+                <div class="section-title" locale="movie/section-tvshows">TV / Shows</div>
                 <div id="series-grid" class="album-grid"></div>
-                <div class="load-more-wrap"><button class="load-more-btn" id="shows-load-more" style="display:none" onclick="loadMoreSection('shows')">Load more</button></div>
+                <div class="load-more-wrap"><button class="load-more-btn" id="shows-load-more" style="display:none" onclick="loadMoreSection('shows')" locale="movie/btn-load-more">Load more</button></div>
             </div>
             <div id="anime-section" style="display:none">
-                <div class="section-title">Anime</div>
+                <div class="section-title" locale="movie/section-anime">Anime</div>
                 <div id="anime-grid" class="album-grid"></div>
-                <div class="load-more-wrap"><button class="load-more-btn" id="anime-load-more" style="display:none" onclick="loadMoreSection('anime')">Load more</button></div>
+                <div class="load-more-wrap"><button class="load-more-btn" id="anime-load-more" style="display:none" onclick="loadMoreSection('anime')" locale="movie/btn-load-more">Load more</button></div>
             </div>
             <div id="shorts-section" style="display:none">
-                <div class="section-title">Shorts</div>
+                <div class="section-title" locale="movie/section-shorts">Shorts</div>
                 <div id="shorts-grid" class="album-grid"></div>
-                <div class="load-more-wrap"><button class="load-more-btn" id="shorts-load-more" style="display:none" onclick="loadMoreSection('shorts')">Load more</button></div>
+                <div class="load-more-wrap"><button class="load-more-btn" id="shorts-load-more" style="display:none" onclick="loadMoreSection('shorts')" locale="movie/btn-load-more">Load more</button></div>
             </div>
         </div>
     </div>
@@ -1206,13 +1207,13 @@ html, body {
                     <div id="detail-title">Album Title</div>
                     <div id="detail-subtitle">0 episodes</div>
                     <div id="detail-actions">
-                        <button class="btn btn-primary" id="btn-play-first"><img src="img/icons/play_black.svg" width="15" height="15" alt="" style="vertical-align:middle;margin-right:5px;">Play</button>
-                        <button class="btn btn-secondary" id="btn-shuffle"><img src="img/icons/shuffle_white.svg" width="15" height="15" alt="" style="vertical-align:middle;margin-right:5px;">Shuffle</button>
+                        <button class="btn btn-primary" id="btn-play-first"><img src="img/icons/play_black.svg" width="15" height="15" alt="" style="vertical-align:middle;margin-right:5px;"><span locale="movie/btn-play">Play</span></button>
+                        <button class="btn btn-secondary" id="btn-shuffle"><img src="img/icons/shuffle_white.svg" width="15" height="15" alt="" style="vertical-align:middle;margin-right:5px;"><span locale="movie/btn-shuffle">Shuffle</span></button>
                     </div>
                 </div>
             </div>
         </div>
-        <button id="detail-back" onclick="showLibrary()"><img src="img/icons/back_arrow_white.svg" width="14" height="14" alt="" style="vertical-align:middle;margin-right:4px;">Back</button>
+        <button id="detail-back" onclick="showLibrary()"><img src="img/icons/back_arrow_white.svg" width="14" height="14" alt="" style="vertical-align:middle;margin-right:4px;"><span locale="movie/btn-back">Back</span></button>
 
         <div id="season-tabs"></div>
 
@@ -1224,7 +1225,7 @@ html, body {
     <!-- ═══════════════ MOVIE INFO VIEW ══════════════════════════════════════ -->
     <div id="view-movie-info" class="view">
         <div id="movie-info-backdrop"></div>
-        <button id="movie-info-back" onclick="closeMovieInfo()"><img src="img/icons/back_arrow_white.svg" width="14" height="14" alt="" style="vertical-align:middle;margin-right:4px;">Back</button>
+        <button id="movie-info-back" onclick="closeMovieInfo()"><img src="img/icons/back_arrow_white.svg" width="14" height="14" alt="" style="vertical-align:middle;margin-right:4px;"><span locale="movie/btn-back">Back</span></button>
         <div id="movie-info-scroll">
             <div id="movie-info-hero">
                 <div id="movie-info-poster-wrap">
@@ -1236,15 +1237,15 @@ html, body {
                     <div id="movie-info-year"></div>
                     <div id="movie-info-cast"></div>
                     <div id="movie-info-actions">
-                        <button class="btn btn-primary" id="movie-info-play-btn"><img src="img/icons/play_black.svg" width="15" height="15" alt="" style="vertical-align:middle;margin-right:5px;">Play</button>
-                        <button class="btn btn-secondary" id="movie-info-fm-btn">Open in Files</button>
+                        <button class="btn btn-primary" id="movie-info-play-btn"><img src="img/icons/play_black.svg" width="15" height="15" alt="" style="vertical-align:middle;margin-right:5px;"><span locale="movie/btn-play">Play</span></button>
+                        <button class="btn btn-secondary" id="movie-info-fm-btn" locale="movie/btn-open-files">Open in Files</button>
                         <button class="yt-badge" id="movie-info-yt-btn">▶ YouTube</button>
                         <button class="imdb-badge" id="movie-info-imdb-btn" style="display:none">IMDb</button>
                     </div>
                 </div>
             </div>
             <div id="movie-info-wrong-wrap">
-                <button class="reset-info-btn" id="movie-info-reset-btn">✕ Wrong movie? Disable IMDB info</button>
+                <button class="reset-info-btn" id="movie-info-reset-btn">✕ <span locale="movie/btn-wrong-movie">Wrong movie? Disable IMDB info</span></button>
             </div>
             <div id="movie-info-loading"><div class="spinner"></div><span>Loading info…</span></div>
             <div id="movie-info-files" style="display:none">

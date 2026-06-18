@@ -6,6 +6,7 @@
     <title>AGI Forge</title>
     <script src="../script/jquery.min.js"></script>
     <script src="../script/ao_module.js"></script>
+    <script src="../script/applocale.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -236,15 +237,15 @@
                 <div class="logo">&#10095;</div>
                 <div class="bt">
                     <b>AGI Forge</b>
-                    <i>natural language &rarr; AGI script &rarr; result</i>
+                    <i locale="agiforge/brand-subtitle">natural language &rarr; AGI script &rarr; result</i>
                 </div>
             </div>
             <div class="tb-controls">
-                <label class="model-wrap">model
+                <label class="model-wrap"><span locale="agiforge/model-label">model</span>
                     <select id="modelSel"><option value="">default</option></select>
                 </label>
-                <label class="switch"><input type="checkbox" id="autorun" checked> auto-run</label>
-                <button class="tb-btn" id="clearBtn" onclick="resetConvo()">New</button>
+                <label class="switch"><input type="checkbox" id="autorun" checked> <span locale="agiforge/autorun-label">auto-run</span></label>
+                <button class="tb-btn" id="clearBtn" onclick="resetConvo()" locale="agiforge/btn-new">New</button>
             </div>
         </div>
 
@@ -253,14 +254,14 @@
             <div class="inner" id="inner">
                 <div class="empty" id="empty">
                     <div class="empty-logo">&#10095;</div>
-                    <h1>What should we build?</h1>
-                    <p>Describe a task in plain language. AGI Forge writes an AGI script
+                    <h1 locale="agiforge/empty-title">What should we build?</h1>
+                    <p locale="agiforge/empty-desc">Describe a task in plain language. AGI Forge writes an AGI script
                        grounded in the live API reference, runs it on your ArozOS server,
                        and hands back the output &mdash; including any file it generates.</p>
                     <div class="examples" id="examples"></div>
                     <div class="empty-note">
-                        Uses your configured AI model &middot;
-                        <a onclick="openAISettings()">Configure endpoint &amp; key</a>
+                        <span locale="agiforge/uses-ai-model">Uses your configured AI model</span> &middot;
+                        <a onclick="openAISettings()" locale="agiforge/configure-link">Configure endpoint &amp; key</a>
                     </div>
                 </div>
             </div>
@@ -270,10 +271,10 @@
         <div class="composer-wrap">
             <div class="composer">
                 <textarea id="ta" rows="1" placeholder="Describe a task&hellip;  e.g. &ldquo;list the 10 largest files on my Desktop&rdquo;"
-                          autocomplete="off" spellcheck="false"></textarea>
-                <button id="send" onclick="onSend()">Send &#9654;</button>
+                          autocomplete="off" spellcheck="false" locale="agiforge/placeholder"></textarea>
+                <button id="send" onclick="onSend()" locale="agiforge/btn-send">Send &#9654;</button>
             </div>
-            <div class="composer-hint">
+            <div class="composer-hint" locale="agiforge/composer-hint">
                 Enter to send &middot; Shift+Enter for a new line &middot;
                 generated scripts run on the server with your permissions
             </div>
@@ -300,7 +301,7 @@
     ];
 
     /* ── boot ──────────────────────────────────────────────────────────── */
-    $(document).ready(function () {
+    function startApp() {
         renderExamples();
         loadModels();
 
@@ -311,7 +312,16 @@
         });
         document.getElementById("autorun").checked = true;
         ta.focus();
-    });
+    }
+
+    if (typeof applocale !== 'undefined' && applocale) {
+        applocale.init('locale/agiforge.json', function() {
+            applocale.translate();
+            startApp();
+        });
+    } else {
+        startApp();
+    }
 
     function renderExamples() {
         var box = document.getElementById("examples");
@@ -610,7 +620,7 @@
 
     function buildFileChip(f) {
         var chip = el("div", "file-chip" + (f.exists ? "" : " missing"));
-        var ico = el("div", "fc-ico"); ico.textContent = f.exists ? "📄" : "⚠";
+        var ico = el("div", "fc-ico"); ico.innerHTML = f.exists ? '<i class="file outline icon"></i>' : '<i class="warning sign icon"></i>';
         var info = el("div", "fc-info");
         var name = el("div", "fc-name"); name.textContent = f.name || f.path;
         var sub = el("div", "fc-sub");
