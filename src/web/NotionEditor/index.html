@@ -92,6 +92,7 @@
                     if (!collab || !collab.isConnected()) scheduleAutosave();
                 },
                 onPresence: function (blockId) { if (collab) collab.sendPresence(blockId); },
+                onResync: function () { if (collab) collab.requestSnapshot(); },
                 onAI: function (blockId) { ai.open(blockId); },
                 onSave: function () { saveNow(true); },
                 pickFromStorage: function (kind, cb) {
@@ -201,11 +202,14 @@
                 }
             }
 
-            function setStatus(state) {
+            function setStatus(state, detail) {
                 var el = document.getElementById("status");
                 el.className = "ne-status " + state;
                 var label = state === "connected" ? "Live" : (state === "connecting" ? "Connecting" : "Offline");
                 el.querySelector(".label").textContent = label;
+                el.title = "Collaboration room: " + docId +
+                    (detail ? "\n" + detail : "") +
+                    (state !== "connected" ? "\nIf this stays Offline, ensure the ArozOS server was rebuilt and restarted." : "");
             }
 
             // ---- boot: load content then connect -----------------------------

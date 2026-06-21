@@ -70,3 +70,29 @@ NotionEditor/
   via the standard `media?file=` endpoint.
 - Markdown is the on-disk format. Images export as `![alt](vpath)` and videos as
   a raw `<video>` tag, both of which round-trip back into blocks on load.
+
+## Troubleshooting collaboration
+
+The header shows a status pill: **Live** (connected), **Connecting**, or
+**Offline**. Hover it for the room id and the last socket close code. The
+browser console also logs the connection lifecycle (prefixed `[NotionEditor]`).
+
+If the pill stays **Offline**:
+
+1. **Rebuild and restart the server.** Collaboration is served by Go code
+   (`/api/collab/ws`). Copying the web assets alone is not enough — you must
+   `cd src && go build && ./arozos` so the new endpoint exists. A 404 on the
+   WebSocket handshake (close code 1006) is the tell-tale sign of a stale binary.
+2. **Open the *same saved file* on both sides.** The collaboration room is keyed
+   by the document's virtual path, so both editors must point at the same `.md`
+   file. Two freshly-created (unsaved) documents get separate rooms — save first,
+   then open that file on the other side.
+3. **Check module access.** The endpoint is gated by the `NotionEditor` module
+   permission. Admins always have it; for other users an admin must grant the
+   module to their permission group.
+4. **Reverse proxies** must forward WebSocket upgrades for `/api/collab/ws`.
+
+Block ids are generated per client when Markdown is parsed; they are aligned
+across clients via the room snapshot on join, and self-heal (a snapshot is
+re-requested) if an operation ever references an unknown block.
+

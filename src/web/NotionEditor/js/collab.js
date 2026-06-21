@@ -29,20 +29,24 @@
     }
 
     NECollab.prototype._wsURL = function () {
-        var u = new URL(this.aoRoot + "api/collab/ws", window.location.href);
-        u.protocol = (u.protocol === "https:") ? "wss:" : "ws:";
-        u.search = "?doc=" + encodeURIComponent(this.docId);
-        return u.toString();
+        // Resolve against the page, then build the ws/wss URL by string so we do
+        // not depend on the URL.protocol setter switching http<->ws.
+        var http = new URL(this.aoRoot + "api/collab/ws", window.location.href);
+        var proto = (http.protocol === "https:") ? "wss:" : "ws:";
+        return proto + "//" + http.host + http.pathname + "?doc=" + encodeURIComponent(this.docId);
     };
 
     NECollab.prototype.connect = function () {
         if (this.destroyed) return;
         this._setStatus("connecting");
         var self = this;
+        var url = this._wsURL();
+        console.log("[NotionEditor] connecting to", url, "room:", this.docId);
         var ws;
         try {
-            ws = new WebSocket(this._wsURL());
+            ws = new WebSocket(url);
         } catch (e) {
+            console.warn("[NotionEditor] WebSocket construction failed", e);
             this._scheduleReconnect();
             return;
         }
@@ -52,11 +56,15 @@
             self.backoff = 1000;
             self._setStatus("connected");
             self._startKeepalive();
+            console.log("[NotionEditor] collaboration connected");
         };
         ws.onmessage = function (ev) { self._onMessage(ev.data); };
-        ws.onclose = function () {
+        ws.onclose = function (ev) {
             self._stopKeepalive();
-            self._setStatus("offline");
+            self._setStatus("offline", "code " + (ev ? ev.code : "?"));
+            console.warn("[NotionEditor] collaboration socket closed (code " +
+                (ev ? ev.code : "?") + "). Is the ArozOS server rebuilt with the " +
+                "collaboration hub? Retrying...");
             self._scheduleReconnect();
         };
         ws.onerror = function () { /* close handler will deal with it */ };
@@ -86,6 +94,8 @@
         if (msg.type === "welcome") {
             this.selfId = msg.id;
             this.color = msg.color;
+            console.log("[NotionEditor] joined room, members:", (msg.members || []).length,
+                "snapshot:", !!msg.hasSnapshot);
             if (msg.hasSnapshot && msg.snapshot) {
                 this._loadSnapshot(msg.snapshot);
             } else {
@@ -163,6 +173,18 @@
         if (!this.primary) return;
         this._send({ type: "snapshot", data: JSON.stringify(this.editor.getBlocks()), rev: Date.now() });
         if (this.opts.onLocalChange) this.opts.onLocalChange(true);
+    };
+
+    // Ask the hub for the authoritative snapshot. Used to self-heal when a remote
+    // op references a block this client does not know (block ids only align once a
+    // client has adopted the room snapshot). The primary IS the source of truth,
+    // so it never needs to pull.
+    NECollab.prototype.requestSnapshot = function () {
+        if (this.primary) return;
+        var now = Date.now();
+        if (this._lastSnapReq && (now - this._lastSnapReq) < 1500) return; // throttle
+        this._lastSnapReq = now;
+        this._send({ type: "requestSnapshot" });
     };
 
     NECollab.prototype.isPrimary = function () { return this.primary; };

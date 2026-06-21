@@ -928,8 +928,13 @@
                 if (op.block.id === this.focusedId) {
                     // Defer until the local user leaves the block to avoid caret jumps.
                     this.pendingRemote[op.block.id] = op.block;
-                } else {
+                } else if (this.byId[op.block.id]) {
                     this._applyUpdateNow(op.block);
+                } else if (this.opts.onResync) {
+                    // Unknown block id: our block ids have not aligned with the room
+                    // (e.g. both clients joined a cold room at once). Pull the
+                    // authoritative snapshot to re-align.
+                    this.opts.onResync();
                 }
             } else if (op.kind === "insert") {
                 if (this.indexOf(op.block.id) === -1) { this.insertAfter(op.afterId, op.block); }
