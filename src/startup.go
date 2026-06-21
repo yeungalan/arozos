@@ -131,6 +131,7 @@ func RunStartup() {
 	SchedulerInit()  //Start System Scheudler
 	SubserviceInit() //Subservice Handler
 	ArozcastInit()   //Arozcast remote projection pub/sub relay
+	CollabInit()     //NotionEditor collaborative document hub (real-time edit + presence)
 
 	//9. Initiate System Settings Handlers
 	SystemSettingInit()       //Start System Setting Core

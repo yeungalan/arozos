@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NotionEditor</title>
+    <link rel="stylesheet" href="../script/semantic/semantic.min.css">
+    <link rel="stylesheet" href="css/editor.css">
+    <script src="../script/jquery.min.js"></script>
+    <script src="../script/ao_module.js"></script>
+</head>
+
+<body data-theme="light">
+    <div class="ne-app">
+        <div class="ne-header">
+            <input type="text" class="ne-title" id="docTitle" placeholder="Untitled" spellcheck="false">
+            <div class="ne-presence" id="presence"></div>
+            <div class="ne-status" id="status"><span class="dot"></span><span class="label">Offline</span></div>
+            <span class="ne-savestate" id="saveState"></span>
+            <button class="ne-hbtn" id="btnAI" title="Ask AI"><i class="magic icon"></i> AI</button>
+            <button class="ne-hbtn" id="btnDownload" title="Download as Markdown"><i class="download icon"></i></button>
+            <button class="ne-hbtn primary" id="btnSave" title="Save (Ctrl/Cmd+S)"><i class="save icon"></i> Save</button>
+        </div>
+        <div class="ne-scroll">
+            <div class="ne-page" id="editor"></div>
+        </div>
+    </div>
+
+    <script src="js/markdown.js"></script>
+    <script src="js/editor.js"></script>
+    <script src="js/collab.js"></script>
+    <script src="js/ai.js"></script>
+    <script>
+        (function () {
+            "use strict";
+
+            var ao_root_path = (typeof ao_root !== "undefined") ? ao_root : "../";
+            var MEDIA_DIR = "user:/Documents/NotionEditor/media";
+
+            // ---- helpers -----------------------------------------------------
+            function parse(data) {
+                if (typeof data === "object") return data;
+                try { return JSON.parse(data); } catch (e) { return null; }
+            }
+            function agiRun(script, data, ok, fail, timeout) {
+                ao_module_agirun("NotionEditor/" + script, data, ok, fail, timeout || 0);
+            }
+            function mediaUrl(vpath) {
+                if (/^https?:|^data:/.test(vpath)) return vpath;
+                return ao_root_path + "media?file=" + encodeURIComponent(vpath);
+            }
+            function safeName(s) {
+                return (s || "Untitled").replace(/[\\/:*?"<>|]/g, "_").trim() || "Untitled";
+            }
+            function initials(name) {
+                if (!name) return "?";
+                var parts = name.trim().split(/\s+/);
+                return (parts[0].charAt(0) + (parts[1] ? parts[1].charAt(0) : "")).toUpperCase();
+            }
+
+            // ---- document identity -------------------------------------------
+            var inputFiles = ao_module_loadInputFiles();
+            var currentPath = null;
+            var title = "Untitled";
+            if (inputFiles && inputFiles.length) {
+                currentPath = inputFiles[0].filepath || inputFiles[0];
+                var fname = currentPath.split("/").pop();
+                title = fname.replace(/\.(md|markdown)$/i, "");
+            }
+            var docId = currentPath ? currentPath : ("untitled-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+
+            document.getElementById("docTitle").value = title;
+            ao_module_setWindowTitle(title || "NotionEditor");
+
+            // ---- theme -------------------------------------------------------
+            function applyTheme(t) { document.body.setAttribute("data-theme", t === "dark" ? "dark" : "light"); }
+            try { ao_module_getSystemThemeColor(function (c) { applyTheme(c); }); } catch (e) { }
+            try { ao_module_onThemeChanged(function (t) { applyTheme(t); }); } catch (e) { }
+
+            // ---- save state UI ----------------------------------------------
+            var saveStateEl = document.getElementById("saveState");
+            function setSaveState(s) { saveStateEl.textContent = s; }
+
+            // ---- editor ------------------------------------------------------
+            var collab = null;
+            var editor = new NEEditor(document.getElementById("editor"), {
+                mediaUrl: mediaUrl,
+                onOp: function (op) { if (collab) collab.sendOp(op); },
+                onDirty: function () {
+                    setSaveState("Editing…");
+                    if (!collab || !collab.isConnected()) scheduleAutosave();
+                },
+                onPresence: function (blockId) { if (collab) collab.sendPresence(blockId); },
+                onAI: function (blockId) { ai.open(blockId); },
+                onSave: function () { saveNow(true); },
+                pickFromStorage: function (kind, cb) {
+                    var filter = kind === "video"
+                        ? ["mp4", "webm", "ogg", "mov", "m4v"]
+                        : ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"];
+                    ao_module_openFileSelector(function (files) {
+                        if (files && files.length) { cb(files[0].filepath || files[0]); }
+                    }, "user:/", "file", false, { filter: filter });
+                },
+                uploadBlob: function (file, cb) {
+                    var ext = (file.type.split("/")[1] || "bin").split("+")[0];
+                    var unique = "ne_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + "." + ext;
+                    var named = new File([file], unique, { type: file.type });
+                    var vpath = MEDIA_DIR + "/" + unique;
+                    setSaveState("Uploading…");
+                    ao_module_uploadFile(named, MEDIA_DIR, function () {
+                        setSaveState("Saved media");
+                        cb({ vpath: vpath, url: mediaUrl(vpath) });
+                    }, undefined, function () {
+                        setSaveState("Upload failed");
+                    });
+                }
+            });
+
+            // ---- AI ----------------------------------------------------------
+            var ai = new NEAI(editor, {
+                agiRun: agiRun,
+                getContext: function () { return editor.toMarkdown().slice(0, 6000); },
+                onStatus: function (configured) {
+                    document.getElementById("btnAI").style.display = configured ? "" : "none";
+                }
+            });
+
+            // ---- save logic --------------------------------------------------
+            var scheduleAutosave = NEUtil.debounce(function () { saveNow(false); }, 1200);
+
+            function saveNow(manual) {
+                // Don't auto-create a file for a brand-new untitled document; the
+                // user must Save once (which assigns a path) before autosave kicks in.
+                if (!manual && !currentPath) return;
+                // Only the primary collaborator persists when connected, so a file is
+                // never written by several editors at once. A lone / offline editor
+                // (or an explicit Save) always writes.
+                if (!manual && collab && collab.isConnected() && !collab.isPrimary()) return;
+
+                if (!currentPath) {
+                    currentPath = "user:/Documents/" + safeName(document.getElementById("docTitle").value) + ".md";
+                }
+                var md = editor.toMarkdown();
+                setSaveState("Saving…");
+                agiRun("backend/save.agi", { path: currentPath, content: md }, function (resp) {
+                    var d = parse(resp);
+                    if (d && d.ok) {
+                        setSaveState("Saved · " + new Date().toLocaleTimeString());
+                    } else {
+                        setSaveState((d && d.error) ? d.error : "Save failed");
+                    }
+                }, function () { setSaveState("Save failed"); });
+            }
+
+            document.getElementById("btnSave").addEventListener("click", function () { saveNow(true); });
+            document.getElementById("btnDownload").addEventListener("click", function () {
+                var md = editor.toMarkdown();
+                var blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+                var a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = safeName(document.getElementById("docTitle").value) + ".md";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+            });
+            document.getElementById("btnAI").addEventListener("click", function () {
+                ai.open(editor.focusedId || (editor.blocks.length ? editor.blocks[editor.blocks.length - 1].id : null));
+            });
+            document.getElementById("docTitle").addEventListener("input", function (e) {
+                title = e.target.value;
+                ao_module_setWindowTitle(title || "NotionEditor");
+            });
+            window.addEventListener("keydown", function (e) {
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+                    e.preventDefault();
+                    saveNow(true);
+                }
+            });
+
+            // ---- presence avatars --------------------------------------------
+            function renderPresence(members, selfId) {
+                var box = document.getElementById("presence");
+                box.innerHTML = "";
+                var shown = members.slice(0, 5);
+                shown.forEach(function (m) {
+                    var a = document.createElement("div");
+                    a.className = "ne-avatar";
+                    a.style.background = m.color;
+                    a.textContent = initials(m.name);
+                    a.title = m.name + (m.id === selfId ? " (you)" : "");
+                    box.appendChild(a);
+                });
+                if (members.length > shown.length) {
+                    var more = document.createElement("div");
+                    more.className = "ne-avatar";
+                    more.style.background = "#888";
+                    more.textContent = "+" + (members.length - shown.length);
+                    box.appendChild(more);
+                }
+            }
+
+            function setStatus(state) {
+                var el = document.getElementById("status");
+                el.className = "ne-status " + state;
+                var label = state === "connected" ? "Live" : (state === "connecting" ? "Connecting" : "Offline");
+                el.querySelector(".label").textContent = label;
+            }
+
+            // ---- boot: load content then connect -----------------------------
+            function startCollab() {
+                collab = new NECollab(editor, {
+                    docId: docId,
+                    aoRoot: ao_root_path,
+                    onStatus: setStatus,
+                    onMembers: renderPresence,
+                    onLocalChange: function (pushed) { if (pushed) scheduleAutosave(); }
+                });
+                collab.connect();
+            }
+
+            if (currentPath) {
+                setSaveState("Loading…");
+                agiRun("backend/load.agi", { path: currentPath }, function (resp) {
+                    var d = parse(resp);
+                    if (d && d.exists && d.content) {
+                        editor.loadMarkdown(d.content);
+                        setSaveState("Saved");
+                    } else {
+                        editor.emptyDoc();
+                        setSaveState("");
+                    }
+                    startCollab();
+                }, function () {
+                    editor.emptyDoc();
+                    startCollab();
+                });
+            } else {
+                editor.emptyDoc();
+                startCollab();
+            }
+
+            window.addEventListener("beforeunload", function () { if (collab) collab.destroy(); });
+        })();
+    </script>
+</body>
+
+</html>

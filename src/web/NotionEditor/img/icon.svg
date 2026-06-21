@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="NotionEditor">
+  <defs>
+    <linearGradient id="ne-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#6366f1"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="116" height="116" rx="26" fill="url(#ne-bg)"/>
+  <!-- page -->
+  <rect x="34" y="26" width="60" height="76" rx="8" fill="#ffffff"/>
+  <!-- text lines -->
+  <rect x="44" y="40" width="40" height="6" rx="3" fill="#c7d2fe"/>
+  <rect x="44" y="54" width="34" height="5" rx="2.5" fill="#e2e8f0"/>
+  <rect x="44" y="65" width="40" height="5" rx="2.5" fill="#e2e8f0"/>
+  <rect x="44" y="76" width="26" height="5" rx="2.5" fill="#e2e8f0"/>
+  <!-- slash command caret -->
+  <text x="44" y="95" font-family="monospace" font-size="16" font-weight="700" fill="#6366f1">/</text>
+  <!-- collaborator presence dots -->
+  <circle cx="92" cy="92" r="9" fill="#22c55e" stroke="#ffffff" stroke-width="3"/>
+  <circle cx="78" cy="92" r="9" fill="#f97316" stroke="#ffffff" stroke-width="3"/>
+</svg>

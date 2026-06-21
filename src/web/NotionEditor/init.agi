@@ -1,0 +1,26 @@
+/*
+    NotionEditor Module Registration
+
+    A block based, Notion style document editor with real-time multi-user
+    collaboration, slash commands, media paste, AI assistance and Markdown I/O.
+
+    Runs with system scope only - do not call user / filesystem functions here.
+*/
+
+var moduleLaunchInfo = {
+    Name: "NotionEditor",
+    Desc: "Block based collaborative document editor with slash commands, media paste and AI",
+    Group: "Office",
+    IconPath: "NotionEditor/img/icon.svg",
+    Version: "1.0.0",
+    StartDir: "NotionEditor/index.html",
+    SupportFW: true,
+    LaunchFWDir: "NotionEditor/index.html",
+    SupportEmb: true,
+    LaunchEmb: "NotionEditor/index.html",
+    InitFWSize: [1080, 720],
+    InitEmbSize: [720, 540],
+    SupportedExt: [".md", ".markdown"]
+}
+
+registerModule(JSON.stringify(moduleLaunchInfo));

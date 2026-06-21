@@ -1,0 +1,45 @@
+/*
+    NotionEditor - AI assistant bridge
+    POST:
+        prompt (string)            - the user instruction (required)
+        system (string, optional)  - system prompt override
+        model  (string, optional)  - model override
+        context(string, optional)  - surrounding document text for grounding
+    Returns: { text: string } or { error: string }
+
+    Uses the aimodel library, which an admin configures under
+    System Settings > AI Integration. When no model is configured the call
+    fails gracefully so the front-end can show a helpful message.
+*/
+if (!requirelib("aimodel")) {
+    sendJSONResp({ error: "AI model library unavailable" });
+} else {
+    var userPrompt = (typeof prompt !== "undefined") ? String(prompt) : "";
+    var sysPrompt = (typeof system !== "undefined") ? String(system) : "";
+    var mdl = (typeof model !== "undefined") ? String(model) : "";
+    var ctx = (typeof context !== "undefined") ? String(context) : "";
+
+    if (userPrompt === "") {
+        sendJSONResp({ error: "Empty prompt" });
+    } else {
+        var finalPrompt = userPrompt;
+        if (ctx !== "") {
+            finalPrompt = "Document context:\n\n" + ctx + "\n\n---\n\nInstruction: " + userPrompt;
+        }
+
+        var opts = {};
+        opts.system = (sysPrompt !== "")
+            ? sysPrompt
+            : "You are a writing assistant embedded in a document editor. Reply with clean Markdown only, no preamble or sign-off.";
+        if (mdl !== "") {
+            opts.model = mdl;
+        }
+
+        try {
+            var reply = aimodel.chat(finalPrompt, opts);
+            sendJSONResp({ text: reply });
+        } catch (e) {
+            sendJSONResp({ error: "AI request failed: " + String(e) });
+        }
+    }
+}

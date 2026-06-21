@@ -1,0 +1,19 @@
+/*
+    NotionEditor - Report AI availability
+    Returns: { configured: bool, default: string, models: [string] }
+
+    Lets the front-end decide whether to show AI features. Never throws to the
+    client: any failure is reported as configured:false.
+*/
+if (!requirelib("aimodel")) {
+    sendJSONResp({ configured: false, default: "", models: [] });
+} else {
+    try {
+        var m = aimodel.models();
+        var list = (m && m.models) ? m.models : [];
+        var def = (m && m.default) ? m.default : "";
+        sendJSONResp({ configured: def !== "", default: def, models: list });
+    } catch (e) {
+        sendJSONResp({ configured: false, default: "", models: [] });
+    }
+}

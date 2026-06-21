@@ -1,0 +1,32 @@
+/*
+    NotionEditor - Save a Markdown document
+    POST: path (vpath ending in .md / .markdown), content (markdown string)
+    Returns: { ok: true } or { error: string }
+*/
+requirelib("filelib");
+
+var docpath = (typeof path !== "undefined") ? String(path) : "";
+var data = (typeof content !== "undefined") ? String(content) : "";
+
+if (docpath === "") {
+    sendJSONResp({ error: "Missing path" });
+} else if (!/\.(md|markdown)$/i.test(docpath)) {
+    sendJSONResp({ error: "Only .md / .markdown files are supported" });
+} else if (!pathCanWrite(docpath)) {
+    sendJSONResp({ error: "Permission denied for this path" });
+} else {
+    // Best-effort: make sure the immediate parent directory exists.
+    var slash = docpath.lastIndexOf("/");
+    if (slash > 0) {
+        var parent = docpath.substring(0, slash);
+        if (parent.indexOf(":") !== -1 && !filelib.fileExists(parent)) {
+            filelib.mkdir(parent);
+        }
+    }
+
+    if (filelib.writeFile(docpath, data)) {
+        sendJSONResp({ ok: true });
+    } else {
+        sendJSONResp({ error: "Failed to write file" });
+    }
+}

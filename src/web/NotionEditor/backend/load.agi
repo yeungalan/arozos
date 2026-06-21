@@ -1,0 +1,23 @@
+/*
+    NotionEditor - Load a Markdown document
+    POST: path (vpath ending in .md / .markdown)
+    Returns: { exists: bool, content: string } or { error: string }
+
+    POST parameters are injected as globals by the AGI runtime, so we read them
+    defensively with typeof guards (an unset param is left undefined).
+*/
+requirelib("filelib");
+
+var docpath = (typeof path !== "undefined") ? String(path) : "";
+
+if (docpath === "") {
+    sendJSONResp({ error: "Missing path" });
+} else if (!/\.(md|markdown)$/i.test(docpath)) {
+    sendJSONResp({ error: "Only .md / .markdown files are supported" });
+} else if (!filelib.fileExists(docpath)) {
+    // A not-yet-saved document is a normal case, not an error.
+    sendJSONResp({ exists: false, content: "" });
+} else {
+    var content = filelib.readFile(docpath);
+    sendJSONResp({ exists: true, content: content });
+}
