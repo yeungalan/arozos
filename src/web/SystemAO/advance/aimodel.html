@@ -243,30 +243,37 @@ body.dark #aim-root {
             <tbody id="aim-metrics-body"><tr><td colspan="7" style="text-align:center; color:var(--aim-dim);">No usage recorded yet.</td></tr></tbody>
         </table>
     </div>
+    <div id="aim-toast"></div>
 </div>
-<div id="aim-toast"></div>
 
 <script>
-(function () {
+/* Apply theme immediately, outside the ready callback, so it fires even if
+   jQuery defers the ready handler by a tick on an already-loaded document. */
+(function applyTheme() {
+    try {
+        if (typeof preferredTheme !== 'undefined') {
+            document.body.classList.toggle('dark', (preferredTheme === 'dark' || preferredTheme === 'darkTheme'));
+            return;
+        }
+    } catch (e) {}
+    if (typeof ao_module_getSystemThemeColor === 'function') {
+        ao_module_getSystemThemeColor(function (c) { document.body.classList.toggle('dark', c !== 'whiteTheme'); });
+    }
+})();
+
+/* Use $(document).ready() so initialization is always deferred asynchronously.
+   This ensures that if a previous visit's in-flight AJAX callbacks complete
+   while new HTML is being injected, they reference their own captured $root
+   (the old, now-detached element) rather than the new DOM. */
+$(document).ready(function () {
     var API = "../../system/aimodel/";
     var $root = $("#aim-root");
     var discovered = [];
     var currency = "USD";
 
-    /* ── theme (match overview.html) ── */
-    (function applyTheme() {
-        try {
-            if (typeof preferredTheme !== 'undefined') {
-                document.body.classList.toggle('dark', (preferredTheme === 'dark' || preferredTheme === 'darkTheme'));
-                return;
-            }
-        } catch (e) {}
-        if (typeof ao_module_getSystemThemeColor === 'function') {
-            ao_module_getSystemThemeColor(function (c) { document.body.classList.toggle('dark', c !== 'whiteTheme'); });
-        }
-    })();
-
-    function el(id){ return document.getElementById(id); }
+    /* Scope all element lookups to $root so stale callbacks from a prior
+       visit cannot accidentally target elements belonging to this visit. */
+    function el(id){ return $root[0].querySelector('#' + id); }
     function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
     function numfmt(n){ return Number(n||0).toLocaleString(); }
     function money(n){ n = Number(n||0); return currency + " " + (n < 1 ? n.toFixed(4) : n.toFixed(2)); }
@@ -450,5 +457,5 @@ body.dark #aim-root {
     el("aim-reset-metrics").addEventListener("click", resetMetrics);
 
     loadConfig(); loadPricing(); loadQuota(); loadMetrics();
-})();
+});
 </script>
