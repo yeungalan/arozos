@@ -254,6 +254,35 @@ func TestModuleSortList_Empty(t *testing.T) {
 	mh.ModuleSortList() // should not panic
 }
 
+// TestInstallFromURL_BadURL verifies that an unreachable URL returns an error.
+func TestInstallFromURL_BadURL(t *testing.T) {
+	mh := &ModuleHandler{
+		LoadedModule: []*ModuleInfo{},
+		tmpDirectory: t.TempDir(),
+	}
+	err := mh.InstallFromURL("http://127.0.0.1:0/no-such-host", nil)
+	if err == nil {
+		t.Error("expected error for unreachable URL, got nil")
+	}
+}
+
+// TestInstallFromURL_Non200 verifies that a non-200 HTTP response returns an error.
+func TestInstallFromURL_Non200(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	mh := &ModuleHandler{
+		LoadedModule: []*ModuleInfo{},
+		tmpDirectory: t.TempDir(),
+	}
+	err := mh.InstallFromURL(srv.URL+"/notfound.zip", nil)
+	if err == nil {
+		t.Error("expected error for 404 response, got nil")
+	}
+}
+
 // TestOnModuleUninstall_Hook verifies the hook is called on uninstall (only if hook is set)
 func TestOnModuleUninstall_Hook(t *testing.T) {
 	mh := &ModuleHandler{LoadedModule: []*ModuleInfo{}}

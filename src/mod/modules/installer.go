@@ -79,6 +79,41 @@ func (m *ModuleHandler) InstallViaZip(realpath string, gateway *agi.Gateway) err
 	return nil
 }
 
+// InstallFromURL downloads a zip from a URL and installs it.
+func (m *ModuleHandler) InstallFromURL(rawURL string, gateway *agi.Gateway) error {
+	logger.PrintAndLog("Modules", "Starting module installation from URL: "+rawURL, nil)
+
+	tmpDir := filepath.Join(m.tmpDirectory, "installer")
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	tmpPath := filepath.Join(tmpDir, strconv.FormatInt(time.Now().UnixNano(), 10)+"_download.zip")
+
+	resp, err := http.Get(rawURL) //nolint:noctx
+	if err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed with HTTP status %d", resp.StatusCode)
+	}
+
+	out, err := os.Create(tmpPath)
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	if _, err = io.Copy(out, resp.Body); err != nil {
+		out.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("failed to write download: %w", err)
+	}
+	out.Close()
+
+	installErr := m.InstallViaZip(tmpPath, gateway)
+	os.Remove(tmpPath)
+	return installErr
+}
+
 // Reload all modules from agi file again
 func (m *ModuleHandler) ReloadAllModules(gateway *agi.Gateway) error {
 	//Clear the current registered module list

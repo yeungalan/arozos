@@ -187,7 +187,17 @@ func HandleModuleInstall(w http.ResponseWriter, r *http.Request) {
 		//Reply ok
 		utils.SendOK(w)
 	} else if opr == "zipinstall" {
-
+		rawURL, _ := utils.PostPara(r, "url")
+		if rawURL == "" {
+			utils.SendErrorResponse(w, "Invalid URL")
+			return
+		}
+		err := moduleHandler.InstallFromURL(rawURL, AGIGateway)
+		if err != nil {
+			utils.SendErrorResponse(w, err.Error())
+			return
+		}
+		utils.SendOK(w)
 	} else if opr == "remove" {
 		//Get the module name from list
 		module, _ := utils.PostPara(r, "module")

@@ -1,0 +1,19 @@
+/*
+    AppStore Module Registration
+    Lets users browse and install ArozOS webapps from GitHub repositories.
+*/
+
+var moduleLaunchInfo = {
+    Name: "App Store",
+    Desc: "Browse and install webapps from GitHub app repositories",
+    Group: "System Tools",
+    IconPath: "AppStore/img/icon.svg",
+    Version: "1.0.0",
+    StartDir: "AppStore/index.html",
+    SupportFW: true,
+    LaunchFWDir: "AppStore/index.html",
+    SupportEmb: false,
+    InitFWSize: [860, 600]
+}
+
+registerModule(JSON.stringify(moduleLaunchInfo));
