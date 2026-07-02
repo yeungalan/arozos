@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Notes Sync</title>
+    <script src="../../script/jquery.min.js"></script>
+    <script src="../../script/ao_module.js"></script>
+    <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: transparent; overflow-x: hidden; }
+
+    #ni-root {
+        --ni-bg:      #f3f3f3;
+        --ni-card:    #ffffff;
+        --ni-border:  #e0e0e0;
+        --ni-text:    #1b1b1b;
+        --ni-dim:     #5a5a5a;
+        --ni-muted:   #8a8a8a;
+        --ni-accent:  #0067c0;
+        --ni-accentH: #1475c8;
+        --ni-ok:      #107c10;
+        --ni-shadow:  0 1px 4px rgba(0,0,0,0.08);
+        --ni-radius:  6px;
+
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        font-size: 14px;
+        color: var(--ni-text);
+        background: var(--ni-bg);
+        min-height: 100vh;
+        padding-bottom: 32px;
+    }
+
+    #ni-root.dark {
+        --ni-bg:      #202020;
+        --ni-card:    #2d2d2d;
+        --ni-border:  #404040;
+        --ni-text:    #e8e8e8;
+        --ni-dim:     #aaaaaa;
+        --ni-muted:   #666666;
+        --ni-accent:  #60cdff;
+        --ni-accentH: #8cd9ff;
+        --ni-ok:      #6ccb5f;
+        --ni-shadow:  0 1px 6px rgba(0,0,0,0.4);
+    }
+
+    #ni-hero {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 20px 20px 16px;
+    }
+
+    #ni-hero-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        background: var(--ni-accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        opacity: 0.9;
+    }
+
+    #ni-hero-icon svg { color: #fff; }
+
+    #ni-hero-title { font-size: 17px; font-weight: 600; color: var(--ni-text); margin-bottom: 3px; }
+    #ni-hero-sub { font-size: 12.5px; color: var(--ni-dim); }
+
+    .ni-section {
+        background: var(--ni-card);
+        border: 1px solid var(--ni-border);
+        border-radius: var(--ni-radius);
+        margin: 0 12px 10px;
+        box-shadow: var(--ni-shadow);
+        padding: 16px 18px;
+    }
+
+    .ni-section-title { font-size: 14px; font-weight: 600; color: var(--ni-text); margin-bottom: 10px; }
+
+    .ni-label { display: block; font-size: 12px; font-weight: 500; color: var(--ni-dim); margin-bottom: 5px; margin-top: 14px; }
+
+    .ni-input {
+        width: 140px;
+        padding: 7px 10px;
+        border: 1px solid var(--ni-border);
+        border-radius: 4px;
+        background: var(--ni-card);
+        color: var(--ni-text);
+        font-family: inherit;
+        font-size: 13px;
+        outline: none;
+    }
+    .ni-input:focus { border-color: var(--ni-accent); }
+
+    .ni-toggle-row { display: flex; align-items: center; gap: 10px; }
+    .ni-toggle-label { font-size: 13px; color: var(--ni-text); cursor: pointer; user-select: none; }
+
+    .ni-toggle { position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; }
+    .ni-toggle input { opacity: 0; width: 0; height: 0; }
+    .ni-slider { position: absolute; inset: 0; background: var(--ni-border); border-radius: 20px; cursor: pointer; transition: background 0.2s; }
+    .ni-slider::before { content: ''; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform 0.2s; }
+    .ni-toggle input:checked + .ni-slider { background: var(--ni-accent); }
+    .ni-toggle input:checked + .ni-slider::before { transform: translateX(16px); }
+
+    .ni-actions { margin-top: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .ni-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 7px 16px; border-radius: 4px; border: 1px solid transparent;
+        font-family: inherit; font-size: 13px; font-weight: 500;
+        cursor: pointer; transition: background 0.1s; outline: none;
+    }
+    .ni-btn-primary { background: var(--ni-accent); color: #fff; border-color: var(--ni-accent); }
+    .ni-btn-primary:hover { background: var(--ni-accentH); border-color: var(--ni-accentH); }
+    .ni-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .ni-status { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 12px; font-size: 11.5px; font-weight: 500; }
+    .ni-status-on { background: rgba(16,124,16,0.1); color: var(--ni-ok); }
+    .ni-status-off { background: rgba(0,0,0,0.06); color: var(--ni-muted); }
+    #ni-root.dark .ni-status-on { background: rgba(108, 203, 95, 0.12); }
+
+    .ni-callout {
+        display: flex; align-items: flex-start; gap: 8px;
+        padding: 10px 12px; border-radius: 4px; font-size: 12.5px;
+        margin-top: 14px; line-height: 1.5;
+        background: rgba(0, 103, 192, 0.07);
+        border: 1px solid rgba(0, 103, 192, 0.2);
+        color: var(--ni-dim);
+    }
+    .ni-callout svg { flex-shrink: 0; margin-top: 1px; color: var(--ni-accent); }
+
+    .ni-kv { margin-top: 10px; font-size: 13px; }
+    .ni-kv div { margin-bottom: 4px; }
+    .ni-kv b { color: var(--ni-text); }
+    </style>
+</head>
+<body>
+
+<div id="ni-root">
+    <div id="ni-hero">
+        <div id="ni-hero-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path d="M6 3h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                <path d="M9 11h6M9 15h6M9 7h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <div>
+            <div id="ni-hero-title">Notes Sync</div>
+            <div id="ni-hero-sub">Sync the Notes app with Apple Notes over IMAP</div>
+        </div>
+    </div>
+
+    <div class="ni-section">
+        <div class="ni-section-title">Sync Server <span id="ni-status-badge" class="ni-status ni-status-off">Off</span></div>
+
+        <div class="ni-callout">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6.3" stroke="currentColor" stroke-width="1.3"/>
+                <path d="M8 7.2v4M8 5.2v.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+            <span>Apple Notes has no public sync API, but it natively supports adding a plain IMAP account and treats a "Notes" folder as a Notes account &mdash; the same way it syncs with Gmail or Fastmail. Turning this on starts a small IMAP server so users can add ArozOS as that account. No Apple ID or iCloud credentials are ever involved; each user gets their own per-device sign-in code from inside the Notes app.</span>
+        </div>
+
+        <div class="ni-toggle-row" style="margin-top:16px;">
+            <label class="ni-toggle" for="ni-enable">
+                <input type="checkbox" id="ni-enable">
+                <span class="ni-slider"></span>
+            </label>
+            <label class="ni-toggle-label" for="ni-enable">Enable Notes Sync server</label>
+        </div>
+
+        <label class="ni-label">Listening Port</label>
+        <input class="ni-input" type="number" id="ni-port" min="1" max="65535" placeholder="1143">
+
+        <div class="ni-kv">
+            <div>TLS (STARTTLS): <b id="ni-tls-state">&mdash;</b></div>
+        </div>
+
+        <div class="ni-actions">
+            <button class="ni-btn ni-btn-primary" id="ni-save-btn" onclick="niSave()">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                    <path d="M2 8.5L6 12.5L14 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Save &amp; Apply
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+var _niDark = false;
+
+function niApplyTheme(dark) {
+    _niDark = dark;
+    document.getElementById('ni-root').classList.toggle('dark', dark);
+}
+
+try {
+    var _pt = (typeof preferredTheme !== 'undefined' ? preferredTheme : null)
+           || (typeof parent !== 'undefined' && parent.preferredTheme ? parent.preferredTheme : null);
+    if (_pt) {
+        niApplyTheme(_pt === 'dark' || _pt === 'darkTheme');
+    } else {
+        ao_module_getSystemThemeColor(function(c) { niApplyTheme(c !== 'whiteTheme'); });
+    }
+} catch(e) {
+    ao_module_getSystemThemeColor(function(c) { niApplyTheme(c !== 'whiteTheme'); });
+}
+
+$(document).ready(function() {
+    niRead();
+});
+
+function niRead() {
+    $.getJSON('../../system/notes/imap/status', function(data) {
+        document.getElementById('ni-enable').checked = !!data.enabled;
+        document.getElementById('ni-port').value = data.port || 1143;
+        document.getElementById('ni-tls-state').textContent = data.tls ? 'Enabled' : 'Disabled (plaintext IMAP)';
+        niUpdateBadge(data.enabled);
+    });
+}
+
+function niUpdateBadge(enabled) {
+    var badge = document.getElementById('ni-status-badge');
+    badge.textContent = enabled ? 'On' : 'Off';
+    badge.classList.toggle('ni-status-on', !!enabled);
+    badge.classList.toggle('ni-status-off', !enabled);
+}
+
+function niSave() {
+    var btn = document.getElementById('ni-save-btn');
+    btn.disabled = true;
+
+    var enable = document.getElementById('ni-enable').checked;
+    var port = parseInt(document.getElementById('ni-port').value, 10) || 1143;
+
+    $.post('../../system/notes/imap/port', { port: port })
+        .then(function() {
+            return $.post('../../system/notes/imap/toggle', { enable: enable ? 'true' : 'false' });
+        })
+        .done(function() {
+            btn.disabled = false;
+            niUpdateBadge(enable);
+            niToast('Notes Sync settings saved', true);
+        })
+        .fail(function(xhr) {
+            btn.disabled = false;
+            var msg = 'Request failed. Please try again.';
+            try { msg = JSON.parse(xhr.responseText).error || msg; } catch(e) {}
+            niToast(msg, false);
+            niRead();
+        });
+}
+
+function niToast(msg, ok) {
+    try {
+        if (typeof parent !== 'undefined' && typeof parent.msgbox === 'function') {
+            parent.msgbox(msg, ok);
+            return;
+        }
+        if (typeof msgbox === 'function') {
+            msgbox(msg, ok);
+            return;
+        }
+    } catch(e) {}
+    alert(msg);
+}
+</script>
+</body>
+</html>

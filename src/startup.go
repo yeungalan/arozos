@@ -150,6 +150,7 @@ func RunStartup() {
 
 	//10. Startup network services and schedule services
 	CalDAVInit()         //CalDAV calendar sync server (iOS bidirectional sync)
+	NotesIMAPInit()      //Notes IMAP sync server (Apple Notes bidirectional sync)
 	NetworkServiceInit() //Initalize network serves (ssdp / mdns etc)
 	WiFiInit()           //Inialize WiFi management module
 

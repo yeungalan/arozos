@@ -68,6 +68,12 @@ func executeShutdownSequence() {
 		FTPManager.StopFtpServer()
 	}
 
+	//Shutdown Notes IMAP sync server
+	if NotesIMAPManager != nil && NotesIMAPManager.IsRunning() {
+		systemWideLogger.PrintAndLog("System", "<!> Shutting down Notes IMAP sync server", nil)
+		NotesIMAPManager.Stop()
+	}
+
 	//Cleaning up tmp files
 	systemWideLogger.PrintAndLog("System", "<!> Cleaning up tmp folder", nil)
 	os.RemoveAll(*tmp_directory)

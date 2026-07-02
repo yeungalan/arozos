@@ -316,6 +316,76 @@
         body.light-mode ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.18); border-radius: 4px; }
         body.dark-mode  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 4px; }
 
+        /* ── Sync modal ───────────────────────────────────────────────────── */
+        .sync-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sync-modal-overlay.show { display: flex; }
+
+        .sync-modal {
+            width: 400px;
+            max-width: 92vw;
+            max-height: 82vh;
+            overflow-y: auto;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        body.light-mode .sync-modal { background: #ffffff; color: #1c1c1e; }
+        body.dark-mode  .sync-modal { background: #2c2c2e; color: #ffffff; }
+
+        .sync-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            font-size: 15px;
+            font-weight: 700;
+            border-bottom: 1px solid;
+        }
+
+        body.light-mode .sync-modal-header { border-color: #d1d1d6; }
+        body.dark-mode  .sync-modal-header { border-color: #38383a; }
+
+        .sync-modal-body { padding: 16px 18px 20px; font-size: 13px; line-height: 1.6; }
+
+        .sync-row { margin-bottom: 10px; }
+        .sync-row label { display: block; font-size: 11px; opacity: 0.55; margin-bottom: 3px; }
+
+        .sync-value {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 9px;
+            border-radius: 7px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 12.5px;
+            word-break: break-all;
+        }
+
+        body.light-mode .sync-value { background: #f2f2f7; }
+        body.dark-mode  .sync-value { background: #3a3a3c; }
+
+        .sync-value button {
+            flex-shrink: 0;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 11px;
+            opacity: 0.6;
+            color: inherit;
+        }
+        .sync-value button:hover { opacity: 1; }
+
+        .sync-note { margin-top: 12px; opacity: 0.65; font-size: 12px; }
+
         /* Back button: hidden on desktop, shown on mobile */
         .back-btn {
             display: none;
@@ -362,6 +432,9 @@
         <div class="sidebar-header">
             <span class="sidebar-title">Notes</span>
             <div class="sidebar-header-actions">
+                <button class="icon-btn" id="syncBtn" title="Sync with Apple Notes">
+                    <img id="syncIcon" src="img/sync_white.svg" alt="sync">
+                </button>
                 <button class="icon-btn" id="themeToggle" title="Toggle theme">
                     <img id="themeIcon" src="img/theme_white.svg" alt="theme">
                 </button>
@@ -416,6 +489,17 @@
     <!-- Snackbar -->
     <div id="snackbar"></div>
 
+    <!-- Apple Notes sync panel -->
+    <div class="sync-modal-overlay" id="syncModalOverlay">
+        <div class="sync-modal">
+            <div class="sync-modal-header">
+                <span>Sync with Apple Notes</span>
+                <button class="icon-btn" id="syncModalClose" title="Close">&#10005;</button>
+            </div>
+            <div class="sync-modal-body" id="syncModalBody">Loading&#8230;</div>
+        </div>
+    </div>
+
     <script>
         // ── Mobile helpers ─────────────────────────────────────────────────────
         function isMobile() {
@@ -449,7 +533,8 @@
                 themeIcon:    'theme_',
                 newNoteIcon:  'edit_',
                 deleteIcon:   'delete_',
-                downloadIcon: 'download_'
+                downloadIcon: 'download_',
+                syncIcon:     'sync_'
             };
             Object.keys(iconMap).forEach(function (id) {
                 var el = document.getElementById(id);
@@ -504,6 +589,63 @@
 
         function apiSaveTheme(theme) {
             ao_module_agirun('Notes/backend/savemeta.agi', { newTheme: theme }, null, null);
+        }
+
+        // ── Apple Notes sync panel ─────────────────────────────────────────────
+        function syncValueRow(label, value) {
+            return '<div class="sync-row"><label>' + escHtml(label) + '</label>' +
+                '<div class="sync-value"><span>' + escHtml(value) + '</span>' +
+                '<button onclick="copySyncValue(this)" data-value="' + escHtml(value) + '">Copy</button></div></div>';
+        }
+
+        function copySyncValue(btn) {
+            var value = btn.getAttribute('data-value');
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(value);
+            } else {
+                var ta = document.createElement('textarea');
+                ta.value = value;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+            showSnackbar('Copied to clipboard');
+        }
+
+        function openSyncModal() {
+            document.getElementById('syncModalOverlay').classList.add('show');
+            var body = document.getElementById('syncModalBody');
+            body.innerHTML = 'Loading&#8230;';
+
+            $.get(ao_root + 'api/notes/imap/credentials', function (data) {
+                if (!data || data.error) {
+                    body.innerHTML = '<div class="sync-note">Unable to load sync credentials.</div>';
+                    return;
+                }
+                if (!data.enabled) {
+                    body.innerHTML = '<div class="sync-note">Notes Sync is currently turned off. Ask your administrator to enable it under ' +
+                        'System Settings &rarr; Network &rarr; Notes Sync.</div>';
+                    return;
+                }
+
+                var html = '';
+                html += syncValueRow('Server', data.serverHost);
+                html += syncValueRow('Port', String(data.port));
+                html += syncValueRow('Username', data.username);
+                html += syncValueRow('Password', data.token);
+                html += '<div class="sync-note">On iPhone/iPad/Mac: Settings &rarr; Notes &rarr; Accounts &rarr; Add Account &rarr; ' +
+                    'Other &rarr; Add Mail Account, then enter the values above as the incoming mail server' +
+                    (data.tls ? ' (use SSL).' : '.') +
+                    ' Notes does not need an outgoing server. Content is synced as plain text; rich formatting is simplified.</div>';
+                body.innerHTML = html;
+            }).fail(function () {
+                body.innerHTML = '<div class="sync-note">Unable to load sync credentials.</div>';
+            });
+        }
+
+        function closeSyncModal() {
+            document.getElementById('syncModalOverlay').classList.remove('show');
         }
 
         // ── Helpers ────────────────────────────────────────────────────────────
@@ -737,6 +879,11 @@
         document.getElementById('newNoteBtn').addEventListener('click', createNote);
         document.getElementById('deleteNoteBtn').addEventListener('click', deleteActiveNote);
         document.getElementById('downloadNoteBtn').addEventListener('click', downloadActiveNote);
+        document.getElementById('syncBtn').addEventListener('click', openSyncModal);
+        document.getElementById('syncModalClose').addEventListener('click', closeSyncModal);
+        document.getElementById('syncModalOverlay').addEventListener('click', function (e) {
+            if (e.target === this) closeSyncModal();
+        });
 
         // ── Search ─────────────────────────────────────────────────────────────
         document.getElementById('searchInput').addEventListener('input', function () {
