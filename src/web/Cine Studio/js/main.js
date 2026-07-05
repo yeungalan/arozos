@@ -531,14 +531,25 @@ CS.ensureAppFolders = function () {
     ao_module_agirun("Cine Studio/backend/ensuredir.js", {}, function () {}, function () {});
 };
 
-//Ask the server whether ffmpeg is available (enables MP4 export path)
+//Ask the server whether ffmpeg is available (enables MP4 export path).
+//Re-runnable: the export dialog re-checks so a host that gained ffmpeg
+//after boot is picked up without restarting the app. done(available) is
+//invoked with the result (also outside ArozOS, where it is always false).
 CS.serverFFmpeg = false;
-CS.checkServerFFmpeg = function () {
-    if (!CS.inArozOS()) { return; }
+CS.checkServerFFmpeg = function (done) {
+    if (!CS.inArozOS()) {
+        CS.serverFFmpeg = false;
+        if (done) { done(false); }
+        return;
+    }
     ao_module_agirun("Cine Studio/backend/ffmpegtools.js", { action: "check" }, function (resp) {
         try {
             var data = typeof resp === "string" ? JSON.parse(resp) : resp;
             CS.serverFFmpeg = !!data.ffmpeg;
         } catch (e) { CS.serverFFmpeg = false; }
-    }, function () { CS.serverFFmpeg = false; });
+        if (done) { done(CS.serverFFmpeg); }
+    }, function () {
+        CS.serverFFmpeg = false;
+        if (done) { done(false); }
+    });
 };

@@ -43,9 +43,18 @@ CS.exporter = {
 
                 var formats = [{ v: "webm", l: "WebM (VP9)" }];
                 if (inAroz) {
-                    formats.push({ v: "mp4", l: CS.serverFFmpeg ? "MP4 (server ffmpeg)" : "MP4 (unavailable - no ffmpeg)" });
+                    formats.push({ v: "mp4", l: CS.serverFFmpeg ? "MP4 (server ffmpeg)" : "MP4 (checking for ffmpeg...)" });
                 }
                 formatIn = CS.modalRow(body, "Format", CS.selectInput(formats, "webm"));
+
+                //Re-probe ffmpeg each time the dialog opens so a host that
+                //gained ffmpeg after boot enables MP4 without a restart.
+                if (inAroz) {
+                    CS.checkServerFFmpeg(function (available) {
+                        var opt = formatIn.querySelector('option[value="mp4"]');
+                        if (opt) { opt.textContent = available ? "MP4 (server ffmpeg)" : "MP4 (unavailable - no ffmpeg)"; }
+                    });
+                }
 
                 if (inAroz) {
                     var destBtn = document.createElement("button");

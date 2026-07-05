@@ -4,8 +4,6 @@ import (
 	"errors"
 
 	"imuslab.com/arozos/mod/agi/static"
-	apt "imuslab.com/arozos/mod/apt"
-	"imuslab.com/arozos/mod/info/logger"
 )
 
 /*
@@ -59,12 +57,11 @@ func (g *Gateway) LoadAllFunctionalModules() {
 	g.CNNLibRegister()
 	g.SQLiteLibRegister()
 
-	//Only register ffmpeg lib if host OS have ffmpeg installed
-	ffmpegExists, _ := apt.PackageExists("ffmpeg")
-	if ffmpegExists {
-		g.FFmpegLibRegister()
-	} else {
-		logger.PrintAndLog("Agi", "[AGI] ffmpeg not installed on host OS. Bypassing module.", nil)
-	}
-
+	//FFmpegLibRegister self-gates on exec.LookPath("ffmpeg"), so register
+	//it unconditionally: any ffmpeg reachable on the host PATH is picked
+	//up. The previous apt.PackageExists gate was redundant and returned a
+	//false negative on Windows (its where.exe call mis-parsed its args),
+	//which left ffmpeg-backed features such as Cine Studio MP4 export
+	//disabled even when ffmpeg was installed.
+	g.FFmpegLibRegister()
 }
