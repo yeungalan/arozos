@@ -73,7 +73,12 @@ CS.iconPaths = {
     "upload":        '<path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
     "server":        '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01"/><path d="M7 16.5h.01"/>',
     "file":          '<path d="M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M14 2v5h5"/>',
-    "scissors":      '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8.2 7.6L20 19"/><path d="M20 5L8.2 16.4"/>'
+    "scissors":      '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8.2 7.6L20 19"/><path d="M20 5L8.2 16.4"/>',
+    "stopwatch":     '<circle cx="12" cy="13" r="7"/><path d="M12 13V9"/><path d="M9 2h6"/><path d="M18.5 6.5l1.5-1.5"/>',
+    "kf-diamond":    '<path d="M12 5l6 7-6 7-6-7 6-7z"/>',
+    "kf-diamond-solid": '<path d="M12 5l6 7-6 7-6-7 6-7z" style="fill:currentColor"/>',
+    "kf-prev":       '<path d="M16 6l-6 6 6 6"/><path d="M8 6v12"/>',
+    "kf-next":       '<path d="M8 6l6 6-6 6"/><path d="M16 6v12"/>'
 };
 
 CS.iconSVG = function (name, extraClass) {

@@ -319,6 +319,19 @@ CS.timeline = {
             el.appendChild(trMark);
         }
 
+        //Keyframe diamonds along the bottom of an animated clip
+        if (CS.keyframes.hasAny(clip)) {
+            var kfStrip = document.createElement("div");
+            kfStrip.className = "clip-kf";
+            CS.keyframes.keyTimes(clip, Object.keys(CS.keyframes.PROPS)).forEach(function (lt) {
+                var d = document.createElement("span");
+                d.className = "kf-mark";
+                d.style.left = (lt * CS.state.zoom) + "px";
+                kfStrip.appendChild(d);
+            });
+            el.appendChild(kfStrip);
+        }
+
         //Trim handles
         ["left", "right"].forEach(function (side) {
             var handle = document.createElement("div");

@@ -235,6 +235,9 @@ CS.player = {
         CS.player.render();
         CS.player.updateTransportUI();
         CS.timeline.updatePlayhead();
+        //Keep the inspector's sampled values / keyframe diamond in sync
+        var sel = CS.selectedClip();
+        if (sel && CS.keyframes.hasAny(sel)) { CS.inspector.render(); }
     },
 
     gotoEditPoint: function (dir) {
@@ -319,8 +322,8 @@ CS.player = {
             var speed = CS.clipSpeed(clip);
             var target = clip.in + (t - clip.start) * speed;
 
-            //Volume: clip setting shaped by any fade in/out effects
-            var vol = (clip.props.volume === undefined ? 100 : clip.props.volume) / 100;
+            //Volume: keyframed / static setting shaped by any fade in/out effects
+            var vol = CS.keyframes.valueAt(clip, "volume", t) / 100;
             vol *= CS.effects.fadeAlpha(clip, t);
             el.volume = CS.clamp(vol, 0, 1);
             var soloMuted = anySolo && track && track.kind === "audio" && !track.solo;
@@ -441,7 +444,9 @@ CS.player = {
         if (!sw || !sh) { return; }
 
         var p = clip.props;
-        var fx = CS.effects.analyze(clip, t === undefined ? CS.state.playhead : t, W);
+        var at = (t === undefined ? CS.state.playhead : t);
+        var kv = CS.keyframes.resolveTransform(clip, at);
+        var fx = CS.effects.analyze(clip, at, W);
         if (fx.alpha <= 0) { return; }
 
         if (fx.pixelate > 1) {
@@ -459,7 +464,7 @@ CS.player = {
             dw = sw * s;
             dh = sh * s;
         }
-        var userScale = (p.scale === undefined ? 100 : p.scale) / 100;
+        var userScale = kv.scale / 100;
         dw *= userScale;
         dh *= userScale;
 
@@ -467,12 +472,12 @@ CS.player = {
         if (p.blend && p.blend !== "normal") {
             ctx.globalCompositeOperation = p.blend;
         }
-        ctx.translate(W / 2 + (p.x || 0), H / 2 + (p.y || 0));
-        if (p.rotation) { ctx.rotate(p.rotation * Math.PI / 180); }
+        ctx.translate(W / 2 + kv.x, H / 2 + kv.y);
+        if (kv.rotation) { ctx.rotate(kv.rotation * Math.PI / 180); }
         var flipX = (fx.mirror ? -1 : 1) * (p.flipH ? -1 : 1);
         var flipY = p.flipV ? -1 : 1;
         if (flipX !== 1 || flipY !== 1) { ctx.scale(flipX, flipY); }
-        var alpha = CS.clamp((p.opacity === undefined ? 100 : p.opacity) / 100, 0, 1) * fx.alpha;
+        var alpha = CS.clamp(kv.opacity / 100, 0, 1) * fx.alpha;
         if (opts.alphaMul !== undefined) { alpha *= CS.clamp(opts.alphaMul, 0, 1); }
         ctx.globalAlpha = alpha;
         var baseFilter = CS.player.buildFilter(p);

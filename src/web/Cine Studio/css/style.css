@@ -719,6 +719,46 @@ svg {
 }
 .num-chip .unit { color: var(--text-faint); font-size: 11px; }
 
+/* keyframe controls (inspector rows) */
+.kf-ctrl { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.kf-btn, .kf-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: var(--text-faint);
+    cursor: pointer;
+}
+.kf-btn:hover, .kf-nav:hover { background: var(--bg-elev); color: var(--text); }
+.kf-btn svg, .kf-nav svg { width: 15px; height: 15px; }
+.kf-btn.on { color: var(--accent); }
+.kf-btn.on.here { color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* keyframe diamonds on the timeline clip */
+.clip-kf {
+    position: absolute;
+    left: 0; right: 0; bottom: 1px;
+    height: 8px;
+    pointer-events: none;
+    overflow: hidden;
+}
+.clip-kf .kf-mark {
+    position: absolute;
+    bottom: 1px;
+    width: 6px;
+    height: 6px;
+    margin-left: -3px;
+    background: #ffd35a;
+    transform: rotate(45deg);
+    border-radius: 1px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.45);
+}
+
 /* sliders */
 input[type="range"].insp-slider, #tl-zoom {
     -webkit-appearance: none;

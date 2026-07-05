@@ -104,26 +104,40 @@ CS.inspector = {
         //---- Transform ----
         var transform = CS.inspector.section(body, "Transform", function () {
             p.x = 0; p.y = 0; p.scale = 100; p.rotation = 0; p.opacity = 100;
+            if (p.kf) {
+                ["x", "y", "scale", "rotation", "opacity"].forEach(function (k) { delete p.kf[k]; });
+            }
             CS.commit("Reset Transform");
         });
 
-        var xChip = CS.inspector.numChip("X", p.x, "", function (v) { p.x = v; }, 1);
-        var yChip = CS.inspector.numChip("Y", p.y, "", function (v) { p.y = v; }, 1);
-        CS.inspector.row(transform, "Position", [xChip, yChip]);
+        //Values shown are sampled under the playhead so keyframed clips
+        //display their current animated state.
+        var vx = CS.keyframes.valueAt(clip, "x");
+        var vy = CS.keyframes.valueAt(clip, "y");
+        var vScale = CS.keyframes.valueAt(clip, "scale");
+        var vRot = CS.keyframes.valueAt(clip, "rotation");
+        var vOpacity = CS.keyframes.valueAt(clip, "opacity");
+
+        var xChip = CS.inspector.numChip("X", vx, "", CS.inspector.kfApply(clip, "x"), 1);
+        var yChip = CS.inspector.numChip("Y", vy, "", CS.inspector.kfApply(clip, "y"), 1);
+        CS.inspector.row(transform, "Position", [xChip, yChip, CS.inspector.kfControl(clip, ["x", "y"])]);
 
         CS.inspector.row(transform, "Scale", [
-            CS.inspector.slider(10, 300, 1, p.scale, function (v) { p.scale = v; }),
-            CS.inspector.numChip(null, p.scale, "%", function (v) { p.scale = CS.clamp(v, 1, 1000); }, 1)
+            CS.inspector.slider(10, 300, 1, vScale, CS.inspector.kfApply(clip, "scale")),
+            CS.inspector.numChip(null, vScale, "%", CS.inspector.kfApply(clip, "scale", function (v) { return CS.clamp(v, 1, 1000); }), 1),
+            CS.inspector.kfControl(clip, ["scale"])
         ]);
 
         CS.inspector.row(transform, "Rotation", [
-            CS.inspector.dial(p.rotation, function (v) { p.rotation = v; }),
-            CS.inspector.numChip(null, p.rotation, "°", function (v) { p.rotation = ((v % 360) + 360) % 360; }, 1)
+            CS.inspector.dial(vRot, CS.inspector.kfApply(clip, "rotation")),
+            CS.inspector.numChip(null, vRot, "°", CS.inspector.kfApply(clip, "rotation", function (v) { return ((v % 360) + 360) % 360; }), 1),
+            CS.inspector.kfControl(clip, ["rotation"])
         ]);
 
         CS.inspector.row(transform, "Opacity", [
-            CS.inspector.slider(0, 100, 1, p.opacity, function (v) { p.opacity = v; }),
-            CS.inspector.numChip(null, p.opacity, "%", function (v) { p.opacity = CS.clamp(v, 0, 100); }, 1)
+            CS.inspector.slider(0, 100, 1, vOpacity, CS.inspector.kfApply(clip, "opacity")),
+            CS.inspector.numChip(null, vOpacity, "%", CS.inspector.kfApply(clip, "opacity", function (v) { return CS.clamp(v, 0, 100); }), 1),
+            CS.inspector.kfControl(clip, ["opacity"])
         ]);
 
         CS.inspector.row(transform, "Blend", [
@@ -326,11 +340,14 @@ CS.inspector = {
 
         var sec = CS.inspector.section(body, "Audio", function () {
             p.volume = 100;
+            if (p.kf) { delete p.kf.volume; }
             CS.commit("Reset Audio");
         });
+        var vVol = CS.keyframes.valueAt(clip, "volume");
         CS.inspector.row(sec, "Volume", [
-            CS.inspector.slider(0, 200, 1, (p.volume === undefined ? 100 : p.volume), function (v) { p.volume = v; }),
-            CS.inspector.numChip(null, (p.volume === undefined ? 100 : p.volume), "%", function (v) { p.volume = CS.clamp(v, 0, 200); }, 1)
+            CS.inspector.slider(0, 200, 1, vVol, CS.inspector.kfApply(clip, "volume")),
+            CS.inspector.numChip(null, vVol, "%", CS.inspector.kfApply(clip, "volume", function (v) { return CS.clamp(v, 0, 200); }), 1),
+            CS.inspector.kfControl(clip, ["volume"])
         ]);
 
         var note = document.createElement("div");
@@ -495,6 +512,78 @@ CS.inspector = {
             onChange(on);
         });
         return btn;
+    },
+
+    /* ---------- keyframe controls ---------- */
+
+    //Stopwatch / diamond toggle plus prev/next navigation for a property
+    //group. props is an array so Position can key X and Y together.
+    kfControl: function (clip, props) {
+        var wrap = document.createElement("span");
+        wrap.className = "kf-ctrl";
+        var animated = props.some(function (p) { return CS.keyframes.has(clip, p); });
+        var here = animated && props.some(function (p) {
+            return CS.keyframes.hasKeyAt(clip, p, CS.state.playhead);
+        });
+
+        var prev = document.createElement("button");
+        prev.className = "kf-nav";
+        prev.title = "Previous keyframe";
+        prev.innerHTML = CS.iconSVG("kf-prev");
+        prev.addEventListener("click", function () {
+            CS.keyframes.gotoAdjacent(clip, props, -1);
+        });
+
+        var toggle = document.createElement("button");
+        toggle.className = "kf-btn" + (animated ? " on" : "") + (here ? " here" : "");
+        toggle.title = animated
+            ? "Add / remove keyframe at playhead (Alt-click to turn off animation)"
+            : "Animate: add keyframes over time";
+        toggle.innerHTML = CS.iconSVG(animated ? (here ? "kf-diamond-solid" : "kf-diamond") : "stopwatch");
+        toggle.addEventListener("click", function (ev) {
+            var t = CS.state.playhead;
+            if (!animated) {
+                props.forEach(function (p) { CS.keyframes.enable(clip, p, t); });
+                CS.commit("Enable Keyframes");
+            } else if (ev.altKey) {
+                props.forEach(function (p) { CS.keyframes.disable(clip, p, t); });
+                CS.commit("Disable Keyframes");
+            } else if (here) {
+                props.forEach(function (p) { CS.keyframes.removeAt(clip, p, t); });
+                CS.commit("Remove Keyframe");
+            } else {
+                props.forEach(function (p) {
+                    CS.keyframes.setAt(clip, p, t, CS.keyframes.valueAt(clip, p, t));
+                });
+                CS.commit("Add Keyframe");
+            }
+        });
+
+        var next = document.createElement("button");
+        next.className = "kf-nav";
+        next.title = "Next keyframe";
+        next.innerHTML = CS.iconSVG("kf-next");
+        next.addEventListener("click", function () {
+            CS.keyframes.gotoAdjacent(clip, props, 1);
+        });
+
+        if (animated) { wrap.appendChild(prev); }
+        wrap.appendChild(toggle);
+        if (animated) { wrap.appendChild(next); }
+        return wrap;
+    },
+
+    //Wrap a value-apply callback so that, while a property is keyframed,
+    //edits write a keyframe at the playhead instead of the static value.
+    kfApply: function (clip, prop, clamp) {
+        return function (v) {
+            if (clamp) { v = clamp(v); }
+            if (CS.keyframes.has(clip, prop)) {
+                CS.keyframes.setAt(clip, prop, CS.state.playhead, v);
+            } else {
+                clip.props[prop] = v;
+            }
+        };
     },
 
     select: function (options, value, onChange) {

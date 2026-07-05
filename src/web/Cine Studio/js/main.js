@@ -432,6 +432,9 @@ CS.splitClip = function (clip, t) {
     right.start = t;
     right.in = clip.in + srcOffset;
     clip.out = clip.in + srcOffset;
+    //Keyframe times are measured from clip.start; rebase the new right
+    //half so its keyframes stay locked to the same content frames.
+    CS.keyframes.rebase(right, t - clip.start);
     CS.project.clips.push(right);
     CS.state.selectedClipId = right.id;
     CS.state.selectedClipIds = [right.id];
