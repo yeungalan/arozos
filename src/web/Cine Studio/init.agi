@@ -11,7 +11,7 @@ var moduleLaunchInfo = {
 	Desc: "Minimalistic timeline video editor",
 	Group: "Media",
 	IconPath: "Cine Studio/img/module_icon.png",
-	Version: "1.0",
+	Version: "1.1",
 	StartDir: "Cine Studio/index.html",
 	SupportFW: true,
 	LaunchFWDir: "Cine Studio/index.html",

@@ -979,6 +979,20 @@
      "desc": "Convert/resize an image. scaleFactor 0.5 = 50% size.",
      "ret": "bool",
      "example": "requirelib(\"ffmpeg\");\nffmpeg.imageConvert(\"user:/in.png\", \"user:/out.jpg\", 0.5, 80);"
+    },
+    {
+     "name": "ffmpeg.convertWithProgress",
+     "sig": "ffmpeg.convertWithProgress(input, output, progressFile)",
+     "desc": "Direct conversion without format detection, for cross-media pairs like mp4 to gif.",
+     "ret": "bool",
+     "example": "requirelib(\"ffmpeg\");\nffmpeg.convertWithProgress(\"user:/in.mp4\", \"user:/out.gif\", \"tmp:/conv_progress.json\");"
+    },
+    {
+     "name": "ffmpeg.renderTimeline",
+     "sig": "ffmpeg.renderTimeline(specJson, output, progressFile)",
+     "desc": "Render a multi-track editor timeline (JSON render spec: sources, video clips, audio clips) into one .mp4 or .webm file. See the AGI README for the spec format.",
+     "ret": "bool",
+     "example": "requirelib(\"ffmpeg\");\nvar spec = {width:1280, height:720, fps:30, duration:5, sources:[{id:\"a\", vpath:\"user:/in.mp4\", type:\"video\"}], video:[{source:\"a\", start:0, in:0, out:5}]};\nffmpeg.renderTimeline(JSON.stringify(spec), \"user:/out.mp4\", \"tmp:/render_progress.json\");"
     }
    ]
   }

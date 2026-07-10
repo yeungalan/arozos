@@ -477,6 +477,116 @@ func (g *Gateway) injectFFmpegFunctions(payload *static.AgiLibInjectionPayload) 
 		return otto.TrueValue()
 	})
 
+	// _ffmpeg_render_timeline(specJson, output, progressFile)
+	// Renders a multi-track editor timeline (see ffmpegutil.TimelineSpec)
+	// into a single .mp4 or .webm file. Media paths inside the spec are
+	// virtual paths resolved with the calling user's permission scope.
+	// progressFile: virtual path for the JSON progress file; omit or pass "" to disable.
+	vm.Set("_ffmpeg_render_timeline", func(call otto.FunctionCall) otto.Value {
+		specJSON, err := call.Argument(0).ToString()
+		if err != nil || specJSON == "" || specJSON == "undefined" {
+			g.RaiseError(errors.New("render spec not provided"))
+			return otto.FalseValue()
+		}
+		voutput, err := call.Argument(1).ToString()
+		if err != nil || voutput == "" || voutput == "undefined" {
+			g.RaiseError(errors.New("output filename not provided"))
+			return otto.FalseValue()
+		}
+		vprogressFile := ""
+		if !call.Argument(2).IsUndefined() {
+			vprogressFile, _ = call.Argument(2).ToString()
+		}
+
+		spec, err := ffmpegutil.ParseTimelineSpec(specJSON)
+		if err != nil {
+			g.RaiseError(err)
+			return otto.FalseValue()
+		}
+
+		voutput = static.RelativeVpathRewrite(scriptFsh, voutput, vm, u)
+		if !u.CanWrite(voutput) {
+			panic(vm.MakeCustomError("PermissionDenied", "Path access denied: "+voutput))
+		}
+		outFsh, routput, err := static.VirtualPathToRealPath(voutput, u)
+		if err != nil {
+			g.RaiseError(err)
+			return otto.FalseValue()
+		}
+
+		rprogressFile := ""
+		if vprogressFile != "" && vprogressFile != "undefined" {
+			vprogressFile = static.RelativeVpathRewrite(scriptFsh, vprogressFile, vm, u)
+			if _, rp, e := static.VirtualPathToRealPath(vprogressFile, u); e == nil {
+				rprogressFile = rp
+			}
+		}
+
+		//Buffer every referenced source to the local disk, deduplicated by vpath
+		bufferedByVpath := map[string]string{}
+		bufferedPaths := []string{}
+		releaseBuffers := func() {
+			for _, p := range bufferedPaths {
+				os.Remove(p)
+			}
+		}
+		for i := range spec.Sources {
+			vsrc := static.RelativeVpathRewrite(scriptFsh, spec.Sources[i].Path, vm, u)
+			if !u.CanRead(vsrc) {
+				releaseBuffers()
+				panic(vm.MakeCustomError("PermissionDenied", "Path access denied: "+vsrc))
+			}
+			if local, ok := bufferedByVpath[vsrc]; ok {
+				spec.Sources[i].Path = local
+				continue
+			}
+			srcFsh, rsrc, err := static.VirtualPathToRealPath(vsrc, u)
+			if err != nil {
+				releaseBuffers()
+				g.RaiseError(err)
+				return otto.FalseValue()
+			}
+			local, err := srcFsh.BufferRemoteToLocal(rsrc)
+			if err != nil {
+				releaseBuffers()
+				g.RaiseError(err)
+				return otto.FalseValue()
+			}
+			bufferedByVpath[vsrc] = local
+			bufferedPaths = append(bufferedPaths, local)
+			spec.Sources[i].Path = local
+		}
+
+		outputBufferPath := filepath.Join(os.TempDir(), uuid.NewV4().String()+filepath.Ext(routput))
+		err = ffmpegutil.FFmpeg_render_timeline(spec, outputBufferPath, rprogressFile)
+		releaseBuffers()
+		if err != nil {
+			os.Remove(outputBufferPath)
+			g.RaiseError(err)
+			return otto.FalseValue()
+		}
+		if !utils.FileExists(outputBufferPath) {
+			g.RaiseError(errors.New("output file not found after timeline render"))
+			return otto.FalseValue()
+		}
+
+		src, err := os.OpenFile(outputBufferPath, os.O_RDONLY, 0755)
+		if err != nil {
+			g.RaiseError(err)
+			os.Remove(outputBufferPath)
+			return otto.FalseValue()
+		}
+		defer src.Close()
+		err = outFsh.FileSystemAbstraction.WriteStream(routput, src, 0775)
+		if err != nil {
+			g.RaiseError(err)
+			os.Remove(outputBufferPath)
+			return otto.FalseValue()
+		}
+		os.Remove(outputBufferPath)
+		return otto.TrueValue()
+	})
+
 	vm.Run(`
 		var ffmpeg = {};
 		ffmpeg.convert = _ffmpeg_conv;
@@ -484,5 +594,6 @@ func (g *Gateway) injectFFmpegFunctions(payload *static.AgiLibInjectionPayload) 
 		ffmpeg.imageConvert = _ffmpeg_image_conv;
 		ffmpeg.videoConvert = _ffmpeg_video_conv;
 		ffmpeg.convertWithProgress = _ffmpeg_conv_with_progress;
+		ffmpeg.renderTimeline = _ffmpeg_render_timeline;
 	`)
 }

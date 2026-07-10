@@ -1243,6 +1243,61 @@ ffmpeg.videoConvert("user:/in.mp4", "user:/out.mp4", "720p", 55, "tmp:/video_pro
 ffmpeg.convertWithProgress("user:/in.mp4", "user:/out.gif", "tmp:/conv_progress.json");
 ```
 
+### `ffmpeg.renderTimeline(specJson, output, progressFile)`
+Renders a multi-track video-editor timeline into a single `.mp4` or `.webm`
+file with one ffmpeg invocation (used by the Cine Studio web app for
+server-side export). `specJson` is a JSON string describing the whole job;
+every media path in it is a virtual path resolved with the calling user's
+permission scope. Returns `true` on success.
+
+```javascript
+var spec = {
+    width: 1920, height: 1080,     //canvas size (rounded down to even)
+    fps: 30,                       //output frame rate (1 - 120)
+    duration: 12.5,                //timeline length in seconds
+    quality: 0,                    //0 = encoder default, 1-100 mapped to CRF
+    sources: [                     //media referenced by the clips below
+        { id: "a", vpath: "user:/Video/clip.mp4", type: "video" },  //video | image | audio
+        { id: "b", vpath: "user:/Photo/logo.png", type: "image" }
+    ],
+    video: [                       //painted in array order (first = bottom)
+        {
+            source: "a",
+            start: 0,              //timeline position (s)
+            in: 1, out: 6,         //source range (s)
+            speed: 1,              //0.0625 - 16
+            x: 0, y: 0,            //offset from canvas centre (px)
+            scale: 100,            //percent of the crop-mode size
+            rotation: 0,           //degrees clockwise
+            opacity: 100,          //percent
+            crop: "fit",           //fit | fill | stretch
+            flipH: false, flipV: false,
+            exposure: 0,           //-1 .. 1 brightness multiplier offset
+            contrast: 0,           //-100 .. 100
+            saturation: 1,         //0 .. 3
+            preset: "default",     //default | warm | cool
+            effects: [             //bw, sepia, invert, hue, blur,
+                { type: "blur", amount: 6 }   //pixelate, vignette, grain, mirror
+            ],
+            fadeIn: 0, fadeOut: 0, //alpha fade durations (s)
+            //transition helpers (freeze previous clip + alpha ramp):
+            transFadeIn: 0, transFadeInOffset: 0,
+            extend: 0, extendFadeOut: 0
+        }
+    ],
+    audio: [                       //mixed together with amix
+        { source: "a", start: 0, in: 1, out: 6, speed: 1,
+          volume: 100, fadeIn: 0, fadeOut: 0 }
+    ]
+};
+ffmpeg.renderTimeline(JSON.stringify(spec), "user:/Video/final.mp4", "tmp:/render_progress.json");
+```
+
+Audio clips whose source file has no audio stream are dropped automatically.
+The spec is validated and converted into an ffmpeg filter graph by the host,
+so scripts never pass raw ffmpeg arguments. Mixing more than one audio clip
+uses `amix=normalize=0` and therefore needs ffmpeg 4.4 or newer on the host.
+
 ## websocket API
 
 The websocket library upgrades the current HTTP connection to a WebSocket session.

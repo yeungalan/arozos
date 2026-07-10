@@ -32,7 +32,7 @@ CS.exporter = {
             return;
         }
 
-        var nameIn, formatIn, destRow;
+        var nameIn, formatIn, modeIn, destRow;
         var dest = { dir: CS.APP_ROOT + "/Exports", label: "Cine Studio/Exports" };
         var inAroz = CS.inArozOS();
 
@@ -41,11 +41,19 @@ CS.exporter = {
             build: function (body) {
                 nameIn = CS.modalRow(body, "Filename", CS.textInput(CS.project.name || "Export"));
 
+                if (inAroz) {
+                    var modes = [
+                        { v: "browser", l: "In this browser (real time)" },
+                        { v: "server", l: CS.serverFFmpeg ? "On the server (ffmpeg)" : "On the server (unavailable - no ffmpeg)" }
+                    ];
+                    modeIn = CS.modalRow(body, "Render", CS.selectInput(modes, CS.serverFFmpeg ? "server" : "browser"));
+                }
+
                 var formats = [{ v: "webm", l: "WebM (VP9)" }];
                 if (inAroz) {
-                    formats.push({ v: "mp4", l: CS.serverFFmpeg ? "MP4 (server ffmpeg)" : "MP4 (unavailable - no ffmpeg)" });
+                    formats.push({ v: "mp4", l: CS.serverFFmpeg ? "MP4 (H.264)" : "MP4 (unavailable - no ffmpeg)" });
                 }
-                formatIn = CS.modalRow(body, "Format", CS.selectInput(formats, "webm"));
+                formatIn = CS.modalRow(body, "Format", CS.selectInput(formats, CS.serverFFmpeg ? "mp4" : "webm"));
 
                 if (inAroz) {
                     var destBtn = document.createElement("button");
@@ -65,9 +73,19 @@ CS.exporter = {
 
                 var note = document.createElement("div");
                 note.className = "modal-note";
-                note.textContent = "The timeline is rendered in real time at "
-                    + CS.project.settings.width + " x " + CS.project.settings.height
-                    + ". Keep this window visible during export.";
+                var updateNote = function () {
+                    if (modeIn && modeIn.value === "server") {
+                        note.textContent = "The timeline is rendered by ffmpeg on the server at "
+                            + CS.project.settings.width + " x " + CS.project.settings.height
+                            + " - usually faster than real time, and you can keep working meanwhile.";
+                    } else {
+                        note.textContent = "The timeline is rendered in real time at "
+                            + CS.project.settings.width + " x " + CS.project.settings.height
+                            + ". Keep this window visible during export.";
+                    }
+                };
+                updateNote();
+                if (modeIn) { modeIn.addEventListener("change", updateNote); }
                 body.appendChild(note);
             },
             buttons: [
@@ -76,11 +94,32 @@ CS.exporter = {
                     label: "Export", primary: true,
                     action: function () {
                         var format = formatIn.value;
+                        var mode = (modeIn && modeIn.value) || "browser";
+                        var base = (nameIn.value.trim() || "Export").replace(/[\\/:*?"<>|]/g, "_");
+
+                        if (mode === "server") {
+                            if (!CS.serverFFmpeg) {
+                                CS.toast("Server rendering needs ffmpeg on the ArozOS host", true);
+                                return false;
+                            }
+                            var check = CS.serverrender.validate();
+                            if (!check.ok) {
+                                CS.toast(check.reason, true);
+                                return false;
+                            }
+                            CS.serverrender.start({
+                                base: base,
+                                format: format,
+                                destDir: dest.dir
+                            });
+                            //start() swapped this dialog for the progress modal
+                            return false;
+                        }
+
                         if (format === "mp4" && !CS.serverFFmpeg) {
                             CS.toast("MP4 export needs ffmpeg on the ArozOS host", true);
                             return false;
                         }
-                        var base = (nameIn.value.trim() || "Export").replace(/[\\/:*?"<>|]/g, "_");
                         CS.exporter.start({
                             base: base,
                             format: format,

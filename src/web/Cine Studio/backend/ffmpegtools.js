@@ -9,6 +9,7 @@
 	  action = "check"                    - report whether ffmpeg is available
 	  action = "convert", src, dst        - convert virtual path src into dst
 	  action = "cleanup", target          - delete a temporary file owned by the export
+	  action = "preparedir", target       - create a temporary folder used by the export
 
 	All paths are ArozOS virtual paths (e.g. user:/Cine Studio/Exports/out.webm)
 */
@@ -69,6 +70,24 @@ function main() {
 		return;
 	}
 
+	if (action == "preparedir") {
+		if (typeof(target) == "undefined") {
+			sendJSONResp(JSON.stringify({ error: "target parameter is required" }));
+			return;
+		}
+		requirelib("filelib");
+		//Only allow creating folders inside the app folder
+		if (target.indexOf("user:/Cine Studio/") != 0 || target.indexOf("..") >= 0) {
+			sendJSONResp(JSON.stringify({ error: "target outside of Cine Studio folder" }));
+			return;
+		}
+		if (!filelib.fileExists(target)) {
+			filelib.mkdir(target);
+		}
+		sendJSONResp(JSON.stringify({ ok: true }));
+		return;
+	}
+
 	if (action == "cleanup") {
 		if (typeof(target) == "undefined") {
 			sendJSONResp(JSON.stringify({ error: "target parameter is required" }));
@@ -76,7 +95,7 @@ function main() {
 		}
 		requirelib("filelib");
 		//Only allow deleting temporary export artifacts inside the app folder
-		if (target.indexOf("user:/Cine Studio/") != 0) {
+		if (target.indexOf("user:/Cine Studio/") != 0 || target.indexOf("..") >= 0) {
 			sendJSONResp(JSON.stringify({ error: "target outside of Cine Studio folder" }));
 			return;
 		}
