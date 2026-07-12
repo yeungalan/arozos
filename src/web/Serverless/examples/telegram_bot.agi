@@ -1,0 +1,303 @@
+/*
+    Telegram Bot — ArozOS AGI Serverless Function
+    ================================================
+
+    A single-file port of the "Telegram Bot" n8n workflow to the ArozOS AGI
+    serverless runtime. Host it with the Serverless webapp:
+
+        1. Copy this file into your ArozOS storage, e.g.
+               user:/telegram_bot.agi
+        2. Open the "Serverless" webapp, select this script and create an
+           endpoint. You will get a public URL like:
+               https://<your-host>/api/remote/<UUID>
+        3. Register that URL as your Telegram bot webhook (one time):
+               https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=<endpoint-url>
+        4. Fill in CONFIG.botToken below (or store it in the DB, see notes).
+
+    Telegram delivers each update as an HTTP POST whose body is the update JSON.
+    This script reads that body, decides whether the bot should answer, calls the
+    admin-configured LLM (System Settings > AI Integration > AI Model) and posts
+    the reply back through the Telegram Bot API.
+
+    What was ported from the workflow
+    ---------------------------------
+      Telegram Trigger        -> readBody() of the webhook POST
+      Insert row / Get row(s) -> per-chat message log in the AGI key-value DB
+      If / If1                -> shouldRespond() trigger rules (keyword / reply / cmd)
+      Message a model2        -> llm.request() with system prompt + context messages
+      Send a text message1    -> http.post() to Telegram sendMessage
+
+    Intentionally left out (no 1:1 AGI equivalent, and disconnected in the source
+    workflow): the DuckDuckGo web-search enrichment and the external Guardrails
+    node. Hooks are noted inline so they are easy to add with requirelib("http").
+
+    Author: converted from n8n workflow "Telegram Bot"
+*/
+
+requirelib("http");
+requirelib("llm");
+
+// ── Configuration ───────────────────────────────────────────────────────────
+var CONFIG = {
+    // Telegram bot token from @BotFather. Leave "" to instead read it from the
+    // AGI DB item TelegramBot/botToken (writeDBItem("TelegramBot","botToken",...)).
+    botToken: "",
+
+    // The bot's own @username (without @). Used to detect replies to the bot.
+    botUsername: "alanyeungcotestbot",
+
+    // The bot answers when the message text CONTAINS any of these (lower-cased),
+    botTriggerKeywords: ["arozosbot", "arozbot", "alanyeungcotestbot"],
+    // ...or STARTS WITH any of these commands,
+    botCommandPrefixes: ["/chat"],
+    // ...or is a reply to a message sent by botUsername.
+    respondToReplies: true,
+
+    // LLM settings. model === "" uses the server's configured default model.
+    model: "",
+    systemPrompt: "你是arozosbot, 根據用戶提出的問題回答問題。" +
+        "如果問題與引用的訊息相關則您可引用該信息。回覆時應使用繁體中文",
+    maxTokens: 32768,
+
+    // Group memory: include the recent conversation of this chat as context.
+    includeHistory: true,
+    historyWindowMs: 24 * 60 * 60 * 1000, // 24 hours (matches the n8n Get row(s) filter)
+    historyMaxMessages: 40,               // cap how many past lines are fed to the model
+
+    // Telegram parse mode for the reply: "MarkdownV2", "HTML" or "" (plain text).
+    // MarkdownV2 special characters are escaped automatically so replies never
+    // fail with a Telegram 400; a plain-text fallback retry is also attempted.
+    parseMode: "MarkdownV2",
+
+    dbTable: "TelegramBot" // key-value table used for the per-chat message log
+};
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function getBotToken() {
+    if (CONFIG.botToken && CONFIG.botToken !== "") {
+        return CONFIG.botToken;
+    }
+    var stored = readDBItem(CONFIG.dbTable, "botToken");
+    if (stored && stored !== "false" && stored !== "null") {
+        return stored;
+    }
+    return "";
+}
+
+function telegramApi(token, method, payload) {
+    var url = "https://api.telegram.org/bot" + token + "/" + method;
+    var raw = http.post(url, JSON.stringify(payload));
+    if (raw === null) {
+        return { ok: false, error: "no response from Telegram API" };
+    }
+    try {
+        return JSON.parse(raw);
+    } catch (e) {
+        return { ok: false, error: "unparsable Telegram response", raw: raw };
+    }
+}
+
+// Escape all MarkdownV2 reserved characters so arbitrary model output is sent
+// literally instead of being interpreted (and rejected) as markup.
+function escapeMarkdownV2(text) {
+    return String(text).replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+}
+
+// Persist one message into the per-chat log. Keyed by chatId|timestamp|rand so
+// entries stay unique and are cheap to filter later.
+function logMessage(chatId, from, text) {
+    var now = Date.now();
+    var key = chatId + "|" + now + "|" + Math.floor(Math.random() * 1e6);
+    var row = { chatId: String(chatId), from: from, message: text, createdAt: now };
+    writeDBItem(CONFIG.dbTable, key, JSON.stringify(row));
+}
+
+// Read this chat's recent messages (newest last), pruning anything older than the
+// history window as we go so the table does not grow without bound.
+function getRecentHistory(chatId) {
+    var all = listDBTable(CONFIG.dbTable);
+    var cutoff = Date.now() - CONFIG.historyWindowMs;
+    var rows = [];
+    for (var key in all) {
+        if (!all.hasOwnProperty(key) || key === "botToken") continue;
+        var row;
+        try { row = JSON.parse(all[key]); } catch (e) { continue; }
+        if (!row || typeof row.createdAt === "undefined") continue;
+        if (row.createdAt < cutoff) {
+            deleteDBItem(CONFIG.dbTable, key); // opportunistic cleanup
+            continue;
+        }
+        if (String(row.chatId) === String(chatId)) {
+            rows.push(row);
+        }
+    }
+    rows.sort(function (a, b) { return a.createdAt - b.createdAt; });
+    if (rows.length > CONFIG.historyMaxMessages) {
+        rows = rows.slice(rows.length - CONFIG.historyMaxMessages);
+    }
+    return rows;
+}
+
+// Decide whether the bot should answer this message (ports the If / If1 nodes).
+function shouldRespond(message) {
+    var text = (message.text || "").toLowerCase();
+
+    for (var i = 0; i < CONFIG.botTriggerKeywords.length; i++) {
+        if (text.indexOf(CONFIG.botTriggerKeywords[i].toLowerCase()) !== -1) {
+            return true;
+        }
+    }
+    for (var j = 0; j < CONFIG.botCommandPrefixes.length; j++) {
+        if (text.indexOf(CONFIG.botCommandPrefixes[j].toLowerCase()) === 0) {
+            return true;
+        }
+    }
+    if (CONFIG.respondToReplies &&
+        message.reply_to_message &&
+        message.reply_to_message.from &&
+        message.reply_to_message.from.username &&
+        message.reply_to_message.from.username.toLowerCase()
+            .indexOf(CONFIG.botUsername.toLowerCase()) !== -1) {
+        return true;
+    }
+    return false;
+}
+
+// Build the OpenAI-style messages array (ports the "Message a model2" node,
+// plus the datatable-backed group memory the workflow sets up).
+function buildMessages(message) {
+    var messages = [{ role: "system", content: CONFIG.systemPrompt }];
+
+    var sender = (message.from && message.from.username) || "unknown";
+    messages.push({ role: "user", content: "此信息由 " + sender + " 所發送" });
+
+    var replyText = (message.reply_to_message && message.reply_to_message.text)
+        ? message.reply_to_message.text
+        : "無回覆訊息";
+    messages.push({ role: "user", content: "上一個訊息為: " + replyText });
+
+    if (CONFIG.includeHistory) {
+        var history = getRecentHistory(message.chat.id);
+        if (history.length > 0) {
+            var lines = history.map(function (r) {
+                return r.from + ": " + r.message +
+                    " (" + new Date(r.createdAt).toISOString() + ")";
+            }).join("\n\n");
+            messages.push({ role: "user", content: "過往此群組之對話\n\n" + lines });
+        }
+    }
+
+    // Hook: to reproduce the workflow's DuckDuckGo enrichment, run a search here
+    // with requirelib("http") and push its results as another user message.
+
+    messages.push({ role: "user", content: message.text });
+    return messages;
+}
+
+// Send the reply, retrying without a parse mode if Telegram rejects the markup.
+function sendReply(token, chatId, replyToId, text) {
+    var body = text;
+    if (CONFIG.parseMode === "MarkdownV2") {
+        body = escapeMarkdownV2(text);
+    }
+
+    var payload = {
+        chat_id: chatId,
+        text: body,
+        reply_to_message_id: replyToId,
+        disable_notification: true
+    };
+    if (CONFIG.parseMode !== "") {
+        payload.parse_mode = CONFIG.parseMode;
+    }
+
+    var res = telegramApi(token, "sendMessage", payload);
+    if (res.ok !== true && CONFIG.parseMode !== "") {
+        // Fallback: resend as plain text so a formatting error never eats the reply.
+        res = telegramApi(token, "sendMessage", {
+            chat_id: chatId,
+            text: text,
+            reply_to_message_id: replyToId,
+            disable_notification: true
+        });
+    }
+    return res;
+}
+
+// ── Main ────────────────────────────────────────────────────────────────────
+
+function main() {
+    var token = getBotToken();
+    if (token === "") {
+        // Reply 200 so Telegram does not retry; surface the misconfiguration.
+        sendJSONResp({ ok: false, error: "bot token not configured" });
+        return;
+    }
+
+    var rawBody = readBody();
+    if (!rawBody) {
+        sendJSONResp({ ok: true, skipped: "empty body" });
+        return;
+    }
+
+    var update;
+    try {
+        update = JSON.parse(rawBody);
+    } catch (e) {
+        sendJSONResp({ ok: false, error: "invalid update JSON" });
+        return;
+    }
+
+    // Only handle plain new text messages (ignore edits, joins, callbacks, ...).
+    var message = update.message;
+    if (!message || typeof message.text !== "string" || message.text === "") {
+        sendJSONResp({ ok: true, skipped: "no text message" });
+        return;
+    }
+
+    // Ignore other bots to avoid bot-to-bot reply loops.
+    if (message.from && message.from.is_bot === true) {
+        sendJSONResp({ ok: true, skipped: "message from a bot" });
+        return;
+    }
+
+    var sender = (message.from && message.from.username) || "unknown";
+
+    // Log every incoming message (ports the "Insert row" node).
+    logMessage(message.chat.id, sender, message.text);
+
+    if (!shouldRespond(message)) {
+        sendJSONResp({ ok: true, responded: false });
+        return;
+    }
+
+    // Ask the model (ports "Message a model2").
+    var reply;
+    try {
+        var resp = llm.request(buildMessages(message), {
+            model: CONFIG.model,
+            max_tokens: CONFIG.maxTokens
+        });
+        reply = (resp && resp.choices && resp.choices[0] &&
+                 resp.choices[0].message && resp.choices[0].message.content) || "";
+    } catch (e) {
+        sendReply(token, message.chat.id, message.message_id,
+            "（AI 回覆時發生錯誤：" + e + "）");
+        sendJSONResp({ ok: false, error: "llm error: " + e });
+        return;
+    }
+
+    if (!reply || reply === "") {
+        sendJSONResp({ ok: true, responded: false, note: "empty model reply" });
+        return;
+    }
+
+    // Send it back and remember it as part of the conversation.
+    var sendResult = sendReply(token, message.chat.id, message.message_id, reply);
+    logMessage(message.chat.id, "Bot", reply);
+
+    sendJSONResp({ ok: true, responded: true, telegram_ok: sendResult.ok === true });
+}
+
+main();
