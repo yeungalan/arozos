@@ -10,24 +10,25 @@
 
     What the workflow did
     ---------------------
-      HK / US holiday calendars   ->  gatherCalendar()  (Google Calendar)
-      Personal + Work calendars   ->  gatherCalendar()
-      Trello board -> lists/cards ->  gatherTrello()
-      Aggr (Code node)            ->  buildAggregate()  (same text layout)
-      Message a model             ->  llm.chat()        (Traditional-Chinese digest)
-      Send a text message         ->  sendMessage()     (Telegram)
-      Wait 20h -> Delete message  ->  pending-deletion queue (see cleanup())
+      Holiday + personal + work calendars ->  gatherCalendar()  (now via .ics)
+      Trello board -> lists/cards         ->  gatherTrello()
+      Aggr (Code node)                    ->  buildAggregate()  (same text layout)
+      Message a model                     ->  llm.chat()        (zh-TW digest)
+      Send a text message                 ->  sendMessage()     (Telegram)
+      Wait 20h -> Delete message          ->  pending-deletion queue (cleanup())
 
-    IMPORTANT constraint
-    --------------------
-    The AGI `http` library's GET cannot set request headers, so Google Calendar
-    is queried with the OAuth token / API key passed as a QUERY PARAMETER:
-      * public holiday calendars work with an API key (calendar.apiKey);
-      * private calendars need an OAuth access token (calendar.accessToken),
-        which Google accepts as `?access_token=` — you must refresh it
-        externally, as AGI has no OAuth flow. Point these at any reachable
-        source you like; each gatherer fails soft (contributes "") so a broken
-        or unconfigured source never breaks the briefing.
+    Calendars via ICS (no OAuth needed)
+    -----------------------------------
+    The AGI `http` library's GET cannot set request headers, so instead of the
+    Google Calendar API this build reads each calendar's public/secret **iCal
+    (.ics) feed** — a plain URL that `http.get` can fetch directly. Get the URL
+    from Google Calendar > Settings > "Secret address in iCal format" (private
+    calendars) or "Public address in iCal format" (holiday calendars).
+
+    The built-in ICS parser handles line folding, all-day (VALUE=DATE) and timed
+    events (UTC "Z" or TZID). Note: it does not expand RRULE recurring events, so
+    a recurring event only appears on its original DTSTART day — list concrete
+    occurrences in the feed, or drop such events into a dedicated calendar.
 
     Trello uses its normal key+token query-parameter auth, so it works directly.
 
@@ -45,7 +46,7 @@ var CONFIG = {
     chatId: "184782124", // the original personal chat id
 
     // Timezone used both for the "today" window and for displaying event times.
-    tzOffsetHours: -7,       // Pacific (PDT). Use -8 for PST.
+    tzOffsetHours: -7,       // Pacific (PDT). Use -8 for PST, +9 for Tokyo, etc.
     tzLabel: "Pacific Time",
 
     // Trello (key + token from https://trello.com/app-key). boardId is the
@@ -57,17 +58,15 @@ var CONFIG = {
         boardId: ""
     },
 
-    // Google Calendars to pull today's events/holidays from. `kind` controls the
-    // section and line prefix: "holiday", "event" or "work".
+    // Calendars to pull today's events/holidays from, each an iCal .ics URL.
+    // `kind` controls the section and line prefix: "holiday", "event" or "work".
     calendars: [
-        { enabled: true, kind: "holiday", label: "HK",
-          calendarId: "zh-tw.hong_kong#holiday@group.v.calendar.google.com", apiKey: "", accessToken: "" },
-        { enabled: true, kind: "holiday", label: "US",
-          calendarId: "en.usa#holiday@group.v.calendar.google.com", apiKey: "", accessToken: "" },
         { enabled: true, kind: "event", label: "Personal",
-          calendarId: "yeungbluecat123@gmail.com", apiKey: "", accessToken: "" },
-        { enabled: true, kind: "work", label: "Work",
-          calendarId: "uqli5bcakag80vbuhm0he5vap1970age@import.calendar.google.com", apiKey: "", accessToken: "" }
+          ics: "https://calendar.google.com/calendar/ical/yeungbluecat123%40gmail.com/private-ff992be9c3c1072cabbfe5681e8341bf/basic.ics" },
+        { enabled: true, kind: "holiday", label: "US",
+          ics: "https://calendar.google.com/calendar/ical/en.usa%23holiday%40group.v.calendar.google.com/public/basic.ics" },
+        { enabled: true, kind: "holiday", label: "JP",
+          ics: "https://calendar.google.com/calendar/ical/en.japanese%23holiday%40group.v.calendar.google.com/public/basic.ics" }
     ],
 
     // LLM settings. model === "" uses the server's configured default model.
@@ -132,12 +131,6 @@ function escapeMarkdownV2(text) {
     return String(text).replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 }
 
-function httpGetJSON(url) {
-    var raw = http.get(url);
-    if (raw === null) return null;
-    try { return JSON.parse(raw); } catch (e) { return null; }
-}
-
 // ── Date/time formatting (Intl-free, tz-offset based) ───────────────────────
 // Otto lacks Intl, so timezone display is done by shifting epoch ms by the
 // configured offset and reading UTC components off the shifted instant.
@@ -160,32 +153,96 @@ function fmtTime(p) {
 
 function fmtDate(p) { return MONTHS[p.mo] + " " + p.d + ", " + p.y; }
 
-// Format a Google Calendar event line (mirrors the workflow's per-calendar
-// Code nodes). `prefix` is prepended (e.g. "Working - ").
-function formatEvent(event, prefix) {
-    if (!event || (typeof event === "object" && isEmptyObject(event))) return "";
-    var summary = event.summary || "Untitled Event";
-    var location = event.location || "No location";
-    var when;
+// ── ICS parsing ─────────────────────────────────────────────────────────────
 
-    if (event.start && event.start.dateTime) {
-        var s = shifted(new Date(event.start.dateTime).getTime());
-        var e = event.end && event.end.dateTime
-            ? shifted(new Date(event.end.dateTime).getTime()) : s;
-        when = fmtDate(s) + " " + fmtTime(s) + " - " + fmtTime(e);
-    } else if (event.start && event.start.date) {
-        var parts = event.start.date.split("-");
-        when = MONTHS[parseInt(parts[1], 10) - 1] + " " +
-               parseInt(parts[2], 10) + ", " + parts[0] + " (All day)";
-    } else {
-        when = "No date";
-    }
-    return prefix + summary + " | " + when + " " + CONFIG.tzLabel + " | " + location + "\n";
+function unescapeICS(v) {
+    return String(v)
+        .replace(/\\n/gi, "\n").replace(/\\,/g, ",")
+        .replace(/\\;/g, ";").replace(/\\\\/g, "\\");
 }
 
-function isEmptyObject(o) {
-    for (var k in o) { if (o.hasOwnProperty(k)) return false; }
-    return true;
+// Parse an ICS DTSTART/DTEND value into { allDay, y, mo, d, [h, mi], ms }.
+// Times ending in "Z" are UTC; naive/TZID times are approximated in the
+// configured display timezone (correct when your calendar's tz matches it).
+function parseICSDate(value, params) {
+    value = value.replace(/\s+$/, "");
+    var isDate = (/VALUE=DATE/i.test(params)) || /^\d{8}$/.test(value);
+    var y = parseInt(value.substr(0, 4), 10);
+    var mo = parseInt(value.substr(4, 2), 10) - 1;
+    var d = parseInt(value.substr(6, 2), 10);
+    if (isDate) {
+        return { allDay: true, y: y, mo: mo, d: d };
+    }
+    var h = parseInt(value.substr(9, 2), 10);
+    var mi = parseInt(value.substr(11, 2), 10);
+    var s = parseInt(value.substr(13, 2) || "0", 10);
+    var ms;
+    if (value.charAt(value.length - 1) === "Z") {
+        ms = Date.UTC(y, mo, d, h, mi, s);
+    } else {
+        ms = Date.UTC(y, mo, d, h, mi, s) - CONFIG.tzOffsetHours * 3600000;
+    }
+    return { allDay: false, y: y, mo: mo, d: d, ms: ms };
+}
+
+// Parse an ICS document into an array of { summary, location, start, end }.
+// Only VEVENT blocks are read; VTIMEZONE and other components are ignored.
+function parseICS(text) {
+    // Unfold continuation lines (a CRLF/LF followed by a space or tab).
+    text = text.replace(/\r\n[ \t]/g, "").replace(/\n[ \t]/g, "");
+    var lines = text.split(/\r\n|\n|\r/);
+    var events = [];
+    var cur = null;
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        if (line === "BEGIN:VEVENT") {
+            cur = {};
+        } else if (line === "END:VEVENT") {
+            if (cur) events.push(cur);
+            cur = null;
+        } else if (cur) {
+            var idx = line.indexOf(":");
+            if (idx < 0) continue;
+            var left = line.slice(0, idx);
+            var value = line.slice(idx + 1);
+            var semi = left.indexOf(";");
+            var name = (semi < 0 ? left : left.slice(0, semi)).toUpperCase();
+            var params = semi < 0 ? "" : left.slice(semi + 1);
+            if (name === "SUMMARY") cur.summary = unescapeICS(value);
+            else if (name === "LOCATION") cur.location = unescapeICS(value);
+            else if (name === "DTSTART") cur.start = parseICSDate(value, params);
+            else if (name === "DTEND") cur.end = parseICSDate(value, params);
+        }
+    }
+    return events;
+}
+
+// True when the event overlaps today's window (in the configured timezone).
+function eventInToday(ev, win, today) {
+    if (!ev.start) return false;
+    if (ev.start.allDay) {
+        var t = Date.UTC(today.y, today.mo, today.d);
+        var s = Date.UTC(ev.start.y, ev.start.mo, ev.start.d);
+        var e = ev.end ? Date.UTC(ev.end.y, ev.end.mo, ev.end.d) : s + 86400000;
+        if (e <= s) e = s + 86400000; // guard: single-day feeds with DTEND == DTSTART
+        return s <= t && t < e;
+    }
+    return ev.start.ms >= win.startMs && ev.start.ms < win.endMs;
+}
+
+// Format one parsed event as a briefing line (mirrors the workflow Code nodes).
+function formatEvent(ev, prefix) {
+    var summary = ev.summary || "Untitled Event";
+    var location = ev.location || "No location";
+    var when;
+    if (ev.start.allDay) {
+        when = MONTHS[ev.start.mo] + " " + ev.start.d + ", " + ev.start.y + " (All day)";
+    } else {
+        var s = shifted(ev.start.ms);
+        var e = ev.end ? shifted(ev.end.ms) : s;
+        when = fmtDate(s) + " " + fmtTime(s) + " - " + fmtTime(e);
+    }
+    return prefix + summary + " | " + when + " " + CONFIG.tzLabel + " | " + location + "\n";
 }
 
 // ── Today window (in the configured timezone) ───────────────────────────────
@@ -195,10 +252,7 @@ function todayWindow() {
     var localNow = Date.now() + offMs;
     var localMidnight = localNow - (localNow % 86400000);
     var utcStart = localMidnight - offMs;
-    return {
-        timeMin: new Date(utcStart).toISOString(),
-        timeMax: new Date(utcStart + 86400000).toISOString()
-    };
+    return { startMs: utcStart, endMs: utcStart + 86400000 };
 }
 
 // ── Data gatherers ──────────────────────────────────────────────────────────
@@ -212,8 +266,11 @@ function gatherTrello() {
     var auth = "key=" + encodeURIComponent(t.apiKey) + "&token=" + encodeURIComponent(t.token);
     var base = "https://api.trello.com/1/boards/" + encodeURIComponent(t.boardId);
 
-    var lists = httpGetJSON(base + "/lists?fields=id,name&" + auth);
-    var cards = httpGetJSON(base + "/cards?fields=id,name,idList,due,dueComplete,closed,labels&" + auth);
+    var listsRaw = http.get(base + "/lists?fields=id,name&" + auth);
+    var cardsRaw = http.get(base + "/cards?fields=id,name,idList,due,dueComplete,closed,labels&" + auth);
+    var lists = null, cards = null;
+    try { lists = JSON.parse(listsRaw); } catch (e) { lists = null; }
+    try { cards = JSON.parse(cardsRaw); } catch (e) { cards = null; }
     if (!cards || cards.length === 0) return "";
 
     var listMap = {};
@@ -240,41 +297,35 @@ function gatherTrello() {
     return output;
 }
 
-// Google Calendar: fetch today's events for one calendar config and format them.
+// Fetch one calendar's ICS feed and format today's events.
 function gatherCalendar(cal) {
-    if (!cal.enabled) return "";
-    if (cal.apiKey === "" && cal.accessToken === "") return "";
+    if (!cal.enabled || !cal.ics) return "";
+    var raw = http.get(cal.ics);
+    if (raw === null || raw === "") return "";
 
+    var events = parseICS(raw);
     var win = todayWindow();
-    var url = "https://www.googleapis.com/calendar/v3/calendars/" +
-        encodeURIComponent(cal.calendarId) + "/events" +
-        "?singleEvents=true&orderBy=startTime" +
-        "&timeMin=" + encodeURIComponent(win.timeMin) +
-        "&timeMax=" + encodeURIComponent(win.timeMax);
-    if (cal.apiKey !== "") url += "&key=" + encodeURIComponent(cal.apiKey);
-    if (cal.accessToken !== "") url += "&access_token=" + encodeURIComponent(cal.accessToken);
-
-    var resp = httpGetJSON(url);
-    if (!resp || !resp.items || resp.items.length === 0) return "";
-
+    var today = shifted(Date.now());
     var prefix = cal.kind === "work" ? "Working - " : "";
+
     var out = "";
-    for (var i = 0; i < resp.items.length; i++) {
-        out += formatEvent(resp.items[i], prefix);
+    for (var i = 0; i < events.length; i++) {
+        if (eventInToday(events[i], win, today)) {
+            out += formatEvent(events[i], prefix);
+        }
     }
     return out;
 }
 
 // Build the aggregated briefing text (ports the "Aggr" node's layout).
 function buildAggregate() {
-    var hk = "", us = "", personal = "", work = "";
+    var holidays = "", events = "", work = "";
     for (var i = 0; i < CONFIG.calendars.length; i++) {
         var cal = CONFIG.calendars[i];
         var text = gatherCalendar(cal);
-        if (cal.kind === "holiday" && cal.label === "HK") hk += text;
-        else if (cal.kind === "holiday") us += text;
+        if (cal.kind === "holiday") holidays += text;
         else if (cal.kind === "work") work += text;
-        else personal += text;
+        else events += text;
     }
 
     var trello = gatherTrello();
@@ -283,8 +334,8 @@ function buildAggregate() {
     var nowLine = "Current user date time: " + new Date().toISOString() +
         ", " + WEEKDAYS[p.wd] + " " + CONFIG.tzLabel + "\n";
 
-    return "假日: \n" + hk + "\n" + us + "\n" +
-        "------------------\n 日曆事件: \n" + personal + "\n" + work + "\n" +
+    return "假日: \n" + holidays + "\n" +
+        "------------------\n 日曆事件: \n" + events + "\n" + work + "\n" +
         "------------------\n Trello 待辦事項:\n" + trello + "\n" +
         "------------------\n" + nowLine;
 }
