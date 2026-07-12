@@ -1,0 +1,380 @@
+/*
+    AI Assistant (Daily Briefing) — ArozOS AGI Serverless Function
+    ===============================================================
+
+    A single-file port of the "AI Assistiant" n8n workflow to the ArozOS AGI
+    serverless runtime. Host it with the Serverless webapp and trigger it every
+    morning (external cron or the AGI scheduler) by hitting its endpoint:
+
+        https://<your-host>/api/remote/<UUID>
+
+    What the workflow did
+    ---------------------
+      HK / US holiday calendars   ->  gatherCalendar()  (Google Calendar)
+      Personal + Work calendars   ->  gatherCalendar()
+      Trello board -> lists/cards ->  gatherTrello()
+      Aggr (Code node)            ->  buildAggregate()  (same text layout)
+      Message a model             ->  llm.chat()        (Traditional-Chinese digest)
+      Send a text message         ->  sendMessage()     (Telegram)
+      Wait 20h -> Delete message  ->  pending-deletion queue (see cleanup())
+
+    IMPORTANT constraint
+    --------------------
+    The AGI `http` library's GET cannot set request headers, so Google Calendar
+    is queried with the OAuth token / API key passed as a QUERY PARAMETER:
+      * public holiday calendars work with an API key (calendar.apiKey);
+      * private calendars need an OAuth access token (calendar.accessToken),
+        which Google accepts as `?access_token=` — you must refresh it
+        externally, as AGI has no OAuth flow. Point these at any reachable
+        source you like; each gatherer fails soft (contributes "") so a broken
+        or unconfigured source never breaks the briefing.
+
+    Trello uses its normal key+token query-parameter auth, so it works directly.
+
+    Author: converted from n8n workflow "AI Assistiant"
+*/
+
+requirelib("http");
+requirelib("llm");
+
+// ── Configuration ───────────────────────────────────────────────────────────
+var CONFIG = {
+    // Telegram bot token (from @BotFather). Leave "" to read it from the AGI DB
+    // item AIAssistant/botToken instead.
+    botToken: "",
+    chatId: "184782124", // the original personal chat id
+
+    // Timezone used both for the "today" window and for displaying event times.
+    tzOffsetHours: -7,       // Pacific (PDT). Use -8 for PST.
+    tzLabel: "Pacific Time",
+
+    // Trello (key + token from https://trello.com/app-key). boardId is the
+    // board's short id or full id.
+    trello: {
+        enabled: true,
+        apiKey: "",
+        token: "",
+        boardId: ""
+    },
+
+    // Google Calendars to pull today's events/holidays from. `kind` controls the
+    // section and line prefix: "holiday", "event" or "work".
+    calendars: [
+        { enabled: true, kind: "holiday", label: "HK",
+          calendarId: "zh-tw.hong_kong#holiday@group.v.calendar.google.com", apiKey: "", accessToken: "" },
+        { enabled: true, kind: "holiday", label: "US",
+          calendarId: "en.usa#holiday@group.v.calendar.google.com", apiKey: "", accessToken: "" },
+        { enabled: true, kind: "event", label: "Personal",
+          calendarId: "yeungbluecat123@gmail.com", apiKey: "", accessToken: "" },
+        { enabled: true, kind: "work", label: "Work",
+          calendarId: "uqli5bcakag80vbuhm0he5vap1970age@import.calendar.google.com", apiKey: "", accessToken: "" }
+    ],
+
+    // LLM settings. model === "" uses the server's configured default model.
+    model: "",
+    maxTokens: 2000,
+    // The instruction block from the workflow's "Message a model" node. The
+    // aggregated briefing text is appended after it.
+    promptTemplate:
+        "查看我今天的行事曆和任務清單。請提供：\n\n" +
+        "今日狀態：告訴我今天是否為假日或特殊日子，以及我行事曆上有什麼安排\n" +
+        "今日待辦事項：列出今天到期或已逾期的任務\n" +
+        "進行中的工作：強調我 Trello 看板上目前正在進行、需要關注的項目\n" +
+        "重要提醒：標記接下來 3-7 天內任何時間敏感的事項（即將到期的截止日期、活動或承諾）\n\n" +
+        "保持簡潔且可執行。按緊急性和重要性排序。\n格式要求：\n\n" +
+        "全部內容必須使用繁體中文（zh-TW）輸出\n" +
+        "條列項目使用「•」符號，不要使用星號或其他符號\n適合在 Telegram 顯示\n\n" +
+        "僅輸出純文字條列，不含前言或結語。\n\n",
+
+    // Telegram parse mode: "" (plain, most reliable), "MarkdownV2" or "HTML".
+    parseMode: "",
+
+    // Auto-cleanup: delete each sent briefing this long after it was posted.
+    // Handled as a pending-deletion queue drained on each run (the endpoint is
+    // hit daily), replacing the workflow's inline "Wait 20h -> Delete" branch.
+    deleteAfterMs: 20 * 60 * 60 * 1000,
+
+    dbTable: "AIAssistant"
+};
+
+var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday",
+                "Thursday", "Friday", "Saturday"];
+
+// ── Generic helpers ─────────────────────────────────────────────────────────
+
+function getBotToken() {
+    if (CONFIG.botToken && CONFIG.botToken !== "") {
+        return CONFIG.botToken;
+    }
+    var stored = readDBItem(CONFIG.dbTable, "botToken");
+    if (stored && stored !== "false" && stored !== "null") {
+        return stored;
+    }
+    return "";
+}
+
+function telegramApi(token, method, payload) {
+    var url = "https://api.telegram.org/bot" + token + "/" + method;
+    var raw = http.post(url, JSON.stringify(payload));
+    if (raw === null) {
+        return { ok: false, error: "no response from Telegram API" };
+    }
+    try {
+        return JSON.parse(raw);
+    } catch (e) {
+        return { ok: false, error: "unparsable Telegram response", raw: raw };
+    }
+}
+
+function escapeMarkdownV2(text) {
+    return String(text).replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+}
+
+function httpGetJSON(url) {
+    var raw = http.get(url);
+    if (raw === null) return null;
+    try { return JSON.parse(raw); } catch (e) { return null; }
+}
+
+// ── Date/time formatting (Intl-free, tz-offset based) ───────────────────────
+// Otto lacks Intl, so timezone display is done by shifting epoch ms by the
+// configured offset and reading UTC components off the shifted instant.
+
+function shifted(ms) {
+    var d = new Date(ms + CONFIG.tzOffsetHours * 3600000);
+    return {
+        y: d.getUTCFullYear(), mo: d.getUTCMonth(), d: d.getUTCDate(),
+        h: d.getUTCHours(), mi: d.getUTCMinutes(), wd: d.getUTCDay()
+    };
+}
+
+function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+
+function fmtTime(p) {
+    var h = p.h % 12; if (h === 0) h = 12;
+    var ap = p.h < 12 ? "AM" : "PM";
+    return h + ":" + pad2(p.mi) + " " + ap;
+}
+
+function fmtDate(p) { return MONTHS[p.mo] + " " + p.d + ", " + p.y; }
+
+// Format a Google Calendar event line (mirrors the workflow's per-calendar
+// Code nodes). `prefix` is prepended (e.g. "Working - ").
+function formatEvent(event, prefix) {
+    if (!event || (typeof event === "object" && isEmptyObject(event))) return "";
+    var summary = event.summary || "Untitled Event";
+    var location = event.location || "No location";
+    var when;
+
+    if (event.start && event.start.dateTime) {
+        var s = shifted(new Date(event.start.dateTime).getTime());
+        var e = event.end && event.end.dateTime
+            ? shifted(new Date(event.end.dateTime).getTime()) : s;
+        when = fmtDate(s) + " " + fmtTime(s) + " - " + fmtTime(e);
+    } else if (event.start && event.start.date) {
+        var parts = event.start.date.split("-");
+        when = MONTHS[parseInt(parts[1], 10) - 1] + " " +
+               parseInt(parts[2], 10) + ", " + parts[0] + " (All day)";
+    } else {
+        when = "No date";
+    }
+    return prefix + summary + " | " + when + " " + CONFIG.tzLabel + " | " + location + "\n";
+}
+
+function isEmptyObject(o) {
+    for (var k in o) { if (o.hasOwnProperty(k)) return false; }
+    return true;
+}
+
+// ── Today window (in the configured timezone) ───────────────────────────────
+
+function todayWindow() {
+    var offMs = CONFIG.tzOffsetHours * 3600000;
+    var localNow = Date.now() + offMs;
+    var localMidnight = localNow - (localNow % 86400000);
+    var utcStart = localMidnight - offMs;
+    return {
+        timeMin: new Date(utcStart).toISOString(),
+        timeMax: new Date(utcStart + 86400000).toISOString()
+    };
+}
+
+// ── Data gatherers ──────────────────────────────────────────────────────────
+
+// Trello: fetch the board's lists and cards, then format the open cards
+// (ports the "Get many lists" -> "Get all cards" -> "Code in JavaScript" chain).
+function gatherTrello() {
+    var t = CONFIG.trello;
+    if (!t.enabled || t.apiKey === "" || t.token === "" || t.boardId === "") return "";
+
+    var auth = "key=" + encodeURIComponent(t.apiKey) + "&token=" + encodeURIComponent(t.token);
+    var base = "https://api.trello.com/1/boards/" + encodeURIComponent(t.boardId);
+
+    var lists = httpGetJSON(base + "/lists?fields=id,name&" + auth);
+    var cards = httpGetJSON(base + "/cards?fields=id,name,idList,due,dueComplete,closed,labels&" + auth);
+    if (!cards || cards.length === 0) return "";
+
+    var listMap = {};
+    if (lists) {
+        for (var i = 0; i < lists.length; i++) { listMap[lists[i].id] = lists[i].name; }
+    }
+
+    var output = "";
+    for (var c = 0; c < cards.length; c++) {
+        var card = cards[c];
+        var listName = listMap[card.idList] || "Unknown List";
+        if (card.dueComplete === true || card.closed === true || listName === "Done") continue;
+
+        var cardName = card.name || "Unnamed Card";
+        var tags = (card.labels && card.labels.length > 0)
+            ? card.labels.map(function (l) { return l.name || l.color; }).join(", ")
+            : "No tags";
+        var due = card.due
+            ? fmtDate(shifted(new Date(card.due).getTime()))
+            : "No due date";
+
+        output += "[" + listName + "] " + cardName + " | Tags: " + tags + " | Due: " + due + "\n";
+    }
+    return output;
+}
+
+// Google Calendar: fetch today's events for one calendar config and format them.
+function gatherCalendar(cal) {
+    if (!cal.enabled) return "";
+    if (cal.apiKey === "" && cal.accessToken === "") return "";
+
+    var win = todayWindow();
+    var url = "https://www.googleapis.com/calendar/v3/calendars/" +
+        encodeURIComponent(cal.calendarId) + "/events" +
+        "?singleEvents=true&orderBy=startTime" +
+        "&timeMin=" + encodeURIComponent(win.timeMin) +
+        "&timeMax=" + encodeURIComponent(win.timeMax);
+    if (cal.apiKey !== "") url += "&key=" + encodeURIComponent(cal.apiKey);
+    if (cal.accessToken !== "") url += "&access_token=" + encodeURIComponent(cal.accessToken);
+
+    var resp = httpGetJSON(url);
+    if (!resp || !resp.items || resp.items.length === 0) return "";
+
+    var prefix = cal.kind === "work" ? "Working - " : "";
+    var out = "";
+    for (var i = 0; i < resp.items.length; i++) {
+        out += formatEvent(resp.items[i], prefix);
+    }
+    return out;
+}
+
+// Build the aggregated briefing text (ports the "Aggr" node's layout).
+function buildAggregate() {
+    var hk = "", us = "", personal = "", work = "";
+    for (var i = 0; i < CONFIG.calendars.length; i++) {
+        var cal = CONFIG.calendars[i];
+        var text = gatherCalendar(cal);
+        if (cal.kind === "holiday" && cal.label === "HK") hk += text;
+        else if (cal.kind === "holiday") us += text;
+        else if (cal.kind === "work") work += text;
+        else personal += text;
+    }
+
+    var trello = gatherTrello();
+
+    var p = shifted(Date.now());
+    var nowLine = "Current user date time: " + new Date().toISOString() +
+        ", " + WEEKDAYS[p.wd] + " " + CONFIG.tzLabel + "\n";
+
+    return "假日: \n" + hk + "\n" + us + "\n" +
+        "------------------\n 日曆事件: \n" + personal + "\n" + work + "\n" +
+        "------------------\n Trello 待辦事項:\n" + trello + "\n" +
+        "------------------\n" + nowLine;
+}
+
+// ── Telegram send + pending-deletion cleanup ────────────────────────────────
+
+function sendMessage(token, chatId, text) {
+    var body = text;
+    if (CONFIG.parseMode === "MarkdownV2") body = escapeMarkdownV2(text);
+
+    var payload = { chat_id: chatId, text: body, disable_notification: true };
+    if (CONFIG.parseMode !== "") payload.parse_mode = CONFIG.parseMode;
+
+    var res = telegramApi(token, "sendMessage", payload);
+    if (res.ok !== true && CONFIG.parseMode !== "") {
+        res = telegramApi(token, "sendMessage", {
+            chat_id: chatId, text: text, disable_notification: true
+        });
+    }
+    return res;
+}
+
+// Delete any previously-sent briefings that are now older than deleteAfterMs,
+// keeping the rest queued. Replaces the workflow's inline Wait(20h)->Delete.
+function cleanupPending(token) {
+    var raw = readDBItem(CONFIG.dbTable, "pending");
+    var queue = [];
+    if (raw && raw !== "false" && raw !== "null") {
+        try { queue = JSON.parse(raw); } catch (e) { queue = []; }
+    }
+
+    var now = Date.now();
+    var remaining = [];
+    for (var i = 0; i < queue.length; i++) {
+        var item = queue[i];
+        if (now - item.sentAt >= CONFIG.deleteAfterMs) {
+            telegramApi(token, "deleteMessage",
+                { chat_id: item.chatId, message_id: item.messageId });
+        } else {
+            remaining.push(item);
+        }
+    }
+    return remaining;
+}
+
+function queuePush(queue, chatId, messageId) {
+    queue.push({ chatId: chatId, messageId: messageId, sentAt: Date.now() });
+    writeDBItem(CONFIG.dbTable, "pending", JSON.stringify(queue));
+}
+
+// ── Main ────────────────────────────────────────────────────────────────────
+
+function main() {
+    var token = getBotToken();
+    if (token === "") {
+        sendJSONResp({ ok: false, error: "bot token not configured" });
+        return;
+    }
+
+    // Drain old briefings first (delete anything past its lifetime).
+    var queue = cleanupPending(token);
+
+    var briefingData = buildAggregate();
+
+    var reply;
+    try {
+        reply = llm.chat(CONFIG.promptTemplate + briefingData, {
+            model: CONFIG.model,
+            max_tokens: CONFIG.maxTokens
+        });
+    } catch (e) {
+        writeDBItem(CONFIG.dbTable, "pending", JSON.stringify(queue));
+        sendJSONResp({ ok: false, error: "llm error: " + e });
+        return;
+    }
+
+    if (!reply || reply === "") {
+        writeDBItem(CONFIG.dbTable, "pending", JSON.stringify(queue));
+        sendJSONResp({ ok: true, sent: false, note: "empty model reply" });
+        return;
+    }
+
+    var res = sendMessage(token, CONFIG.chatId, reply);
+    if (res.ok === true && res.result && res.result.message_id) {
+        queuePush(queue, res.result.chat.id, res.result.message_id);
+    } else {
+        writeDBItem(CONFIG.dbTable, "pending", JSON.stringify(queue));
+    }
+
+    sendJSONResp({ ok: true, sent: res.ok === true });
+}
+
+main();

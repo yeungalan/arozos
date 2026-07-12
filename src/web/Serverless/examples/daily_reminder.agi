@@ -1,0 +1,165 @@
+/*
+    Daily Reminder — ArozOS AGI Serverless Function
+    =================================================
+
+    A single-file port of the "Daily reminder" n8n workflow to the ArozOS AGI
+    serverless runtime. Host it with the Serverless webapp and trigger it on a
+    schedule (external cron, or the AGI scheduler) by hitting its endpoint:
+
+        https://<your-host>/api/remote/<UUID>
+
+    What the workflow did
+    ---------------------
+      HTTP Request        -> GET a todo/data source URL that returns { "data": ... }
+      Message a model     -> LLM extracts the 5-7 most important / urgent items
+      Telegram parser     -> format for Telegram
+      Send a text message -> post the result to a Telegram chat (a group)
+
+    Ported straight across: the source fetch, the LLM summary and the Telegram
+    send. The original schedule (cron "0 14 * * 1-4,7") is external here — point
+    your scheduler at the endpoint URL.
+
+    Author: converted from n8n workflow "Daily reminder"
+*/
+
+requirelib("http");
+requirelib("llm");
+
+// ── Configuration ───────────────────────────────────────────────────────────
+var CONFIG = {
+    // Telegram bot token (from @BotFather). Leave "" to read it from the AGI DB
+    // item DailyReminder/botToken instead.
+    botToken: "",
+    // Target chat id (the original was the group -1001392519602).
+    chatId: "-1001392519602",
+
+    // Data source: the original hit another ArozOS serverless endpoint that
+    // returns JSON shaped like { "data": "...todo text..." }.
+    dataSourceUrl: "https://s03.aroz.alanyeung.co/api/remote/9f712ca8-4525-45f8-8f59-662141b6aed5",
+
+    // LLM settings. model === "" uses the server's configured default model.
+    model: "",
+    maxTokens: 1000,
+    // The instruction from the workflow's "Message a model" node. The fetched
+    // data is appended after the separator line.
+    promptTemplate:
+        "從這些待辦事項中提取 5-7 個最重要且緊急的行動項目，按時間順序和優先級排列。" +
+        "每項用一行簡潔呈現，開頭用 • 符號。對已過期項目直接標註狀態（如「已延遲2天」），" +
+        "然後給出具體行動建議，避免重複使用相同的提醒用語。語氣保持友善但簡潔。僅輸出純文字條列。\n" +
+        "============================================================\n",
+
+    // Telegram parse mode: "" (plain, most reliable), "MarkdownV2" or "HTML".
+    // Plain text is the default so a stray markup character can never cause a
+    // Telegram 400 and drop the whole reminder.
+    parseMode: "",
+
+    dbTable: "DailyReminder"
+};
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function getBotToken() {
+    if (CONFIG.botToken && CONFIG.botToken !== "") {
+        return CONFIG.botToken;
+    }
+    var stored = readDBItem(CONFIG.dbTable, "botToken");
+    if (stored && stored !== "false" && stored !== "null") {
+        return stored;
+    }
+    return "";
+}
+
+function telegramApi(token, method, payload) {
+    var url = "https://api.telegram.org/bot" + token + "/" + method;
+    var raw = http.post(url, JSON.stringify(payload));
+    if (raw === null) {
+        return { ok: false, error: "no response from Telegram API" };
+    }
+    try {
+        return JSON.parse(raw);
+    } catch (e) {
+        return { ok: false, error: "unparsable Telegram response", raw: raw };
+    }
+}
+
+// Escape MarkdownV2 reserved characters when that parse mode is selected.
+function escapeMarkdownV2(text) {
+    return String(text).replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+}
+
+// Fetch the data source and return the string to summarise. Accepts either a
+// JSON body with a "data" field or plain text.
+function fetchData(url) {
+    var raw = http.get(url);
+    if (raw === null) {
+        return "";
+    }
+    try {
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.data !== "undefined") {
+            return typeof parsed.data === "string"
+                ? parsed.data
+                : JSON.stringify(parsed.data);
+        }
+        return raw;
+    } catch (e) {
+        return raw; // not JSON — use the body as-is
+    }
+}
+
+// Send the message, retrying as plain text if a parse mode is rejected.
+function sendMessage(token, chatId, text) {
+    var body = text;
+    if (CONFIG.parseMode === "MarkdownV2") {
+        body = escapeMarkdownV2(text);
+    }
+    var payload = { chat_id: chatId, text: body, disable_notification: true };
+    if (CONFIG.parseMode !== "") {
+        payload.parse_mode = CONFIG.parseMode;
+    }
+
+    var res = telegramApi(token, "sendMessage", payload);
+    if (res.ok !== true && CONFIG.parseMode !== "") {
+        res = telegramApi(token, "sendMessage", {
+            chat_id: chatId, text: text, disable_notification: true
+        });
+    }
+    return res;
+}
+
+// ── Main ────────────────────────────────────────────────────────────────────
+
+function main() {
+    var token = getBotToken();
+    if (token === "") {
+        sendJSONResp({ ok: false, error: "bot token not configured" });
+        return;
+    }
+
+    var data = fetchData(CONFIG.dataSourceUrl);
+    if (!data || data === "") {
+        sendJSONResp({ ok: true, skipped: "no data from source" });
+        return;
+    }
+
+    var reply;
+    try {
+        reply = llm.chat(CONFIG.promptTemplate + data, {
+            model: CONFIG.model,
+            max_tokens: CONFIG.maxTokens
+        });
+    } catch (e) {
+        sendJSONResp({ ok: false, error: "llm error: " + e });
+        return;
+    }
+
+    if (!reply || reply === "") {
+        sendJSONResp({ ok: true, sent: false, note: "empty model reply" });
+        return;
+    }
+
+    var sendResult = sendMessage(token, CONFIG.chatId, reply);
+    sendJSONResp({ ok: true, sent: sendResult.ok === true });
+}
+
+main();
