@@ -27,6 +27,7 @@ Edit `user:/.appdata/DailyReminder/config.json`:
 |-------|---------|
 | `telegramToken` | Your BotFather token (kept out of source control — set it here). |
 | `chatId` | Target chat / channel id (defaults to the original workflow's `-1001392519602`). |
+| `useLLM` | `true` summarises events with the LLM; `false` sends the raw formatted list (handy when the AI endpoint is slow/unavailable). |
 | `model` | LLM model override; `""` uses the admin-configured default. |
 | `lookaheadDays` | How many days ahead to include (default `7`). |
 | `tzOffsetHours` | Timezone offset (default `9` = Asia/Tokyo). |
@@ -48,7 +49,11 @@ Add query parameters when calling the endpoint:
 
 - `?dryRun=1` — build the message and return it as JSON, but do **not** send to Telegram.
 - `?lookahead=14` — widen the window for one call.
+- `?useLLM=0` — skip the LLM for this call and send the raw event list.
 - `?token=...`, `?chat_id=...`, `?model=...` — override config per request.
+
+If the LLM endpoint times out, the script logs the error and automatically
+falls back to sending the raw event list, so a reminder still goes out.
 
 ## Supported iCalendar features
 

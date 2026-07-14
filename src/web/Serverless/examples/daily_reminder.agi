@@ -73,6 +73,7 @@ var defaultConfig = {
     "chatId": "-1001392519602",                // channel / chat id from the original workflow
 
     // --- optional tuning ---
+    "useLLM": true,                            // false = skip the LLM and send the raw event list
     "model": "",                               // "" = use the admin-configured default model
     "lookaheadDays": 7,                        // how many days ahead to include
     "tzOffsetHours": 9,                        // Asia/Tokyo (matches the n8n workflow timezone)
@@ -132,11 +133,15 @@ config.telegramToken = paraOr("token", config.telegramToken);
 config.chatId        = paraOr("chat_id", config.chatId);
 config.model         = paraOr("model", config.model);
 config.lookaheadDays = parseInt(paraOr("lookahead", config.lookaheadDays), 10) || config.lookaheadDays;
+var useLLMPara = getPara("useLLM");
+if (useLLMPara === "0" || useLLMPara === "false") config.useLLM = false;
+if (useLLMPara === "1" || useLLMPara === "true") config.useLLM = true;
 
 var tzOffMs = Number(config.tzOffsetHours) * 3600 * 1000;
 dbg("config resolved:", {
     method: (typeof REQ_METHOD !== "undefined" ? REQ_METHOD : "n/a"),
     dryRun: dryRun,
+    useLLM: config.useLLM,
     lookaheadDays: config.lookaheadDays,
     tzOffsetHours: config.tzOffsetHours,
     model: config.model || "(default)",
@@ -151,6 +156,13 @@ dbg("config resolved:", {
 // Unfold RFC 5545 folded lines (a leading space/tab continues the previous line).
 function unfold(text) {
     return text.replace(/\r\n[ \t]/g, "").replace(/\n[ \t]/g, "").replace(/\r[ \t]/g, "");
+}
+
+// Decode RFC 5545 TEXT escapes: \\ -> \, \; -> ;, \, -> ,, \n / \N -> newline.
+function unescapeICSText(s) {
+    return String(s).replace(/\\([\\;,nN])/g, function (m, ch) {
+        return (ch === "n" || ch === "N") ? "\n" : ch;
+    });
 }
 
 // Split "NAME;PARAM=v;PARAM2=v2:VALUE" into { name, params:{}, value }.
@@ -216,9 +228,9 @@ function parseICS(text) {
         var p = parseProp(line);
         if (!p) continue;
         switch (p.name) {
-            case "SUMMARY":     cur.summary = p.value; break;
-            case "DESCRIPTION": cur.description = p.value; break;
-            case "LOCATION":    cur.location = p.value; break;
+            case "SUMMARY":     cur.summary = unescapeICSText(p.value); break;
+            case "DESCRIPTION": cur.description = unescapeICSText(p.value); break;
+            case "LOCATION":    cur.location = unescapeICSText(p.value); break;
             case "DTSTART":     cur.start = parseICSDate(p.value, p.params); break;
             case "RRULE":       cur.rrule = p.value; break;
             case "EXDATE":
@@ -423,8 +435,13 @@ dbg("total events to report: " + collected.length);
 var eventLines = [];
 for (var g = 0; g < collected.length; g++) {
     var it = collected[g];
-    var line = "• " + formatLocal(it.ms, it.allDay) + "  " + it.summary;
-    if (it.location) line += "  @ " + it.location;
+    // Keep every event on a single line (locations often carry multi-line addresses).
+    var summary = String(it.summary).replace(/\s*\n\s*/g, " ").trim();
+    var line = "• " + formatLocal(it.ms, it.allDay) + "  " + summary;
+    if (it.location) {
+        var loc = String(it.location).replace(/\s*\n\s*/g, ", ").replace(/,\s*,/g, ",").trim();
+        line += "  @ " + loc;
+    }
     if (it.calendar && it.calendar !== "Personal") line += "  [" + it.calendar + "]";
     eventLines.push(line);
 }
@@ -437,6 +454,9 @@ var messageBody;
 if (collected.length === 0) {
     messageBody = config.noEventsMessage;
     dbg("no events in window; skipping LLM, using noEventsMessage");
+} else if (config.useLLM === false) {
+    messageBody = eventsText;
+    dbg("useLLM=false; sending raw event list without summarising");
 } else {
     var prompt = config.promptInstruction +
         "\n============================================================\n" + eventsText;
