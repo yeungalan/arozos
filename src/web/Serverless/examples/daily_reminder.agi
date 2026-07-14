@@ -376,21 +376,22 @@ for (var c = 0; c < config.calendars.length; c++) {
         dbg("calendar '" + cal.name + "' skipped (no url configured)");
         continue;
     }
+    // Classic http.get(url) -> body string (or null). Works on every AGI build
+    // (the newer curl-like http.request is not present on older servers).
     var body = null;
     try {
-        var resp = http.request({ url: cal.url, method: "GET", timeout: 30, followRedirect: true });
-        if (resp && resp.ok) {
-            body = resp.body;
-            dbg("fetched '" + cal.name + "': HTTP " + resp.status + ", " + body.length + " bytes");
-        } else {
-            fetchErrors.push(cal.name + ": HTTP " + (resp ? resp.status : "no response"));
-            dbg("fetch failed '" + cal.name + "': HTTP " + (resp ? resp.status : "no response"));
-        }
+        body = http.get(cal.url);
     } catch (fe) {
         fetchErrors.push(cal.name + ": " + fe);
         dbg("fetch error '" + cal.name + "':", fe);
     }
-    if (!body) continue;
+    if (!body || String(body).indexOf("BEGIN:VCALENDAR") === -1) {
+        var reason = body ? "not an iCalendar response (" + String(body).length + " bytes)" : "empty response";
+        fetchErrors.push(cal.name + ": " + reason);
+        dbg("fetch failed '" + cal.name + "': " + reason);
+        continue;
+    }
+    dbg("fetched '" + cal.name + "': " + body.length + " bytes");
 
     var events = parseICS(body);
     var addedFromCal = 0;
@@ -495,33 +496,41 @@ if (!config.telegramToken) {
 
 dbg("sending to Telegram chat " + config.chatId + " (" + htmlMessage.length + " chars)");
 var tgApi = "https://api.telegram.org/bot" + config.telegramToken + "/sendMessage";
-var tgResp = http.request({
-    url: tgApi,
-    method: "POST",
-    timeout: 30,
-    json: {
+// Classic http.post(url, body) sends the body as JSON and returns the response
+// body string. Compatible with every AGI build.
+var tgRespBody = null;
+try {
+    tgRespBody = http.post(tgApi, JSON.stringify({
         chat_id: config.chatId,
         text: htmlMessage,
         parse_mode: "HTML",
         disable_notification: true
-    }
-});
+    }));
+} catch (te) {
+    dbg("Telegram request threw:", te);
+}
 
-result.telegram = { status: tgResp ? tgResp.status : 0, ok: false };
-if (tgResp && tgResp.ok) {
+result.telegram = { ok: false };
+if (tgRespBody) {
     try {
-        var tgBody = JSON.parse(tgResp.body);
+        var tgBody = JSON.parse(tgRespBody);
         result.telegram.ok = tgBody.ok === true;
-        if (!tgBody.ok) result.telegram.description = tgBody.description;
+        if (!tgBody.ok) {
+            result.ok = false;
+            result.telegram.description = tgBody.description;
+        }
     } catch (pe) {
-        result.telegram.ok = true; // 2xx but non-JSON body — treat as delivered
+        // Non-empty but non-JSON response — surface a snippet for debugging.
+        result.ok = false;
+        result.telegram.error = String(tgRespBody).substring(0, 300);
     }
 } else {
     result.ok = false;
-    result.telegram.error = tgResp ? tgResp.body : "no response from Telegram";
+    result.telegram.error = "no response from Telegram";
 }
-dbg("Telegram result: HTTP " + result.telegram.status + ", ok=" + result.telegram.ok +
-    (result.telegram.description ? ", desc=" + result.telegram.description : ""));
+dbg("Telegram result: ok=" + result.telegram.ok +
+    (result.telegram.description ? ", desc=" + result.telegram.description : "") +
+    (result.telegram.error ? ", error=" + result.telegram.error : ""));
 dbg("run finished, ok=" + result.ok);
 
 sendJSONResp(JSON.stringify(result));
