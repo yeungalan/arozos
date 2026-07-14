@@ -73,15 +73,14 @@ var defaultConfig = {
     "chatId": "-1001392519602",                // channel / chat id from the original workflow
 
     // --- optional tuning ---
-    "useLLM": true,                            // false = skip the LLM and send the raw event list
     "model": "",                               // "" = use the admin-configured default model
     "lookaheadDays": 7,                        // how many days ahead to include
     "tzOffsetHours": 9,                        // Asia/Tokyo (matches the n8n workflow timezone)
     "maxEvents": 40,                           // cap events handed to the model
     "noEventsMessage": "近期沒有即將到來的行程，好好休息一下。",
 
-    // Instruction prompt (adapted from the original workflow, now calendar-aware)
-    "promptInstruction": "以下是我近期的行事曆行程，請從中提取 5-7 個最重要且需要準備或注意的項目，按時間順序和優先級排列。每項用一行簡潔呈現，開頭用 • 符號，並標註日期/時間。對今天或即將到來的項目給出具體行動或準備建議，避免重複使用相同的提醒用語。語氣保持友善但簡潔。僅輸出純文字條列，不要加標題。",
+    // Instruction prompt (from the original workflow: calendar events + Trello to-dos)
+    "promptInstruction": "以下是我近期的行事曆行程與 Trello 待辦事項，請從中提取 5-7 個最重要且緊急的項目，按時間順序和優先級排列。每項用一行簡潔呈現，開頭用 • 符號，並標註日期/時間。對已過期的待辦直接標註狀態（如「已延遲2天」），然後給出具體行動建議，避免重複使用相同的提醒用語。語氣保持友善但簡潔。僅輸出純文字條列，不要加標題。",
 
     // Calendar feeds. Public holiday feeds are safe to ship as defaults; the
     // private personal feed must be pasted into the config file by you.
@@ -89,7 +88,19 @@ var defaultConfig = {
         { "name": "US Holidays",    "url": "https://calendar.google.com/calendar/ical/en.usa%23holiday%40group.v.calendar.google.com/public/basic.ics" },
         { "name": "Japan Holidays", "url": "https://calendar.google.com/calendar/ical/en.japanese%23holiday%40group.v.calendar.google.com/public/basic.ics" },
         { "name": "Personal",       "url": "PUT_YOUR_PRIVATE_ICS_URL_HERE" }
-    ]
+    ],
+
+    // Trello to-do cards (the original workflow's data source). Disabled until
+    // you add your API key + token. Get them from https://trello.com/app-key
+    // (token via the "Token" link on that page). Overdue cards are always
+    // included so the model can flag them.
+    "trello": {
+        "enabled": false,
+        "apiKey": "",              // Trello API key
+        "token": "",               // Trello API token
+        "boardIds": [],            // optional board ids; empty = cards assigned to you
+        "includeNoDueDate": false  // also list open cards that have no due date
+    }
 };
 
 // Shallow-merge a loaded config over the defaults so new fields keep working.
@@ -133,15 +144,12 @@ config.telegramToken = paraOr("token", config.telegramToken);
 config.chatId        = paraOr("chat_id", config.chatId);
 config.model         = paraOr("model", config.model);
 config.lookaheadDays = parseInt(paraOr("lookahead", config.lookaheadDays), 10) || config.lookaheadDays;
-var useLLMPara = getPara("useLLM");
-if (useLLMPara === "0" || useLLMPara === "false") config.useLLM = false;
-if (useLLMPara === "1" || useLLMPara === "true") config.useLLM = true;
+config.trello = mergeConfig(defaultConfig.trello, config.trello || {});
 
 var tzOffMs = Number(config.tzOffsetHours) * 3600 * 1000;
 dbg("config resolved:", {
     method: (typeof REQ_METHOD !== "undefined" ? REQ_METHOD : "n/a"),
     dryRun: dryRun,
-    useLLM: config.useLLM,
     lookaheadDays: config.lookaheadDays,
     tzOffsetHours: config.tzOffsetHours,
     model: config.model || "(default)",
@@ -350,6 +358,15 @@ function expandEvent(ev, windowStart, windowEnd) {
 function pad2(n) { return (n < 10 ? "0" : "") + n; }
 var WEEK_CN = ["日", "一", "二", "三", "四", "五", "六"];
 
+// Parse an ISO 8601 UTC timestamp (e.g. Trello "2026-07-14T04:00:00.000Z") to ms.
+function parseISOUTC(s) {
+    var t = Date.parse(s);
+    if (!isNaN(t)) return t;
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/.exec(String(s));
+    if (!m) return NaN;
+    return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+}
+
 function formatLocal(ms, allDay) {
     var d = new Date(ms + tzOffMs);
     var date = d.getUTCFullYear() + "-" + pad2(d.getUTCMonth() + 1) + "-" + pad2(d.getUTCDate());
@@ -371,7 +388,7 @@ function tgFormat(text) {
 }
 
 //----------------------------------------------------------------------------
-// 5. Gather calendar events
+// 5. Gather calendar events and Trello to-dos
 //----------------------------------------------------------------------------
 var nowMs = Date.now();
 // Window start = local midnight today; end = now + lookahead days.
@@ -380,7 +397,8 @@ var windowStart = Date.UTC(ln.getUTCFullYear(), ln.getUTCMonth(), ln.getUTCDate(
 var windowEnd = nowMs + Number(config.lookaheadDays) * 86400000;
 dbg("window (local):", formatLocal(windowStart, false), "->", formatLocal(windowEnd, false));
 
-var collected = [];
+var collected = [];     // dated items (calendar events + Trello cards with a due date)
+var todoNoDue = [];     // Trello card names without a due date
 var fetchErrors = [];
 for (var c = 0; c < config.calendars.length; c++) {
     var cal = config.calendars[c];
@@ -423,19 +441,80 @@ for (var c = 0; c < config.calendars.length; c++) {
     dbg("parsed '" + cal.name + "': " + events.length + " VEVENTs, " + addedFromCal + " occurrence(s) in window");
 }
 
+// --- Trello to-do cards (optional; the original workflow's data source) ---
+var tr = config.trello || {};
+if (tr.enabled && tr.apiKey && tr.token) {
+    var creds = "key=" + encodeURIComponent(tr.apiKey) + "&token=" + encodeURIComponent(tr.token);
+    var fields = "fields=name,due,dueComplete,shortUrl";
+    var trUrls = [];
+    if (tr.boardIds && tr.boardIds.length) {
+        for (var bi = 0; bi < tr.boardIds.length; bi++) {
+            trUrls.push("https://api.trello.com/1/boards/" + tr.boardIds[bi] + "/cards?filter=open&" + fields + "&" + creds);
+        }
+    } else {
+        trUrls.push("https://api.trello.com/1/members/me/cards?filter=open&" + fields + "&" + creds);
+    }
+
+    var trelloDated = 0, trelloNoDue = 0;
+    for (var ui = 0; ui < trUrls.length; ui++) {
+        var tbody = null;
+        try {
+            tbody = http.get(trUrls[ui]);
+        } catch (tfe) {
+            fetchErrors.push("trello: " + tfe);
+            dbg("trello fetch error:", tfe);
+        }
+        if (!tbody) { fetchErrors.push("trello: empty response"); dbg("trello: empty response"); continue; }
+
+        var cards = null;
+        try {
+            cards = JSON.parse(tbody);
+        } catch (tpe) {
+            fetchErrors.push("trello: unexpected response (" + String(tbody).substring(0, 120) + ")");
+            dbg("trello: response was not JSON");
+            continue;
+        }
+        if (!cards || !cards.length) continue;
+
+        for (var ci = 0; ci < cards.length; ci++) {
+            var card = cards[ci];
+            if (card.dueComplete) continue;            // already done
+            if (card.due) {
+                var dms = parseISOUTC(card.due);
+                if (isNaN(dms)) continue;
+                if (dms > windowEnd) continue;         // too far in the future
+                // Overdue cards (dms < windowStart) are kept on purpose.
+                collected.push({
+                    ms: dms, allDay: false,
+                    summary: card.name || "(untitled)",
+                    location: "", calendar: "Trello", isTodo: true
+                });
+                trelloDated++;
+            } else if (tr.includeNoDueDate) {
+                todoNoDue.push(card.name || "(untitled)");
+                trelloNoDue++;
+            }
+        }
+    }
+    dbg("trello: " + trelloDated + " dated card(s) in window, " + trelloNoDue + " without due date");
+} else if (tr.enabled) {
+    dbg("trello enabled but apiKey/token missing; skipping");
+}
+
 // Sort chronologically and cap.
 collected.sort(function (a, b) { return a.ms - b.ms; });
 if (collected.length > config.maxEvents) {
     dbg("capping events " + collected.length + " -> " + config.maxEvents);
     collected = collected.slice(0, config.maxEvents);
 }
-dbg("total events to report: " + collected.length);
+if (todoNoDue.length > config.maxEvents) todoNoDue = todoNoDue.slice(0, config.maxEvents);
+dbg("total items to report: " + collected.length + " dated, " + todoNoDue.length + " undated");
 
-// Build the plain-text event list handed to the model.
+// Build the plain-text list handed to the model.
 var eventLines = [];
 for (var g = 0; g < collected.length; g++) {
     var it = collected[g];
-    // Keep every event on a single line (locations often carry multi-line addresses).
+    // Keep every item on a single line (locations often carry multi-line addresses).
     var summary = String(it.summary).replace(/\s*\n\s*/g, " ").trim();
     var line = "• " + formatLocal(it.ms, it.allDay) + "  " + summary;
     if (it.location) {
@@ -445,21 +524,25 @@ for (var g = 0; g < collected.length; g++) {
     if (it.calendar && it.calendar !== "Personal") line += "  [" + it.calendar + "]";
     eventLines.push(line);
 }
+// Undated Trello cards go last.
+for (var td = 0; td < todoNoDue.length; td++) {
+    eventLines.push("• (無期限)  " + String(todoNoDue[td]).replace(/\s*\n\s*/g, " ").trim() + "  [Trello]");
+}
 var eventsText = eventLines.join("\n");
+var hasContent = (collected.length > 0 || todoNoDue.length > 0);
 
 //----------------------------------------------------------------------------
 // 6. Summarise with the LLM (skipped when there is nothing to report)
 //----------------------------------------------------------------------------
 var messageBody;
-if (collected.length === 0) {
+if (!hasContent) {
     messageBody = config.noEventsMessage;
-    dbg("no events in window; skipping LLM, using noEventsMessage");
-} else if (config.useLLM === false) {
-    messageBody = eventsText;
-    dbg("useLLM=false; sending raw event list without summarising");
+    dbg("nothing to report; skipping LLM, using noEventsMessage");
 } else {
+    // Give the model "today" so it can compute overdue status for to-dos.
+    var todayLine = "今天：" + formatLocal(nowMs, false) + "\n\n";
     var prompt = config.promptInstruction +
-        "\n============================================================\n" + eventsText;
+        "\n============================================================\n" + todayLine + eventsText;
     var llmOpts = {};
     if (config.model) llmOpts.model = config.model;
     dbg("calling llm.chat, model=" + (config.model || "(default)") + ", prompt length=" + prompt.length);
@@ -492,6 +575,7 @@ if (htmlMessage.length > 4096) {
 var result = {
     ok: true,
     eventCount: collected.length,
+    todoNoDueCount: todoNoDue.length,
     windowDays: Number(config.lookaheadDays),
     fetchErrors: fetchErrors,
     message: messageBody

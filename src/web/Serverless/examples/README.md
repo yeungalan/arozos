@@ -1,13 +1,17 @@
 # Daily Reminder — serverless example
 
 `daily_reminder.agi` is a single-file [AGI serverless](../../../mod/agi/README.md)
-port of an n8n "Daily reminder" workflow. It fetches one or more Google
-Calendar `.ics` feeds, asks the configured LLM to pull out the 5-7 most
-important upcoming items, and pushes the result to a Telegram chat as HTML.
+port of an n8n "Daily reminder" workflow. It gathers upcoming items from two
+sources — one or more Google Calendar `.ics` feeds and (optionally) your Trello
+to-do cards — asks the configured LLM to pull out the 5-7 most important /
+urgent ones, and pushes the result to a Telegram chat as HTML.
 
 ```
-fetch .ics feeds  ->  llm.chat() summary  ->  markdown->HTML  ->  Telegram sendMessage
+fetch .ics feeds + Trello cards  ->  llm.chat() summary  ->  markdown->HTML  ->  Telegram sendMessage
 ```
+
+Overdue Trello cards are kept and the model is told today's date, so it can flag
+them (e.g. "已延遲2天"), matching the original workflow's behaviour.
 
 ## Install
 
@@ -27,15 +31,39 @@ Edit `user:/.appdata/DailyReminder/config.json`:
 |-------|---------|
 | `telegramToken` | Your BotFather token (kept out of source control — set it here). |
 | `chatId` | Target chat / channel id (defaults to the original workflow's `-1001392519602`). |
-| `useLLM` | `true` summarises events with the LLM; `false` sends the raw formatted list (handy when the AI endpoint is slow/unavailable). |
 | `model` | LLM model override; `""` uses the admin-configured default. |
 | `lookaheadDays` | How many days ahead to include (default `7`). |
 | `tzOffsetHours` | Timezone offset (default `9` = Asia/Tokyo). |
 | `calendars` | Array of `{ name, url }`. Paste your **private** personal `.ics` URL into the `"Personal"` entry (replace the `PUT_YOUR_PRIVATE_ICS_URL_HERE` placeholder). US + Japan public holiday feeds are pre-filled. |
+| `trello` | Trello to-do source (see below). |
 
-Secrets (bot token, private calendar URL) live in this config file, **not** in
-the committed script, so the endpoint stays shareable while your credentials do
-not.
+### Trello
+
+The `trello` block pulls open cards from Trello and merges them with the
+calendar items:
+
+```json
+"trello": {
+    "enabled": false,
+    "apiKey": "",
+    "token": "",
+    "boardIds": [],
+    "includeNoDueDate": false
+}
+```
+
+- Set `enabled: true` and fill `apiKey` + `token` (get both from
+  <https://trello.com/app-key> — the token via the "Token" link there).
+- `boardIds` — optional list of board ids to read; leave empty to pull the cards
+  assigned to you (`/members/me/cards`).
+- Cards already marked done (`dueComplete`) are skipped. Cards with a due date
+  within the window — **including overdue ones** — are summarised alongside
+  calendar events. Set `includeNoDueDate: true` to also list open cards that
+  have no due date (shown as `(無期限)`).
+
+Secrets (bot token, private calendar URL, Trello key/token) live in this config
+file, **not** in the committed script, so the endpoint stays shareable while
+your credentials do not.
 
 ## Run on a schedule
 
@@ -49,11 +77,7 @@ Add query parameters when calling the endpoint:
 
 - `?dryRun=1` — build the message and return it as JSON, but do **not** send to Telegram.
 - `?lookahead=14` — widen the window for one call.
-- `?useLLM=0` — skip the LLM for this call and send the raw event list.
 - `?token=...`, `?chat_id=...`, `?model=...` — override config per request.
-
-If the LLM endpoint times out, the script logs the error and automatically
-falls back to sending the raw event list, so a reminder still goes out.
 
 ## Supported iCalendar features
 
