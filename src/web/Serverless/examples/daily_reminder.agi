@@ -53,6 +53,17 @@ requirelib("llm");
 var CONFIG_DIR  = "user:/.appdata/DailyReminder";
 var CONFIG_PATH = CONFIG_DIR + "/config.json";
 
+// Debug logging -> managed system log via console.log. Always on.
+// Never logs secrets (bot token / calendar URLs).
+function dbg() {
+    var parts = [];
+    for (var i = 0; i < arguments.length; i++) {
+        var a = arguments[i];
+        parts.push(typeof a === "object" ? JSON.stringify(a) : String(a));
+    }
+    console.log("[DailyReminder] " + parts.join(" "));
+}
+
 //----------------------------------------------------------------------------
 // 1. Configuration
 //----------------------------------------------------------------------------
@@ -89,6 +100,8 @@ function mergeConfig(base, over) {
     return out;
 }
 
+dbg("run started, EXECUTION_ID=" + (typeof EXECUTION_ID !== "undefined" ? EXECUTION_ID : "n/a"));
+
 var config = defaultConfig;
 var configExisted = filelib.fileExists(CONFIG_PATH);
 if (configExisted) {
@@ -96,7 +109,9 @@ if (configExisted) {
         var raw = filelib.readFile(CONFIG_PATH);
         var loaded = JSON.parse(raw);
         config = mergeConfig(defaultConfig, loaded);
+        dbg("loaded config from " + CONFIG_PATH);
     } catch (e) {
+        dbg("config parse error:", e);
         sendJSONResp(JSON.stringify({ ok: false, error: "config.json is not valid JSON: " + e }));
         exit();
     }
@@ -104,6 +119,7 @@ if (configExisted) {
     // First run: drop a template the user can fill in, then stop.
     if (!filelib.fileExists(CONFIG_DIR)) { filelib.mkdir(CONFIG_DIR); }
     filelib.writeFile(CONFIG_PATH, JSON.stringify(defaultConfig, null, 4));
+    dbg("no config found; wrote template to " + CONFIG_PATH);
 }
 
 // Per-request overrides (handy for testing from a browser)
@@ -118,6 +134,15 @@ config.model         = paraOr("model", config.model);
 config.lookaheadDays = parseInt(paraOr("lookahead", config.lookaheadDays), 10) || config.lookaheadDays;
 
 var tzOffMs = Number(config.tzOffsetHours) * 3600 * 1000;
+dbg("config resolved:", {
+    method: (typeof REQ_METHOD !== "undefined" ? REQ_METHOD : "n/a"),
+    dryRun: dryRun,
+    lookaheadDays: config.lookaheadDays,
+    tzOffsetHours: config.tzOffsetHours,
+    model: config.model || "(default)",
+    calendars: config.calendars.length,
+    hasTelegramToken: config.telegramToken ? true : false
+});
 
 //----------------------------------------------------------------------------
 // 2. iCalendar (.ics) parsing
@@ -341,23 +366,34 @@ var nowMs = Date.now();
 var ln = new Date(nowMs + tzOffMs);
 var windowStart = Date.UTC(ln.getUTCFullYear(), ln.getUTCMonth(), ln.getUTCDate(), 0, 0, 0) - tzOffMs;
 var windowEnd = nowMs + Number(config.lookaheadDays) * 86400000;
+dbg("window (local):", formatLocal(windowStart, false), "->", formatLocal(windowEnd, false));
 
 var collected = [];
 var fetchErrors = [];
 for (var c = 0; c < config.calendars.length; c++) {
     var cal = config.calendars[c];
-    if (!cal.url || cal.url === "PUT_YOUR_PRIVATE_ICS_URL_HERE") continue;
+    if (!cal.url || cal.url === "PUT_YOUR_PRIVATE_ICS_URL_HERE") {
+        dbg("calendar '" + cal.name + "' skipped (no url configured)");
+        continue;
+    }
     var body = null;
     try {
         var resp = http.request({ url: cal.url, method: "GET", timeout: 30, followRedirect: true });
-        if (resp && resp.ok) body = resp.body;
-        else fetchErrors.push(cal.name + ": HTTP " + (resp ? resp.status : "no response"));
+        if (resp && resp.ok) {
+            body = resp.body;
+            dbg("fetched '" + cal.name + "': HTTP " + resp.status + ", " + body.length + " bytes");
+        } else {
+            fetchErrors.push(cal.name + ": HTTP " + (resp ? resp.status : "no response"));
+            dbg("fetch failed '" + cal.name + "': HTTP " + (resp ? resp.status : "no response"));
+        }
     } catch (fe) {
         fetchErrors.push(cal.name + ": " + fe);
+        dbg("fetch error '" + cal.name + "':", fe);
     }
     if (!body) continue;
 
     var events = parseICS(body);
+    var addedFromCal = 0;
     for (var ei = 0; ei < events.length; ei++) {
         var occs = expandEvent(events[ei], windowStart, windowEnd);
         for (var oi = 0; oi < occs.length; oi++) {
@@ -368,13 +404,19 @@ for (var c = 0; c < config.calendars.length; c++) {
                 location: events[ei].location || "",
                 calendar: cal.name
             });
+            addedFromCal++;
         }
     }
+    dbg("parsed '" + cal.name + "': " + events.length + " VEVENTs, " + addedFromCal + " occurrence(s) in window");
 }
 
 // Sort chronologically and cap.
 collected.sort(function (a, b) { return a.ms - b.ms; });
-if (collected.length > config.maxEvents) collected = collected.slice(0, config.maxEvents);
+if (collected.length > config.maxEvents) {
+    dbg("capping events " + collected.length + " -> " + config.maxEvents);
+    collected = collected.slice(0, config.maxEvents);
+}
+dbg("total events to report: " + collected.length);
 
 // Build the plain-text event list handed to the model.
 var eventLines = [];
@@ -393,18 +435,27 @@ var eventsText = eventLines.join("\n");
 var messageBody;
 if (collected.length === 0) {
     messageBody = config.noEventsMessage;
+    dbg("no events in window; skipping LLM, using noEventsMessage");
 } else {
     var prompt = config.promptInstruction +
         "\n============================================================\n" + eventsText;
     var llmOpts = {};
     if (config.model) llmOpts.model = config.model;
+    dbg("calling llm.chat, model=" + (config.model || "(default)") + ", prompt length=" + prompt.length);
     try {
         var reply = llm.chat(prompt, llmOpts);
-        messageBody = (reply && String(reply).trim() !== "") ? String(reply).trim() : eventsText;
+        if (reply && String(reply).trim() !== "") {
+            messageBody = String(reply).trim();
+            dbg("llm reply received, length=" + messageBody.length);
+        } else {
+            messageBody = eventsText;
+            dbg("llm returned empty reply; falling back to raw event list");
+        }
     } catch (le) {
         // If the model is unavailable, still deliver the raw event list.
         messageBody = eventsText;
         fetchErrors.push("llm: " + le);
+        dbg("llm error, falling back to raw event list:", le);
     }
 }
 
@@ -412,7 +463,10 @@ if (collected.length === 0) {
 // 7. Deliver to Telegram
 //----------------------------------------------------------------------------
 var htmlMessage = tgFormat(messageBody);
-if (htmlMessage.length > 4096) htmlMessage = htmlMessage.substring(0, 4090) + "…";
+if (htmlMessage.length > 4096) {
+    dbg("message too long (" + htmlMessage.length + "), truncating to 4090");
+    htmlMessage = htmlMessage.substring(0, 4090) + "…";
+}
 
 var result = {
     ok: true,
@@ -424,6 +478,7 @@ var result = {
 
 if (dryRun) {
     result.dryRun = true;
+    dbg("dryRun=1; not sending to Telegram");
     sendJSONResp(JSON.stringify(result));
     exit();
 }
@@ -433,10 +488,12 @@ if (!config.telegramToken) {
     result.error = "telegramToken is not set. Edit " + CONFIG_PATH +
         " (or pass ?token=...), then run again. A template config was " +
         (configExisted ? "already present." : "just created for you.");
+    dbg("aborting: telegramToken not set");
     sendJSONResp(JSON.stringify(result));
     exit();
 }
 
+dbg("sending to Telegram chat " + config.chatId + " (" + htmlMessage.length + " chars)");
 var tgApi = "https://api.telegram.org/bot" + config.telegramToken + "/sendMessage";
 var tgResp = http.request({
     url: tgApi,
@@ -463,5 +520,8 @@ if (tgResp && tgResp.ok) {
     result.ok = false;
     result.telegram.error = tgResp ? tgResp.body : "no response from Telegram";
 }
+dbg("Telegram result: HTTP " + result.telegram.status + ", ok=" + result.telegram.ok +
+    (result.telegram.description ? ", desc=" + result.telegram.description : ""));
+dbg("run finished, ok=" + result.ok);
 
 sendJSONResp(JSON.stringify(result));
