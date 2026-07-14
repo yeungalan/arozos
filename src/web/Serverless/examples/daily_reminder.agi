@@ -1,0 +1,467 @@
+/*
+    Daily Reminder — ArozOS AGI Serverless Function
+    ================================================
+
+    A single-file port of the n8n "Daily reminder" workflow.
+
+    Pipeline (was: n8n nodes -> now: one AGI serverless script):
+
+        Schedule / manual trigger
+            -> HTTP Request           ==>  fetch one or more Google Calendar
+                                            ".ics" (iCalendar) feeds over HTTP
+            -> Message a model        ==>  requirelib("llm").chat(...) — pull the
+                                            5-7 most important upcoming items out
+                                            of the raw calendar events
+            -> Telegram Markdown fix  ==>  tgFormat() — convert the model's light
+                                            markdown into Telegram-safe HTML
+            -> Send a text message    ==>  Telegram Bot API sendMessage (HTML,
+                                            silent notification)
+
+    This script runs with the *owning user's* scope, so filelib / DB / http /
+    llm are all available. Register it in the "Serverless" web app to get a
+    /api/remote/<uuid> endpoint, then point an external scheduler (or the n8n
+    Schedule Trigger you already have) at that URL.
+
+    --------------------------------------------------------------------------
+    Configuration (secrets are NOT stored in this file)
+    --------------------------------------------------------------------------
+    On first run the script writes a template config to
+
+        user:/.appdata/DailyReminder/config.json
+
+    Fill in your Telegram bot token and your *private* personal calendar URL
+    there (keeping them out of source control), then run again. Every field can
+    also be overridden per-request with a query parameter for testing:
+
+        ?dryRun=1        build the message but do NOT send it to Telegram
+        ?token=...       override telegramToken
+        ?chat_id=...     override chatId
+        ?model=...       override the llm model
+        ?lookahead=14    override lookaheadDays
+
+    Example (dry run, returns the composed message as JSON):
+        GET /api/remote/<uuid>?dryRun=1
+*/
+
+//----------------------------------------------------------------------------
+// 0. Load libraries
+//----------------------------------------------------------------------------
+requirelib("http");
+requirelib("filelib");
+requirelib("llm");
+
+var CONFIG_DIR  = "user:/.appdata/DailyReminder";
+var CONFIG_PATH = CONFIG_DIR + "/config.json";
+
+//----------------------------------------------------------------------------
+// 1. Configuration
+//----------------------------------------------------------------------------
+var defaultConfig = {
+    // --- required to actually send a message ---
+    "telegramToken": "",                       // BotFather token, e.g. "123456:ABC-DEF..."
+    "chatId": "-1001392519602",                // channel / chat id from the original workflow
+
+    // --- optional tuning ---
+    "model": "",                               // "" = use the admin-configured default model
+    "lookaheadDays": 7,                        // how many days ahead to include
+    "tzOffsetHours": 9,                        // Asia/Tokyo (matches the n8n workflow timezone)
+    "maxEvents": 40,                           // cap events handed to the model
+    "noEventsMessage": "近期沒有即將到來的行程，好好休息一下。",
+
+    // Instruction prompt (adapted from the original workflow, now calendar-aware)
+    "promptInstruction": "以下是我近期的行事曆行程，請從中提取 5-7 個最重要且需要準備或注意的項目，按時間順序和優先級排列。每項用一行簡潔呈現，開頭用 • 符號，並標註日期/時間。對今天或即將到來的項目給出具體行動或準備建議，避免重複使用相同的提醒用語。語氣保持友善但簡潔。僅輸出純文字條列，不要加標題。",
+
+    // Calendar feeds. Public holiday feeds are safe to ship as defaults; the
+    // private personal feed must be pasted into the config file by you.
+    "calendars": [
+        { "name": "US Holidays",    "url": "https://calendar.google.com/calendar/ical/en.usa%23holiday%40group.v.calendar.google.com/public/basic.ics" },
+        { "name": "Japan Holidays", "url": "https://calendar.google.com/calendar/ical/en.japanese%23holiday%40group.v.calendar.google.com/public/basic.ics" },
+        { "name": "Personal",       "url": "PUT_YOUR_PRIVATE_ICS_URL_HERE" }
+    ]
+};
+
+// Shallow-merge a loaded config over the defaults so new fields keep working.
+function mergeConfig(base, over) {
+    var out = {};
+    var k;
+    for (k in base) { if (base.hasOwnProperty(k)) out[k] = base[k]; }
+    for (k in over) { if (over.hasOwnProperty(k)) out[k] = over[k]; }
+    return out;
+}
+
+var config = defaultConfig;
+var configExisted = filelib.fileExists(CONFIG_PATH);
+if (configExisted) {
+    try {
+        var raw = filelib.readFile(CONFIG_PATH);
+        var loaded = JSON.parse(raw);
+        config = mergeConfig(defaultConfig, loaded);
+    } catch (e) {
+        sendJSONResp(JSON.stringify({ ok: false, error: "config.json is not valid JSON: " + e }));
+        exit();
+    }
+} else {
+    // First run: drop a template the user can fill in, then stop.
+    if (!filelib.fileExists(CONFIG_DIR)) { filelib.mkdir(CONFIG_DIR); }
+    filelib.writeFile(CONFIG_PATH, JSON.stringify(defaultConfig, null, 4));
+}
+
+// Per-request overrides (handy for testing from a browser)
+function paraOr(key, fallback) {
+    var v = getPara(key);
+    return (v === null || v === "") ? fallback : v;
+}
+var dryRun = (paraOr("dryRun", "0") == "1" || paraOr("dryRun", "0") == "true");
+config.telegramToken = paraOr("token", config.telegramToken);
+config.chatId        = paraOr("chat_id", config.chatId);
+config.model         = paraOr("model", config.model);
+config.lookaheadDays = parseInt(paraOr("lookahead", config.lookaheadDays), 10) || config.lookaheadDays;
+
+var tzOffMs = Number(config.tzOffsetHours) * 3600 * 1000;
+
+//----------------------------------------------------------------------------
+// 2. iCalendar (.ics) parsing
+//----------------------------------------------------------------------------
+
+// Unfold RFC 5545 folded lines (a leading space/tab continues the previous line).
+function unfold(text) {
+    return text.replace(/\r\n[ \t]/g, "").replace(/\n[ \t]/g, "").replace(/\r[ \t]/g, "");
+}
+
+// Split "NAME;PARAM=v;PARAM2=v2:VALUE" into { name, params:{}, value }.
+function parseProp(line) {
+    var colon = line.indexOf(":");
+    if (colon < 0) return null;
+    var head = line.substring(0, colon);
+    var value = line.substring(colon + 1);
+    var segs = head.split(";");
+    var name = segs[0].toUpperCase();
+    var params = {};
+    for (var i = 1; i < segs.length; i++) {
+        var eq = segs[i].indexOf("=");
+        if (eq > 0) {
+            params[segs[i].substring(0, eq).toUpperCase()] = segs[i].substring(eq + 1);
+        }
+    }
+    return { name: name, params: params, value: value };
+}
+
+// Parse an ICS date/date-time value into { ms, allDay, utc }.
+// Handles: 20260101 (DATE), 20260101T090000Z (UTC), 20260101T090000 (local/TZID).
+function parseICSDate(value, params) {
+    value = value.trim();
+    var isDate = (params && params.VALUE === "DATE") || /^\d{8}$/.test(value);
+    var y, mo, d, h = 0, mi = 0, s = 0, utc = false;
+    if (isDate) {
+        y = parseInt(value.substr(0, 4), 10);
+        mo = parseInt(value.substr(4, 2), 10) - 1;
+        d = parseInt(value.substr(6, 2), 10);
+        // All-day: anchor to local midnight in the configured timezone.
+        return { ms: Date.UTC(y, mo, d, 0, 0, 0) - tzOffMs, allDay: true, utc: false };
+    }
+    // date-time
+    y  = parseInt(value.substr(0, 4), 10);
+    mo = parseInt(value.substr(4, 2), 10) - 1;
+    d  = parseInt(value.substr(6, 2), 10);
+    h  = parseInt(value.substr(9, 2), 10);
+    mi = parseInt(value.substr(11, 2), 10);
+    s  = parseInt(value.substr(13, 2), 10) || 0;
+    if (value.charAt(value.length - 1) === "Z") { utc = true; }
+    var off = utc ? 0 : tzOffMs;
+    return { ms: Date.UTC(y, mo, d, h, mi, s) - off, allDay: false, utc: utc };
+}
+
+// Parse a full ICS document into an array of event objects.
+function parseICS(text) {
+    var lines = unfold(text).split(/\r\n|\n|\r/);
+    var events = [];
+    var cur = null;
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        if (line === "BEGIN:VEVENT") {
+            cur = { summary: "", description: "", location: "", start: null, rrule: "", exdates: [] };
+            continue;
+        }
+        if (line === "END:VEVENT") {
+            if (cur && cur.start) events.push(cur);
+            cur = null;
+            continue;
+        }
+        if (!cur) continue;
+        var p = parseProp(line);
+        if (!p) continue;
+        switch (p.name) {
+            case "SUMMARY":     cur.summary = p.value; break;
+            case "DESCRIPTION": cur.description = p.value; break;
+            case "LOCATION":    cur.location = p.value; break;
+            case "DTSTART":     cur.start = parseICSDate(p.value, p.params); break;
+            case "RRULE":       cur.rrule = p.value; break;
+            case "EXDATE":
+                var parts = p.value.split(",");
+                for (var e = 0; e < parts.length; e++) {
+                    var ex = parseICSDate(parts[e], p.params);
+                    if (ex) cur.exdates.push(ex.ms);
+                }
+                break;
+            default: break;
+        }
+    }
+    return events;
+}
+
+//----------------------------------------------------------------------------
+// 3. Recurrence expansion (common RRULE subset)
+//----------------------------------------------------------------------------
+// Supports FREQ=DAILY/WEEKLY/MONTHLY/YEARLY with INTERVAL, COUNT, UNTIL, BYDAY
+// (weekly) and EXDATE. Only occurrences inside the lookahead window are kept.
+function parseRRule(rrule) {
+    var out = {};
+    var segs = rrule.split(";");
+    for (var i = 0; i < segs.length; i++) {
+        var eq = segs[i].indexOf("=");
+        if (eq > 0) out[segs[i].substring(0, eq).toUpperCase()] = segs[i].substring(eq + 1);
+    }
+    return out;
+}
+
+var DOW = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+
+function isExcluded(ms, exdates) {
+    for (var i = 0; i < exdates.length; i++) { if (exdates[i] === ms) return true; }
+    return false;
+}
+
+function expandEvent(ev, windowStart, windowEnd) {
+    var base = ev.start.ms;
+    var off = ev.start.allDay ? tzOffMs : (ev.start.utc ? 0 : tzOffMs);
+    var out = [];
+
+    if (!ev.rrule) {
+        if (base >= windowStart && base <= windowEnd && !isExcluded(base, ev.exdates)) out.push(base);
+        return out;
+    }
+
+    var R = parseRRule(ev.rrule);
+    var freq = (R.FREQ || "").toUpperCase();
+    var interval = parseInt(R.INTERVAL, 10) || 1;
+    var count = R.COUNT ? (parseInt(R.COUNT, 10) || 0) : Infinity;
+    var until = R.UNTIL ? parseICSDate(R.UNTIL, {}).ms : Infinity;
+
+    // Local wall-clock components of the first instance.
+    var lb = new Date(base + off);
+    var Y = lb.getUTCFullYear(), Mo = lb.getUTCMonth(), D = lb.getUTCDate();
+    var H = lb.getUTCHours(), Mi = lb.getUTCMinutes(), S = lb.getUTCSeconds();
+
+    function atLocal(y, mo, d) { return Date.UTC(y, mo, d, H, Mi, S) - off; }
+
+    var emitted = 0, guard = 0, MAX = 3000;
+
+    // Push one candidate occurrence, respecting COUNT / UNTIL / window / EXDATE.
+    // Returns false when generation should stop entirely.
+    function consider(ms) {
+        if (ms < base) return true;            // never before the first instance
+        if (emitted >= count) return false;
+        if (ms > until) return false;
+        emitted++;
+        if (ms > windowEnd) return false;      // occurrences only move forward
+        if (ms >= windowStart && !isExcluded(ms, ev.exdates)) out.push(ms);
+        return true;
+    }
+
+    if (freq === "WEEKLY" && R.BYDAY) {
+        var days = R.BYDAY.split(",");
+        var idxs = [];
+        for (var a = 0; a < days.length; a++) {
+            var key = days[a].replace(/^[0-9+-]*/, "").toUpperCase();
+            if (DOW.hasOwnProperty(key)) idxs.push(DOW[key]);
+        }
+        idxs.sort(function (x, y) { return x - y; });
+        // Sunday that starts the week of the first instance.
+        var weekStart = atLocal(Y, Mo, D - new Date(base + off).getUTCDay());
+        for (var w = 0; guard < MAX; w += interval) {
+            var any = false;
+            for (var di = 0; di < idxs.length; di++) {
+                guard++;
+                var occ = weekStart + (w * 7 + idxs[di]) * 86400000;
+                any = true;
+                if (!consider(occ)) return out;
+            }
+            if (!any) break;
+            if (weekStart + (w * 7) * 86400000 > windowEnd + 8 * 86400000) break;
+        }
+        return out;
+    }
+
+    for (var i = 0; guard < MAX; i++, guard++) {
+        var ms;
+        if (freq === "DAILY")        ms = base + i * interval * 86400000;
+        else if (freq === "WEEKLY")  ms = base + i * interval * 7 * 86400000;
+        else if (freq === "MONTHLY") ms = atLocal(Y, Mo + i * interval, D);
+        else if (freq === "YEARLY")  ms = atLocal(Y + i * interval, Mo, D);
+        else { // unknown FREQ: treat as a single event
+            if (base >= windowStart && base <= windowEnd) out.push(base);
+            break;
+        }
+        if (!consider(ms)) break;
+    }
+    return out;
+}
+
+//----------------------------------------------------------------------------
+// 4. Formatting helpers
+//----------------------------------------------------------------------------
+function pad2(n) { return (n < 10 ? "0" : "") + n; }
+var WEEK_CN = ["日", "一", "二", "三", "四", "五", "六"];
+
+function formatLocal(ms, allDay) {
+    var d = new Date(ms + tzOffMs);
+    var date = d.getUTCFullYear() + "-" + pad2(d.getUTCMonth() + 1) + "-" + pad2(d.getUTCDate());
+    var wd = "週" + WEEK_CN[d.getUTCDay()];
+    if (allDay) return date + " (" + wd + ", 全日)";
+    return date + " (" + wd + ") " + pad2(d.getUTCHours()) + ":" + pad2(d.getUTCMinutes());
+}
+
+// Convert the model's light markdown into Telegram-safe HTML.
+function tgFormat(text) {
+    var s = String(text)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+    s = s.replace(/__([^_]+)__/g, "<b>$1</b>");
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<i>$2</i>");
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    return s;
+}
+
+//----------------------------------------------------------------------------
+// 5. Gather calendar events
+//----------------------------------------------------------------------------
+var nowMs = Date.now();
+// Window start = local midnight today; end = now + lookahead days.
+var ln = new Date(nowMs + tzOffMs);
+var windowStart = Date.UTC(ln.getUTCFullYear(), ln.getUTCMonth(), ln.getUTCDate(), 0, 0, 0) - tzOffMs;
+var windowEnd = nowMs + Number(config.lookaheadDays) * 86400000;
+
+var collected = [];
+var fetchErrors = [];
+for (var c = 0; c < config.calendars.length; c++) {
+    var cal = config.calendars[c];
+    if (!cal.url || cal.url === "PUT_YOUR_PRIVATE_ICS_URL_HERE") continue;
+    var body = null;
+    try {
+        var resp = http.request({ url: cal.url, method: "GET", timeout: 30, followRedirect: true });
+        if (resp && resp.ok) body = resp.body;
+        else fetchErrors.push(cal.name + ": HTTP " + (resp ? resp.status : "no response"));
+    } catch (fe) {
+        fetchErrors.push(cal.name + ": " + fe);
+    }
+    if (!body) continue;
+
+    var events = parseICS(body);
+    for (var ei = 0; ei < events.length; ei++) {
+        var occs = expandEvent(events[ei], windowStart, windowEnd);
+        for (var oi = 0; oi < occs.length; oi++) {
+            collected.push({
+                ms: occs[oi],
+                allDay: events[ei].start.allDay,
+                summary: events[ei].summary || "(無標題)",
+                location: events[ei].location || "",
+                calendar: cal.name
+            });
+        }
+    }
+}
+
+// Sort chronologically and cap.
+collected.sort(function (a, b) { return a.ms - b.ms; });
+if (collected.length > config.maxEvents) collected = collected.slice(0, config.maxEvents);
+
+// Build the plain-text event list handed to the model.
+var eventLines = [];
+for (var g = 0; g < collected.length; g++) {
+    var it = collected[g];
+    var line = "• " + formatLocal(it.ms, it.allDay) + "  " + it.summary;
+    if (it.location) line += "  @ " + it.location;
+    if (it.calendar && it.calendar !== "Personal") line += "  [" + it.calendar + "]";
+    eventLines.push(line);
+}
+var eventsText = eventLines.join("\n");
+
+//----------------------------------------------------------------------------
+// 6. Summarise with the LLM (skipped when there is nothing to report)
+//----------------------------------------------------------------------------
+var messageBody;
+if (collected.length === 0) {
+    messageBody = config.noEventsMessage;
+} else {
+    var prompt = config.promptInstruction +
+        "\n============================================================\n" + eventsText;
+    var llmOpts = {};
+    if (config.model) llmOpts.model = config.model;
+    try {
+        var reply = llm.chat(prompt, llmOpts);
+        messageBody = (reply && String(reply).trim() !== "") ? String(reply).trim() : eventsText;
+    } catch (le) {
+        // If the model is unavailable, still deliver the raw event list.
+        messageBody = eventsText;
+        fetchErrors.push("llm: " + le);
+    }
+}
+
+//----------------------------------------------------------------------------
+// 7. Deliver to Telegram
+//----------------------------------------------------------------------------
+var htmlMessage = tgFormat(messageBody);
+if (htmlMessage.length > 4096) htmlMessage = htmlMessage.substring(0, 4090) + "…";
+
+var result = {
+    ok: true,
+    eventCount: collected.length,
+    windowDays: Number(config.lookaheadDays),
+    fetchErrors: fetchErrors,
+    message: messageBody
+};
+
+if (dryRun) {
+    result.dryRun = true;
+    sendJSONResp(JSON.stringify(result));
+    exit();
+}
+
+if (!config.telegramToken) {
+    result.ok = false;
+    result.error = "telegramToken is not set. Edit " + CONFIG_PATH +
+        " (or pass ?token=...), then run again. A template config was " +
+        (configExisted ? "already present." : "just created for you.");
+    sendJSONResp(JSON.stringify(result));
+    exit();
+}
+
+var tgApi = "https://api.telegram.org/bot" + config.telegramToken + "/sendMessage";
+var tgResp = http.request({
+    url: tgApi,
+    method: "POST",
+    timeout: 30,
+    json: {
+        chat_id: config.chatId,
+        text: htmlMessage,
+        parse_mode: "HTML",
+        disable_notification: true
+    }
+});
+
+result.telegram = { status: tgResp ? tgResp.status : 0, ok: false };
+if (tgResp && tgResp.ok) {
+    try {
+        var tgBody = JSON.parse(tgResp.body);
+        result.telegram.ok = tgBody.ok === true;
+        if (!tgBody.ok) result.telegram.description = tgBody.description;
+    } catch (pe) {
+        result.telegram.ok = true; // 2xx but non-JSON body — treat as delivered
+    }
+} else {
+    result.ok = false;
+    result.telegram.error = tgResp ? tgResp.body : "no response from Telegram";
+}
+
+sendJSONResp(JSON.stringify(result));
