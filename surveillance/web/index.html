@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Surveillance</title>
+  <link rel="icon" href="img/icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="img/icon.svg" alt="" width="26" height="26">
+      <span>Surveillance</span>
+    </div>
+    <div class="stats" id="stats">
+      <span class="stat"><b id="stat-total">0</b> cameras</span>
+      <span class="stat online"><b id="stat-online">0</b> online</span>
+      <span class="stat offline"><b id="stat-offline">0</b> offline</span>
+      <span class="stat"><b id="stat-recording">0</b> recording</span>
+    </div>
+    <button class="btn primary" id="add-camera-btn">
+      <svg viewBox="0 0 20 20" class="ic"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Add camera
+    </button>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Search name, location, manufacturer...">
+      </div>
+
+      <div class="filter-block">
+        <label class="filter-label">Status</label>
+        <select id="filter-status">
+          <option value="">All</option>
+          <option value="online">Online</option>
+          <option value="offline">Offline</option>
+          <option value="disabled">Disabled</option>
+          <option value="unknown">Unknown</option>
+        </select>
+      </div>
+
+      <div class="filter-block">
+        <div class="filter-head">
+          <label class="filter-label">Groups</label>
+          <button class="link-btn" id="add-group-btn">+ Add</button>
+        </div>
+        <ul class="group-list" id="group-list"></ul>
+      </div>
+
+      <div class="filter-block">
+        <label class="filter-label">Tags</label>
+        <div class="tag-cloud" id="tag-cloud"></div>
+      </div>
+    </aside>
+
+    <section class="content">
+      <div class="camera-grid" id="camera-grid"></div>
+      <div class="empty" id="empty-state" hidden>
+        <p>No cameras match your filters.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Camera editor modal -->
+  <div class="modal-backdrop" id="camera-modal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="modal-title">Add camera</h2>
+        <button class="icon-btn" id="modal-close" aria-label="Close">
+          <svg viewBox="0 0 20 20" class="ic"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <form id="camera-form" class="modal-body">
+        <input type="hidden" id="f-id">
+        <div class="grid2">
+          <div class="field">
+            <label>Camera name *</label>
+            <input type="text" id="f-name" required maxlength="120">
+          </div>
+          <div class="field">
+            <label>Group</label>
+            <select id="f-group"></select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Description</label>
+          <input type="text" id="f-description" maxlength="240">
+        </div>
+
+        <div class="field">
+          <label>RTSP URL *</label>
+          <input type="text" id="f-rtsp" required placeholder="rtsp://192.168.1.10:554/live">
+        </div>
+
+        <div class="grid2">
+          <div class="field">
+            <label>Username</label>
+            <input type="text" id="f-username" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input type="password" id="f-password" autocomplete="new-password" placeholder="leave blank to keep unchanged">
+          </div>
+        </div>
+
+        <div class="grid3">
+          <div class="field">
+            <label>Transport</label>
+            <select id="f-transport">
+              <option value="auto">Auto detect</option>
+              <option value="tcp">TCP</option>
+              <option value="udp">UDP</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Codec</label>
+            <select id="f-codec">
+              <option value="">Auto</option>
+              <option value="h264">H.264</option>
+              <option value="h265">H.265</option>
+              <option value="mjpeg">MJPEG</option>
+              <option value="av1">AV1</option>
+              <option value="mpeg4">MPEG4</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Stream type</label>
+            <select id="f-streamtype">
+              <option value="main">Main</option>
+              <option value="sub">Sub</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid3">
+          <div class="field">
+            <label>Resolution</label>
+            <input type="text" id="f-resolution" placeholder="1920x1080">
+          </div>
+          <div class="field">
+            <label>FPS</label>
+            <input type="number" id="f-fps" min="0" max="1000" value="0">
+          </div>
+          <div class="field">
+            <label>Manufacturer</label>
+            <input type="text" id="f-manufacturer">
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="field">
+            <label>Model</label>
+            <input type="text" id="f-model">
+          </div>
+          <div class="field">
+            <label>Tags (comma separated)</label>
+            <input type="text" id="f-tags" placeholder="entrance, hd, outdoor">
+          </div>
+        </div>
+
+        <fieldset class="recording">
+          <legend>Recording</legend>
+          <div class="grid2">
+            <div class="field">
+              <label>Mode</label>
+              <select id="f-rec-mode">
+                <option value="off">Off</option>
+                <option value="continuous">Continuous</option>
+                <option value="motion">Motion</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="manual">Manual</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Format</label>
+              <select id="f-rec-format">
+                <option value="">Default</option>
+                <option value="mp4">MP4</option>
+                <option value="mkv">MKV</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="field">
+              <label>Retention (days, 0 = keep)</label>
+              <input type="number" id="f-rec-retention" min="0" value="0">
+            </div>
+            <div class="field">
+              <label>Max storage (MB, 0 = unlimited)</label>
+              <input type="number" id="f-rec-maxstorage" min="0" value="0">
+            </div>
+          </div>
+        </fieldset>
+
+        <label class="checkbox">
+          <input type="checkbox" id="f-enabled" checked> Enabled
+        </label>
+
+        <div class="test-result" id="test-result" hidden></div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn" id="test-btn">Test connection</button>
+          <div class="spacer"></div>
+          <button type="button" class="btn" id="cancel-btn">Cancel</button>
+          <button type="submit" class="btn primary" id="save-btn">Save camera</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Group modal -->
+  <div class="modal-backdrop" id="group-modal" hidden>
+    <div class="modal small">
+      <div class="modal-head">
+        <h2>New group</h2>
+        <button class="icon-btn" id="group-close" aria-label="Close">
+          <svg viewBox="0 0 20 20" class="ic"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <form id="group-form" class="modal-body">
+        <div class="field">
+          <label>Group name *</label>
+          <input type="text" id="g-name" required>
+        </div>
+        <div class="field">
+          <label>Kind</label>
+          <select id="g-kind">
+            <option value="">General</option>
+            <option value="building">Building</option>
+            <option value="floor">Floor</option>
+            <option value="location">Location</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <div class="spacer"></div>
+          <button type="button" class="btn" id="group-cancel">Cancel</button>
+          <button type="submit" class="btn primary">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# Built binaries (named surveillance_<GOOS>_<GOARCH>) and runtime data.
+surveillance_*
+!surveillance_*.go
+/data/
+*.tmp
