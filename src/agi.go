@@ -15,19 +15,25 @@ var (
 func AGIInit() {
 	//Create new AGI Gateway object
 	gw, err := agi.NewGateway(agi.AgiSysInfo{
-		BuildVersion:         build_version,
-		InternalVersion:      internal_version,
-		LoadedModule:         moduleHandler.GetModuleNameList(),
-		ReservedTables:       []string{"auth", "permisson", "register", "desktop"},
-		ModuleRegisterParser: moduleHandler.RegisterModuleFromAGI,
-		PackageManager:       packageManager,
-		UserHandler:          userHandler,
-		StartupRoot:          "./web",
-		ActivateScope:        []string{"./web", "./subservice"},
-		FileSystemRender:     thumbRenderHandler,
-		ShareManager:         shareManager,
-		NightlyManager:       nightlyManager,
-		TempFolderPath:       *tmp_directory,
+		BuildVersion:          build_version,
+		InternalVersion:       internal_version,
+		LoadedModule:          moduleHandler.GetModuleNameList(),
+		ReservedTables:        []string{"auth", "permisson", "register", "desktop"},
+		ModuleRegisterParser:  moduleHandler.RegisterModuleFromAGI,
+		ExtIconRegisterParser: moduleHandler.RegisterExtIcon,
+		ModuleListProvider:    moduleHandler.GetModuleListJSONForUser,
+		PackageManager:        packageManager,
+		Logger:                systemWideLogger,
+		UserHandler:           userHandler,
+		StartupRoot:           "./web",
+		ActivateScope:         []string{"./web", "./subservice"},
+		FileSystemRender:      thumbRenderHandler,
+		ShareManager:          shareManager,
+		NightlyManager:        nightlyManager,
+		MeetRoomManager:       meetRoomManager,
+		SharedSpaceManager:    sharedSpaceManager,
+		TempFolderPath:        *tmp_directory,
+		NotificationSender:    sendUserNotification,
 	})
 	if err != nil {
 		systemWideLogger.PrintAndLog("AGI", "AGI Gateway Initialization Failed", err)
@@ -87,6 +93,7 @@ func AGIInit() {
 	externalAGIRouter.HandleFunc("/api/ajgi/listExt", gw.ListExternalEndpoint)
 	externalAGIRouter.HandleFunc("/api/ajgi/addExt", gw.AddExternalEndPoint)
 	externalAGIRouter.HandleFunc("/api/ajgi/rmExt", gw.RemoveExternalEndPoint)
+	externalAGIRouter.HandleFunc("/api/ajgi/stats", gw.GetEndpointStats)
 
 	AGIGateway = gw
 }
