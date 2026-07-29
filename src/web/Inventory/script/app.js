@@ -28,6 +28,8 @@ var App = (function () {
         searchResults: [],      // last rendered result set, for keyboard nav
         searchIndex: -1,        // highlighted row on the Find view, -1 = none
         searchTyping: false,    // operator lifted the IME to type a query
+        pairing: null,          // InvPairing status, null until it reports in
+        forwarding: false,      // a scan is in flight to the paired desktop
         lastResult: null,
         busy: false
     };
@@ -217,12 +219,21 @@ var App = (function () {
 
     /* ── Scan handling ──────────────────────────────────────────────────── */
 
-    function onScan(code) {
+    function onScan(code, source) {
         if (!state.loaded) {
             toast("Still loading the inventory", "warn");
             return;
         }
         if (state.busy) return;
+
+        // Paired as a remote scanner: this device is an input for the desktop,
+        // so the barcode is forwarded and nothing is changed here. A scan that
+        // arrived *from* a handheld is exempt, or a host that is also paired
+        // would bounce it straight back.
+        if (InvPairing.isRemote() && source !== "remote") {
+            forwardScan(code);
+            return;
+        }
 
         // Scanning on the Find view means "find this", not "apply the current
         // mode to it" - that view exists to look things up. Every other view
@@ -395,6 +406,279 @@ var App = (function () {
         }
     }
 
+    /* ── Remote scanner pairing ─────────────────────────────────────────── */
+
+    var MODE_LABELS = {
+        lookup: "Look up", in: "Stock in", out: "Stock out",
+        move: "Move", set: "Count"
+    };
+
+    /* Handheld side: send the barcode to the desktop and report what it did */
+    function forwardScan(code) {
+        state.forwarding = true;
+        showResult({ type: "sending", barcode: code });
+        setScanStatus("Sending to the desktop...", false);
+
+        InvPairing.push(code, function (data) {
+            state.forwarding = false;
+            InvScanner.feedbackOk();
+            var did = MODE_LABELS[data.hostMode] || "handled";
+            showResult({
+                type: "sent",
+                barcode: code,
+                detail: "Desktop is set to " + did +
+                    (data.hostMode === "in" || data.hostMode === "out"
+                        ? " " + qtyText(data.hostStep) : "")
+            });
+            setScanStatus(null, true);
+            armInput();
+        }, function (message) {
+            state.forwarding = false;
+            InvScanner.feedbackError();
+            showResult({ type: "error", message: message });
+            setScanStatus(null, true);
+            armInput();
+        });
+    }
+
+    /*
+        Desktop side: a paired handheld scanned something. Put it in the scan box
+        so the operator can see the value land, then run it through exactly the
+        same path a locally scanned barcode takes.
+    */
+    function receiveRemoteScan(scan) {
+        var input = $("scanInput");
+        if (input) {
+            input.value = scan.code;
+            // Cleared once the operation has been shown, so the box is armed
+            // and empty again for the next pull
+            setTimeout(function () {
+                if (input.value === scan.code) input.value = "";
+            }, 600);
+        }
+
+        toast(scan.deviceName + ": " + scan.code, "");
+        onScan(scan.code, "remote");
+    }
+
+    function pairingStatusHtml() {
+        var pairing = state.pairing;
+        if (!pairing || pairing.role === "none") return "";
+
+        if (pairing.role === "remote") {
+            return '<div class="pair-bar remote">' +
+                '<i class="mobile alternate icon"></i>' +
+                '<div class="body"><div class="t">Sending scans to the desktop</div>' +
+                '<div class="s">Paired as ' + esc(pairing.deviceName) +
+                (pairing.hostMode ? " &middot; desktop is on " + esc(MODE_LABELS[pairing.hostMode] || pairing.hostMode) : "") +
+                "</div></div>" +
+                '<button class="btn small" id="pairLeave">Stop</button></div>';
+        }
+
+        var online = 0;
+        for (var i = 0; i < pairing.devices.length; i++) {
+            if (pairing.devices[i].online) online++;
+        }
+        return '<div class="pair-bar host' + (online ? " live" : "") + '">' +
+            '<i class="wifi icon"></i>' +
+            '<div class="body"><div class="t">' +
+            (online ? online + (online === 1 ? " handheld connected" : " handhelds connected")
+                    : "Waiting for a handheld") + "</div>" +
+            '<div class="s">Pairing code ' + esc(pairing.code) + "</div></div>" +
+            '<button class="btn small" id="pairPanel">Manage</button></div>';
+    }
+
+    var lastPairBarHtml = null;
+
+    function renderPairingBar() {
+        var host = $("pairBar");
+        if (!host) return;
+
+        // The host polls continuously; rebuilding this bar on every response
+        // would replace its buttons mid-tap and flicker the status text
+        applyRemoteScannerUi();
+
+        // The scan box names the desktop's mode, so it has to follow the
+        // heartbeat too - but never step on an in-flight "Sending..."
+        if (InvPairing.isRemote() && !state.forwarding) {
+            setScanStatus(null, true);
+        }
+
+        var html = pairingStatusHtml();
+        if (html === lastPairBarHtml) return;
+        lastPairBarHtml = html;
+        host.innerHTML = html;
+
+        if ($("pairLeave")) {
+            $("pairLeave").onclick = function () {
+                InvPairing.leave(function () {
+                    toast("Stopped forwarding scans", "");
+                });
+            };
+        }
+        if ($("pairPanel")) {
+            $("pairPanel").onclick = openPairingSheet;
+        }
+    }
+
+    /*
+        While this device is forwarding, its own mode selector and context row
+        do nothing - the desktop's mode is what applies - so they are hidden
+        rather than left there to be tapped hopefully.
+    */
+    function applyRemoteScannerUi() {
+        var remote = InvPairing.isRemote();
+        var grid = $("modeGrid");
+        var context = $("contextCard");
+        if (grid) grid.style.display = remote ? "none" : "";
+        if (context) context.style.display = remote ? "none" : "";
+    }
+
+    /* The pairing screen: pick a role, or manage the active pairing */
+    function openPairingSheet() {
+        var pairing = state.pairing || { role: "none", devices: [] };
+        var html = "";
+        var foot = "";
+
+        if (pairing.role === "host") {
+            html += '<div class="card pair-code-card">' +
+                '<div class="context-label">Pairing code</div>' +
+                '<div class="pair-code">' + esc(pairing.code) + "</div>" +
+                '<div class="hint">On the handheld, open Inventory, go to <b>More</b> and choose ' +
+                "<b>Send my scans to a desktop</b>, then key in this code. " +
+                "Both devices must be signed in as the same ArozOS user.</div></div>";
+
+            html += '<div class="section-title">Handhelds</div><div class="card flush" id="pairDevices">' +
+                pairDeviceListHtml(pairing.devices) + "</div>";
+
+            html += '<div class="card muted" style="font-size:13px;line-height:1.55;">' +
+                "A forwarded barcode is treated exactly like one scanned here: whatever mode " +
+                "this page is in - Look up, Stock in, Stock out, Move or Count - is what happens " +
+                "to it. Change the mode here and the handheld follows.</div>";
+
+            foot = '<button class="btn" id="pairNewCode"><i class="sync icon"></i>New code</button>' +
+                '<button class="btn danger" id="pairStop"><i class="close icon"></i>Stop pairing</button>';
+
+        } else if (pairing.role === "remote") {
+            html += '<div class="card">' +
+                '<div class="result-name">Sending scans to the desktop</div>' +
+                '<div class="result-sub">Code ' + esc(pairing.code) + " &middot; this device is " +
+                esc(pairing.deviceName) + "</div>" +
+                (pairing.hostMode
+                    ? '<div class="badges"><span class="badge info"><i class="desktop icon"></i>Desktop is on ' +
+                      esc(MODE_LABELS[pairing.hostMode] || pairing.hostMode) + "</span></div>"
+                    : "") +
+                "</div>" +
+                '<div class="card muted" style="font-size:13px;line-height:1.55;">' +
+                "Every trigger pull is sent to the desktop instead of changing stock here. " +
+                "The desktop decides what happens to it.</div>";
+
+            foot = '<button class="btn danger block" id="pairStop"><i class="close icon"></i>Stop sending</button>';
+
+        } else {
+            html += '<div class="card muted" style="font-size:13px;line-height:1.55;">' +
+                "Use one device as the scanner for another. The handheld reads the barcode, " +
+                "the desktop receives it and applies whatever mode is selected there. " +
+                "Both must be signed in as the same ArozOS user.</div>";
+
+            html += '<button class="btn primary block" id="pairBeHost" style="margin-bottom:10px;">' +
+                '<i class="desktop icon"></i>Receive scans on this device</button>' +
+                '<button class="btn block" id="pairBeRemote">' +
+                '<i class="mobile alternate icon"></i>Send my scans to a desktop</button>';
+        }
+
+        openSheet("Remote scanner", html, foot);
+
+        if ($("pairNewCode")) {
+            $("pairNewCode").onclick = function () {
+                InvPairing.startHost({ reset: true, getContext: pairingContext });
+                setTimeout(openPairingSheet, 400);
+            };
+        }
+        if ($("pairStop")) {
+            $("pairStop").onclick = function () {
+                var done = function () {
+                    closeSheet();
+                    toast("Remote scanner stopped", "");
+                };
+                if (pairing.role === "host") InvPairing.stopHost(done); else InvPairing.leave(done);
+            };
+        }
+        if ($("pairBeHost")) {
+            $("pairBeHost").onclick = function () {
+                InvPairing.startHost({ reset: false, getContext: pairingContext });
+                setTimeout(openPairingSheet, 400);
+            };
+        }
+        if ($("pairBeRemote")) {
+            $("pairBeRemote").onclick = openJoinSheet;
+        }
+    }
+
+    function pairDeviceListHtml(devices) {
+        if (!devices || !devices.length) {
+            return '<div class="empty"><i class="mobile alternate icon"></i>' +
+                "No handheld has joined yet.</div>";
+        }
+        var html = "";
+        for (var i = 0; i < devices.length; i++) {
+            var device = devices[i];
+            html += '<div class="log-row">' +
+                '<div class="log-icon ' + (device.online ? "in" : "lookup") + '">' +
+                '<i class="mobile alternate icon"></i></div>' +
+                '<div class="body"><div class="t">' + esc(device.deviceName) + "</div>" +
+                '<div class="s">' + (device.online ? "connected" : "offline") +
+                " &middot; " + device.scanCount + " scans sent</div></div></div>";
+        }
+        return html;
+    }
+
+    /* Handheld side: key in the code shown on the desktop */
+    function openJoinSheet() {
+        var defaultName = InvScanner.deviceHasSoftKeyboard() ? "Handheld" : "This computer";
+
+        openSheet("Pair with a desktop",
+            '<div class="field"><label>Pairing code</label>' +
+            '<input type="text" id="joinCode" class="pair-input" maxlength="9" ' +
+            'autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" ' +
+            'placeholder="ABC123">' +
+            '<div class="hint">Shown on the desktop under More, Remote scanner.</div></div>' +
+            '<div class="field"><label>Name this device</label>' +
+            '<input type="text" id="joinName" value="' + esc(defaultName) + '" maxlength="40">' +
+            '<div class="hint">Appears in the desktop\'s handheld list.</div></div>',
+            '<button class="btn" id="joinCancel">Cancel</button>' +
+            '<button class="btn primary" id="joinGo"><i class="linkify icon"></i>Pair</button>');
+
+        var codeInput = $("joinCode");
+        var commit = function () {
+            var code = codeInput.value.trim();
+            if (code === "") {
+                toast("Enter the code shown on the desktop", "err");
+                return;
+            }
+            InvPairing.join(code, $("joinName").value, function () {
+                closeSheet();
+                InvScanner.feedbackOk();
+                toast("Paired - scans now go to the desktop", "ok");
+            }, function (message) {
+                InvScanner.feedbackError();
+                toast(message, "err");
+            });
+        };
+
+        $("joinCancel").onclick = closeSheet;
+        $("joinGo").onclick = commit;
+        codeInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") { event.preventDefault(); commit(); }
+        });
+        setTimeout(function () { codeInput.focus(); }, 60);
+    }
+
+    /* What the host advertises to its handhelds */
+    function pairingContext() {
+        return { mode: state.mode, step: state.step };
+    }
+
     /* ── Scan view rendering ────────────────────────────────────────────── */
 
     var MODES = [
@@ -475,6 +759,16 @@ var App = (function () {
     function setScanStatus(message, listening) {
         var box = $("scanBox");
         var text = $("scanStatusText");
+        if ((message === null || message === undefined) && InvPairing.isRemote()) {
+            var pairing = state.pairing;
+            var hostMode = pairing && pairing.hostMode ? MODE_LABELS[pairing.hostMode] : "";
+            text.textContent = hostMode
+                ? "Ready - scan goes to the desktop (" + hostMode + ")"
+                : "Ready - scan goes to the desktop";
+            box.className = "scan-box" + (listening ? " listening" : "");
+            return;
+        }
+
         if (message === null || message === undefined) {
             var labels = {
                 lookup: "Ready - scan to look up",
@@ -628,6 +922,27 @@ var App = (function () {
                 state.query = result.barcode;
                 renderSearch();
             };
+            return;
+        }
+
+        if (result.type === "sending") {
+            host.innerHTML =
+                '<div class="card result-card">' +
+                '<div class="result-name">Sending...</div>' +
+                '<div class="result-sub">' + esc(result.barcode) + "</div></div>";
+            return;
+        }
+
+        if (result.type === "sent") {
+            flashScanBox("ok");
+            host.innerHTML =
+                '<div class="card result-card op-in">' +
+                '<div class="result-head"><div class="body">' +
+                '<div class="result-name">Sent to the desktop</div>' +
+                '<div class="result-sub">' + esc(result.barcode) + "</div>" +
+                '<div class="badges"><span class="badge info">' +
+                '<i class="desktop icon"></i>' + esc(result.detail) + "</span></div>" +
+                "</div></div></div>";
             return;
         }
 
@@ -1023,6 +1338,30 @@ var App = (function () {
             '<button class="btn" id="exportMoves"><i class="file alternate outline icon"></i>Export log</button>' +
             "</div></div>";
 
+        var pairing = state.pairing || { role: "none", devices: [] };
+        var pairSummary;
+        if (pairing.role === "host") {
+            var online = 0;
+            for (var d = 0; d < pairing.devices.length; d++) {
+                if (pairing.devices[d].online) online++;
+            }
+            pairSummary = "Receiving scans, code " + pairing.code + " - " +
+                (online ? online + " handheld(s) connected" : "waiting for a handheld");
+        } else if (pairing.role === "remote") {
+            pairSummary = "Sending every scan to the desktop on code " + pairing.code;
+        } else {
+            pairSummary = "Scan on one device and have the barcode arrive on another - " +
+                "read with the handheld, act on the desktop.";
+        }
+
+        html +=
+            '<div class="section-title">Remote scanner</div><div class="card">' +
+            '<div class="context-label">' + esc(pairSummary) + "</div>" +
+            '<button class="btn primary block" id="morePairing">' +
+            '<i class="exchange icon"></i>' +
+            (pairing.role === "none" ? "Set up remote scanning" : "Manage remote scanning") +
+            "</button></div>";
+
         var s = state.settings;
         html +=
             '<div class="section-title">Scanner</div><div class="card">' +
@@ -1088,6 +1427,7 @@ var App = (function () {
         $("moreBody").innerHTML = html;
 
         $("moreAddItem").onclick = function () { openItemEditor(null, ""); };
+        $("morePairing").onclick = openPairingSheet;
         $("moreLocations").onclick = openLocationManager;
         $("moreHistory").onclick = openHistory;
         $("moreReload").onclick = function () { load(true); };
@@ -1671,6 +2011,7 @@ var App = (function () {
 
     function refreshAllViews() {
         renderAlertBadge();
+        renderPairingBar();
         renderContext();
         if (state.view === "search") renderSearch();
         if (state.view === "alerts") renderAlerts();
@@ -1991,6 +2332,28 @@ var App = (function () {
         scanner = InvScanner.init({
             input: $("scanInput"),
             onScan: onScan
+        });
+
+        InvPairing.init({
+            api: api,
+            getContext: pairingContext,
+            onScan: receiveRemoteScan,
+            onDevices: function (devices) {
+                // Refresh the list inside the open pairing panel in place: this
+                // is exactly when the operator is watching for their handheld
+                // to show up, and re-rendering the whole sheet would drop its
+                // buttons mid-tap.
+                var host = $("pairDevices");
+                if (host) host.innerHTML = pairDeviceListHtml(devices);
+            },
+            onStatus: function (pairingStatus) {
+                state.pairing = pairingStatus;
+                renderPairingBar();
+                if (state.view === "more") renderMore();
+            },
+            onError: function (message) {
+                toast(message, "err");
+            }
         });
 
         renderContext();

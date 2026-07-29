@@ -1,0 +1,64 @@
+/*
+    Inventory - forward one scanned barcode to the paired desktop (handheld side)
+
+    POST:
+        sessionId (string)
+        deviceId  (string)
+        barcode   (string) - the decoded symbology
+
+    Returns { ok, seq, hostMode, hostStep } or { error, expired }.
+    hostMode is echoed back so the handheld can show what the desktop will do
+    with the scan it just sent.
+*/
+includes("store.js");
+includes("pairing.js");
+
+var wantedSession = (typeof sessionId !== "undefined") ? ("" + sessionId).trim() : "";
+var thisDevice = (typeof deviceId !== "undefined") ? ("" + deviceId).trim() : "";
+var scanned = (typeof barcode !== "undefined") ? ("" + barcode).trim() : "";
+
+var session = pairLoadSession();
+
+if (!pairIdIsSafe(wantedSession) || !pairIdIsSafe(thisDevice)) {
+    sendJSONResp({ error: "Bad pairing reference" });
+} else if (scanned === "") {
+    sendJSONResp({ error: "Nothing to send" });
+} else if (!session || session.id !== wantedSession) {
+    sendJSONResp({ error: "The desktop ended this session", expired: true });
+} else {
+    var vpath = pairQueuePath(session.id, thisDevice);
+
+    if (!filelib.fileExists(vpath)) {
+        sendJSONResp({ error: "This handheld is no longer paired", expired: true });
+    } else {
+        var queue;
+        try {
+            queue = JSON.parse(filelib.readFile(vpath));
+        } catch (e) {
+            queue = null;
+        }
+
+        if (!queue || !Array.isArray(queue.scans)) {
+            sendJSONResp({ error: "Pairing data was lost - join again", expired: true });
+        } else {
+            var seq = queue.nextSeq || 1;
+            queue.scans.push({
+                id: invNewId("sc_"),
+                seq: seq,
+                code: scanned,
+                ts: invNow()
+            });
+            queue.nextSeq = seq + 1;
+            queue.sent = (queue.sent || 0) + 1;
+            queue.lastSeenAt = invNow();
+            pairSaveQueue(vpath, queue);
+
+            sendJSONResp({
+                ok: true,
+                seq: seq,
+                hostMode: session.hostMode || "lookup",
+                hostStep: session.hostStep || 1
+            });
+        }
+    }
+}

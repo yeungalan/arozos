@@ -1524,3 +1524,98 @@ mark {
         grid-template-columns: 420px 1fr;
     }
 }
+
+/* ── Remote scanner pairing ─────────────────────────────────────────────── */
+.pair-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--muted);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.pair-bar.host.live {
+    border-left-color: var(--ok);
+}
+
+.pair-bar.remote {
+    border-left-color: var(--move);
+}
+
+.pair-bar > i.icon {
+    font-size: 18px;
+    margin: 0;
+    height: auto;
+    color: var(--muted);
+    flex: 0 0 auto;
+}
+
+.pair-bar.host.live > i.icon {
+    color: var(--ok);
+}
+
+.pair-bar.remote > i.icon {
+    color: var(--move);
+}
+
+.pair-bar .body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.pair-bar .body .t {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pair-bar .body .s {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.35;
+}
+
+.pair-bar .btn {
+    flex: 0 0 auto;
+}
+
+/* The code is read off one screen and typed on another - make it unmissable */
+.pair-code-card {
+    text-align: center;
+}
+
+.pair-code {
+    font-family: "SFMono-Regular", Consolas, "Roboto Mono", monospace;
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    line-height: 1.2;
+    margin: 6px 0 10px 0;
+    color: var(--accent);
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.pair-code-card .hint {
+    text-align: left;
+}
+
+.pair-input {
+    font-family: "SFMono-Regular", Consolas, "Roboto Mono", monospace;
+    font-size: 24px;
+    letter-spacing: 0.14em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+@media (min-width: 900px) {
+    .pair-code {
+        font-size: 54px;
+    }
+}

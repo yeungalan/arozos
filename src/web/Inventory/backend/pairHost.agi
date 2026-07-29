@@ -1,0 +1,51 @@
+/*
+    Inventory - start or refresh a remote-scanner session (host / desktop side)
+
+    Reuses the existing session when there is one, so reloading the desktop page
+    does not invalidate a code a handheld has already been paired with.
+
+    POST (optional):
+        reset (string) - "true" to throw the old session away and issue a new code
+
+    Returns { sessionId, code, devices, createdAt, serverTime }.
+*/
+includes("store.js");
+includes("pairing.js");
+
+filelib.mkdir(PAIR_DIR);
+
+var wantsReset = (typeof reset !== "undefined") && ("" + reset) === "true";
+var session = wantsReset ? null : pairLoadSession();
+
+if (wantsReset) {
+    var old = pairLoadSession();
+    if (old) pairClear(old.id, true);
+}
+
+if (!session) {
+    session = {
+        id: invNewId("ps_"),
+        code: pairNewCode(),
+        createdAt: invNow(),
+        hostMode: "lookup",
+        hostStep: 1
+    };
+}
+
+session.hostSeenAt = invNow();
+pairSaveSession(session);
+
+var now = invNow();
+var queues = pairListQueues(session.id);
+var devices = [];
+for (var i = 0; i < queues.length; i++) {
+    devices.push(pairDeviceSummary(queues[i].queue, now));
+}
+
+sendJSONResp({
+    sessionId: session.id,
+    code: session.code,
+    createdAt: session.createdAt,
+    devices: devices,
+    serverTime: now
+});

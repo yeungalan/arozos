@@ -25,6 +25,13 @@
           Inventory/backend/saveSettings.agi   persist thresholds and scanner options
           Inventory/backend/history.agi        paged movement journal
           Inventory/backend/exportCsv.agi      CSV export of items or the journal
+
+        Remote scanner pairing (scan on a handheld, act on a desktop):
+          Inventory/backend/pairHost.agi       host: create or refresh a session
+          Inventory/backend/pairPoll.agi       host: long-poll for forwarded scans
+          Inventory/backend/pairJoin.agi       handheld: join with the pairing code
+          Inventory/backend/pairPush.agi       handheld: forward one barcode
+          Inventory/backend/pairEnd.agi        either end: leave or end the session
     -->
 </head>
 
@@ -46,6 +53,9 @@
                     desktop layout puts the controls left and the result right.
                 -->
                 <div class="scan-pane">
+                    <!-- Remote-scanner status, filled in by app.js when paired -->
+                    <div id="pairBar"></div>
+
                     <!-- Mode buttons are rendered by app.js so the list stays in one place -->
                     <div class="mode-grid" id="modeGrid"></div>
 
@@ -152,6 +162,7 @@
 
     <script src="script/search.js"></script>
     <script src="script/scanner.js"></script>
+    <script src="script/pairing.js"></script>
     <script src="script/app.js"></script>
 </body>
 

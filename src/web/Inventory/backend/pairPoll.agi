@@ -1,0 +1,97 @@
+/*
+    Inventory - wait for scans forwarded by a paired handheld (host / desktop side)
+
+    Long poll: the script holds the request until a scan arrives or waitMs
+    elapses, so a barcode reaches the desktop as fast as the handheld can send it
+    without the page hammering the server with empty requests.
+
+    POST:
+        sessionId (string)  - from pairHost.agi
+        after     (number)  - newest scan timestamp the host has already seen
+        waitMs    (number)  - how long to hold the request, default 12000
+        hostMode  (string)  - the mode the desktop is in, echoed to handhelds
+        hostStep  (number)  - units per scan, echoed to handhelds
+
+    Returns { scans, devices, serverTime } or { error, expired }.
+*/
+includes("store.js");
+includes("pairing.js");
+
+var wantedSession = (typeof sessionId !== "undefined") ? ("" + sessionId).trim() : "";
+
+// Distinct name: "after" is the POST parameter, and declaring a var of the
+// same name would shadow it away before it could be read
+var afterTs = 0;
+if (typeof after !== "undefined") {
+    var parsedAfter = parseFloat(after);
+    if (!isNaN(parsedAfter) && parsedAfter > 0) afterTs = parsedAfter;
+}
+
+var holdMs = 12000;
+if (typeof waitMs !== "undefined") {
+    var parsedWait = parseInt(waitMs);
+    // Capped well under the 300s AGI ceiling, floored so a bad value cannot
+    // turn this into a busy loop
+    if (!isNaN(parsedWait)) holdMs = Math.max(0, Math.min(60000, parsedWait));
+}
+
+var session = pairLoadSession();
+
+if (!pairIdIsSafe(wantedSession)) {
+    sendJSONResp({ error: "Bad session id" });
+} else if (!session || session.id !== wantedSession) {
+    // The host reloaded into a stale session, or it expired
+    sendJSONResp({ error: "Session is no longer active", expired: true });
+} else {
+    // The host owns session.json, so recording its state here is conflict free
+    session.hostSeenAt = invNow();
+    if (typeof hostMode !== "undefined") session.hostMode = ("" + hostMode).trim();
+    if (typeof hostStep !== "undefined") {
+        var parsedStep = parseFloat(hostStep);
+        if (!isNaN(parsedStep)) session.hostStep = parsedStep;
+    }
+    pairSaveSession(session);
+
+    var deadline = invNow() + holdMs;
+    var collected = [];
+    var devices = [];
+
+    while (true) {
+        var now = invNow();
+        var queues = pairListQueues(session.id);
+
+        collected = [];
+        devices = [];
+        for (var i = 0; i < queues.length; i++) {
+            var queue = queues[i].queue;
+            devices.push(pairDeviceSummary(queue, now));
+
+            for (var j = 0; j < queue.scans.length; j++) {
+                var scan = queue.scans[j];
+                // Inclusive on purpose: two scans can share a millisecond, and
+                // the host de-duplicates on the scan id it is given below
+                if (scan.ts >= afterTs) {
+                    collected.push({
+                        id: scan.id,
+                        code: scan.code,
+                        ts: scan.ts,
+                        deviceId: queue.deviceId || "",
+                        deviceName: queue.deviceName || "Handheld"
+                    });
+                }
+            }
+        }
+
+        if (collected.length > 0) break;
+        if (invNow() >= deadline) break;
+        delay(300);
+    }
+
+    collected.sort(function (a, b) { return a.ts - b.ts; });
+
+    sendJSONResp({
+        scans: collected,
+        devices: devices,
+        serverTime: invNow()
+    });
+}

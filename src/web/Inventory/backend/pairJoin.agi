@@ -1,0 +1,63 @@
+/*
+    Inventory - join a desktop's scanner session (handheld side)
+
+    POST:
+        code       (string) - the pairing code shown on the desktop
+        deviceName (string) - shown in the desktop's device list
+        deviceId   (string) - optional, to resume an earlier pairing after a reload
+
+    Returns { sessionId, deviceId, hostMode, hostStep } or { error }.
+*/
+includes("store.js");
+includes("pairing.js");
+
+var givenCode = pairNormaliseCode(typeof code !== "undefined" ? code : "");
+var givenName = (typeof deviceName !== "undefined") ? ("" + deviceName).trim() : "";
+var wantedDevice = (typeof deviceId !== "undefined") ? ("" + deviceId).trim() : "";
+
+if (givenName === "") givenName = "Handheld";
+if (givenName.length > 40) givenName = givenName.substring(0, 40);
+
+var session = pairLoadSession();
+
+if (givenCode === "") {
+    sendJSONResp({ error: "Enter the code shown on the desktop" });
+} else if (!session) {
+    sendJSONResp({ error: "No desktop is waiting to be paired" });
+} else if (pairNormaliseCode(session.code) !== givenCode) {
+    sendJSONResp({ error: "That code does not match the desktop" });
+} else {
+    // Reuse the handheld's own id when it is resuming, so its scan history and
+    // its row in the desktop's device list survive a page reload
+    var thisDevice = (wantedDevice !== "" && pairIdIsSafe(wantedDevice))
+        ? wantedDevice
+        : invNewId("pd_");
+
+    var vpath = pairQueuePath(session.id, thisDevice);
+    var queue = null;
+    if (filelib.fileExists(vpath)) {
+        try {
+            var existing = JSON.parse(filelib.readFile(vpath));
+            if (existing && Array.isArray(existing.scans)) queue = existing;
+        } catch (e) {
+            queue = null;
+        }
+    }
+
+    if (!queue) {
+        queue = { deviceId: thisDevice, scans: [], nextSeq: 1, sent: 0, joinedAt: invNow() };
+    }
+
+    queue.deviceId = thisDevice;
+    queue.deviceName = givenName;
+    queue.lastSeenAt = invNow();
+    pairSaveQueue(vpath, queue);
+
+    sendJSONResp({
+        sessionId: session.id,
+        deviceId: thisDevice,
+        deviceName: givenName,
+        hostMode: session.hostMode || "lookup",
+        hostStep: session.hostStep || 1
+    });
+}

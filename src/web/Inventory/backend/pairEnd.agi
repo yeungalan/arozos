@@ -1,0 +1,31 @@
+/*
+    Inventory - end a pairing
+
+    POST:
+        sessionId (string)
+        deviceId  (string) - present when a handheld is leaving; absent when the
+                             desktop is ending the whole session
+
+    Returns { ok }.
+*/
+includes("store.js");
+includes("pairing.js");
+
+var wantedSession = (typeof sessionId !== "undefined") ? ("" + sessionId).trim() : "";
+var thisDevice = (typeof deviceId !== "undefined") ? ("" + deviceId).trim() : "";
+
+if (!pairIdIsSafe(wantedSession)) {
+    sendJSONResp({ error: "Bad session id" });
+} else if (thisDevice !== "") {
+    if (!pairIdIsSafe(thisDevice)) {
+        sendJSONResp({ error: "Bad device id" });
+    } else {
+        var vpath = pairQueuePath(wantedSession, thisDevice);
+        if (filelib.fileExists(vpath)) filelib.deleteFile(vpath);
+        sendJSONResp({ ok: true, left: true });
+    }
+} else {
+    // Desktop ending the session: drop every handheld queue and the session
+    pairClear(wantedSession, true);
+    sendJSONResp({ ok: true, ended: true });
+}

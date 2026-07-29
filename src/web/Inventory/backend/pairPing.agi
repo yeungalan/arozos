@@ -1,0 +1,51 @@
+/*
+    Inventory - handheld heartbeat
+
+    Keeps the handheld showing as connected on the desktop, and tells it what
+    the desktop is currently set to do, so the operator knows what the next
+    trigger pull will cause *before* pulling it rather than after.
+
+    POST:
+        sessionId (string)
+        deviceId  (string)
+
+    Returns { ok, hostMode, hostStep } or { error, expired }.
+*/
+includes("store.js");
+includes("pairing.js");
+
+var wantedSession = (typeof sessionId !== "undefined") ? ("" + sessionId).trim() : "";
+var thisDevice = (typeof deviceId !== "undefined") ? ("" + deviceId).trim() : "";
+
+var session = pairLoadSession();
+
+if (!pairIdIsSafe(wantedSession) || !pairIdIsSafe(thisDevice)) {
+    sendJSONResp({ error: "Bad pairing reference" });
+} else if (!session || session.id !== wantedSession) {
+    sendJSONResp({ error: "The desktop ended this session", expired: true });
+} else {
+    var vpath = pairQueuePath(session.id, thisDevice);
+
+    if (!filelib.fileExists(vpath)) {
+        sendJSONResp({ error: "This handheld is no longer paired", expired: true });
+    } else {
+        var queue;
+        try {
+            queue = JSON.parse(filelib.readFile(vpath));
+        } catch (e) {
+            queue = null;
+        }
+
+        if (!queue || !Array.isArray(queue.scans)) {
+            sendJSONResp({ error: "Pairing data was lost - join again", expired: true });
+        } else {
+            queue.lastSeenAt = invNow();
+            pairSaveQueue(vpath, queue);
+            sendJSONResp({
+                ok: true,
+                hostMode: session.hostMode || "lookup",
+                hostStep: session.hostStep || 1
+            });
+        }
+    }
+}
