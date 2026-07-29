@@ -221,7 +221,10 @@ var App = (function () {
 
     function onScan(code, source) {
         if (!state.loaded) {
-            toast("Still loading the inventory", "warn");
+            // The operator has already pulled the trigger - the barcode is real
+            // and must not be thrown away just because the inventory is still
+            // on its way. Hold it and apply it the moment the data lands.
+            queueUntilLoaded(code, source);
             return;
         }
         if (state.busy) return;
@@ -404,6 +407,39 @@ var App = (function () {
             InvScanner.feedbackError();
             toast("Nothing matches " + code, "err");
         }
+    }
+
+    // Scans taken before the inventory finished loading
+    var pendingScans = [];
+    var PENDING_MAX = 8;
+    var PENDING_STALE_MS = 20000;
+
+    function queueUntilLoaded(code, source) {
+        if (pendingScans.length < PENDING_MAX) {
+            pendingScans.push({ code: code, source: source, at: new Date().getTime() });
+        }
+        InvScanner.feedbackWarn();
+        setScanStatus("Loading inventory - " + pendingScans.length +
+            (pendingScans.length === 1 ? " scan held" : " scans held"), false);
+    }
+
+    /*
+        Replays held scans one at a time. Each one may start a server round trip
+        that sets state.busy, so the next waits for it rather than being dropped.
+    */
+    function flushPendingScans() {
+        if (!pendingScans.length) return;
+        if (state.busy) {
+            setTimeout(flushPendingScans, 150);
+            return;
+        }
+
+        var next = pendingScans.shift();
+        // A scan from minutes ago is not what the operator is holding now
+        if (new Date().getTime() - next.at <= PENDING_STALE_MS) {
+            onScan(next.code, next.source);
+        }
+        if (pendingScans.length) setTimeout(flushPendingScans, 150);
     }
 
     /* ── Remote scanner pairing ─────────────────────────────────────────── */
@@ -759,6 +795,12 @@ var App = (function () {
     function setScanStatus(message, listening) {
         var box = $("scanBox");
         var text = $("scanStatusText");
+        if ((message === null || message === undefined) && !state.loaded) {
+            text.textContent = "Loading inventory...";
+            box.className = "scan-box";
+            return;
+        }
+
         if ((message === null || message === undefined) && InvPairing.isRemote()) {
             var pairing = state.pairing;
             var hostMode = pairing && pairing.hostMode ? MODE_LABELS[pairing.hostMode] : "";
@@ -827,10 +869,18 @@ var App = (function () {
     */
     function setFieldKeyboard(input, allowTyping) {
         if (!input) return;
-        if (allowTyping) {
+
+        var current = input.getAttribute("inputmode");
+        var wanted = allowTyping ? null : "none";
+        // Rewriting the attribute makes the browser re-evaluate the input method
+        // for a field that may be focused and armed, which on Android can hide
+        // the caret or drop focus outright - so only write it when it differs.
+        if (current === wanted) return;
+
+        if (wanted === null) {
             input.removeAttribute("inputmode");
         } else {
-            input.setAttribute("inputmode", "none");
+            input.setAttribute("inputmode", wanted);
         }
     }
 
@@ -868,6 +918,16 @@ var App = (function () {
         if (state.view === "scan") target = $("scanInput");
         else if (state.view === "search") target = $("searchInput");
         if (!target) return;
+
+        // In an ArozOS float window the app runs inside an iframe. Until that
+        // frame holds the window focus, key events go to the parent document no
+        // matter what has DOM focus inside here - which is exactly why the first
+        // scan after opening the app can go nowhere. Only claim it when this
+        // document does not already have focus, so a desktop with several
+        // windows open never has focus yanked out from under it.
+        try {
+            if (document.hasFocus && !document.hasFocus() && window.focus) window.focus();
+        } catch (e) {}
 
         if (document.activeElement === target) return;
         try { target.focus(); } catch (e) {}
@@ -2056,6 +2116,8 @@ var App = (function () {
             setScanStatus(null, true);
             refreshAllViews();
             updateSubtitle();
+            armInput();
+            flushPendingScans();
 
             if (showToast) toast("Reloaded " + state.items.length + " items", "ok");
         }, function () {
@@ -2362,6 +2424,17 @@ var App = (function () {
         startFocusWatchdog();
         load(false);
         armInput();
+
+        // start() runs at DOMContentLoaded; stylesheets, fonts and - in a float
+        // window - the parent's own focus handling can still land after it
+        window.addEventListener("load", armInput);
+        setTimeout(armInput, 250);
+
+        // The first touch anywhere is the point at which a browser will let this
+        // frame take the window focus, so take it then too
+        document.addEventListener("pointerdown", function () {
+            setTimeout(armInput, 0);
+        }, true);
     }
 
     return {
