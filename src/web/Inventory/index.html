@@ -41,35 +41,54 @@
 
             <!-- ── Scan ──────────────────────────────────────────────────── -->
             <div class="view active" id="view-scan">
-                <!-- Mode buttons are rendered by app.js so the list stays in one place -->
-                <div class="mode-grid" id="modeGrid"></div>
+                <!--
+                    Two .scan-pane columns: the handheld stacks them, the
+                    desktop layout puts the controls left and the result right.
+                -->
+                <div class="scan-pane">
+                    <!-- Mode buttons are rendered by app.js so the list stays in one place -->
+                    <div class="mode-grid" id="modeGrid"></div>
 
-                <div class="card" id="contextCard"></div>
+                    <div class="card" id="contextCard"></div>
 
-                <div class="scan-box listening" id="scanBox">
-                    <div class="scan-status">
-                        <span class="scan-dot"></span>
-                        <span id="scanStatusText">Ready</span>
+                    <div class="scan-box listening" id="scanBox">
+                        <div class="scan-status">
+                            <span class="scan-dot"></span>
+                            <span id="scanStatusText">Ready</span>
+                        </div>
+                        <div class="scan-row">
+                            <!--
+                                inputmode is managed by app.js: on any device that
+                                has an on-screen keyboard it is set to "none" so the
+                                FZ-N1's hardware wedge can type into this field
+                                without raising the Android IME. The keyboard button
+                                lifts it for manual entry; on a desktop, where there
+                                is no soft keyboard, the button is hidden entirely.
+                            -->
+                            <input id="scanInput" type="text" inputmode="none" placeholder="Scan barcode"
+                                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                            <button class="btn square primary" id="scanSubmit" title="Submit code">
+                                <i class="arrow right icon"></i>
+                            </button>
+                            <button class="btn square" id="kbToggle" title="On-screen keyboard">
+                                <i class="keyboard icon"></i>
+                            </button>
+                        </div>
                     </div>
-                    <div class="scan-row">
-                        <!--
-                            inputmode="none" is toggled by the keyboard button: off
-                            by default so the FZ-N1's hardware wedge can type into
-                            this field without raising the Android soft keyboard.
-                        -->
-                        <input id="scanInput" type="text" inputmode="none" placeholder="Scan barcode"
-                            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-                        <button class="btn square primary" id="scanSubmit" title="Submit code">
-                            <i class="arrow right icon"></i>
-                        </button>
-                        <button class="btn square" id="kbToggle" title="On-screen keyboard">
-                            <i class="keyboard icon"></i>
-                        </button>
+
+                    <!-- Shown only in the desktop layout -->
+                    <div class="shortcut-bar desktop-only">
+                        <span><kbd>F1</kbd>-<kbd>F5</kbd> mode</span>
+                        <span><kbd>Ctrl</kbd>+<kbd>F</kbd> find</span>
+                        <span><kbd>Ctrl</kbd>+<kbd>N</kbd> new item</span>
+                        <span><kbd>Esc</kbd> close</span>
                     </div>
                 </div>
 
-                <div id="scanResult"></div>
-                <div id="sessionLog"></div>
+                <div class="scan-pane">
+                    <div id="scanResult"></div>
+                    <div id="sessionLog"></div>
+                </div>
             </div>
 
             <!-- ── Find ──────────────────────────────────────────────────── -->
@@ -78,6 +97,9 @@
                     <i class="search icon"></i>
                     <input id="searchInput" type="text" placeholder="Name, barcode, SKU, location..."
                         autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                    <button class="search-kb" id="searchKb" title="Type a query">
+                        <i class="keyboard icon"></i>
+                    </button>
                     <button class="search-clear" id="searchClear" title="Clear">
                         <i class="times circle icon"></i>
                     </button>

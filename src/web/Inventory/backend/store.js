@@ -18,6 +18,9 @@ var INV_MOVE_PATH = INV_DIR + "/movements.json";
 // long-running handheld never grows an unbounded journal file.
 var INV_MOVE_CAP = 5000;
 
+/* Accepted values for the softKeyboard policy */
+var INV_SOFT_KEYBOARD_MODES = ["auto", "always", "never"];
+
 /* Default user settings, also the schema for saveSettings.agi */
 function invDefaultSettings() {
     return {
@@ -28,7 +31,14 @@ function invDefaultSettings() {
         beep: true,              // audible scan feedback
         vibrate: true,           // haptic scan feedback
         scanAnywhere: true,      // capture wedge scans even without field focus
-        softKeyboard: false      // suppress the on-screen keyboard on handhelds
+
+        // On-screen keyboard policy for the scan and search fields:
+        //   "auto"   - decided by the device (suppressed wherever a soft
+        //              keyboard exists, so a handheld never pops the IME when
+        //              the app re-arms a field for the next trigger pull)
+        //   "always" - never suppressed, for typing codes by hand
+        //   "never"  - always suppressed
+        softKeyboard: "auto"
     };
 }
 
@@ -93,6 +103,14 @@ function invLoad() {
     var defaults = invDefaultSettings();
     for (var key in defaults) {
         if (data.settings[key] === undefined) data.settings[key] = defaults[key];
+    }
+
+    // softKeyboard used to be a boolean; carry old stores over to the policy
+    if (typeof data.settings.softKeyboard === "boolean") {
+        data.settings.softKeyboard = data.settings.softKeyboard ? "always" : "auto";
+    }
+    if (INV_SOFT_KEYBOARD_MODES.indexOf(data.settings.softKeyboard) === -1) {
+        data.settings.softKeyboard = "auto";
     }
     return data;
 }

@@ -66,14 +66,27 @@ body {
     -webkit-text-size-adjust: 100%;
 }
 
-/* Scanning is a two-hand job - never let a stray drag select label text */
-body,
+/* Chrome is never selectable - a stray drag must not highlight a nav label */
 .topbar,
 .navbar,
 .mode-btn,
-.chip {
+.chip,
+.btn,
+.list-head {
     -webkit-user-select: none;
     user-select: none;
+}
+
+/*
+    On a handheld, scanning is a two-hand job and a long-press that starts a
+    text selection only gets in the way. On the desktop, copying a barcode or
+    an item name out of the list is ordinary work, so selection stays enabled.
+*/
+@media (max-width: 899px) {
+    body {
+        -webkit-user-select: none;
+        user-select: none;
+    }
 }
 
 input,
@@ -609,9 +622,14 @@ select,
     min-width: 0;
 }
 
+.hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 6px;
+}
+
 .field .hint {
     font-size: 11px;
-    color: var(--muted);
     margin-top: 4px;
 }
 
@@ -734,6 +752,21 @@ select,
 
 .item-row .qty.zero {
     color: var(--danger);
+}
+
+/* Desktop-only table columns and header; the handheld folds these into .meta */
+.item-row .cell,
+.list-head {
+    display: none;
+}
+
+.item-row.selected {
+    background: rgba(61, 139, 253, 0.16);
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.desktop-only {
+    display: none;
 }
 
 /* ── Badges ─────────────────────────────────────────────────────────────── */
@@ -1136,7 +1169,7 @@ select,
     color: var(--text);
     font-family: inherit;
     font-size: 16px;
-    padding: 0 46px 0 40px;
+    padding: 0 88px 0 40px;
 }
 
 #searchInput:focus {
@@ -1144,9 +1177,9 @@ select,
     border-color: var(--accent);
 }
 
-.search-clear {
+.search-clear,
+.search-kb {
     position: absolute;
-    right: 6px;
     top: 50%;
     transform: translateY(-50%);
     width: 40px;
@@ -1155,11 +1188,24 @@ select,
     background: transparent;
     color: var(--muted);
     cursor: pointer;
+}
+
+.search-clear {
+    right: 6px;
     display: none;
 }
 
 .search-clear.visible {
     display: block;
+}
+
+/* Lifts the on-screen keyboard for a typed query; hidden where there is none */
+.search-kb {
+    right: 46px;
+}
+
+.search-kb.active {
+    color: var(--accent);
 }
 
 mark {
@@ -1178,5 +1224,303 @@ mark {
 
     .mode-btn {
         font-size: 12px;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Desktop layout
+
+   At 900px the handheld stack becomes a proper desktop app: a left sidebar
+   instead of a bottom tab bar, the scan controls and their result side by
+   side, item lists as real tables with columns, and sheets as centred dialogs
+   rather than full-screen takeovers. The breakpoint is mirrored by
+   DESKTOP_MIN_WIDTH in script/app.js, which uses it to decide keyboard and
+   focus behaviour.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 900px) {
+
+    :root {
+        --nav-width: 208px;
+    }
+
+    .desktop-only {
+        display: block;
+    }
+
+    #app {
+        max-width: none;
+        display: grid;
+        grid-template-columns: var(--nav-width) 1fr;
+        grid-template-rows: auto 1fr;
+        grid-template-areas:
+            "top  top"
+            "nav  views";
+    }
+
+    .topbar {
+        grid-area: top;
+        padding: 12px 20px;
+        min-height: 62px;
+    }
+
+    .topbar .title {
+        font-size: 19px;
+    }
+
+    /* ── Sidebar navigation ─────────────────────────────────────────────── */
+    .navbar {
+        grid-area: nav;
+        position: static;
+        height: auto;
+        flex-direction: column;
+        justify-content: flex-start;
+        gap: 4px;
+        padding: 12px 10px;
+        border-top: 0;
+        border-right: 1px solid var(--border);
+    }
+
+    .nav-btn {
+        flex: 0 0 auto;
+        flex-direction: row;
+        justify-content: flex-start;
+        gap: 12px;
+        height: 46px;
+        padding: 0 14px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    .nav-btn:hover {
+        background: var(--surface-2);
+    }
+
+    .nav-btn.active {
+        background: var(--surface-2);
+    }
+
+    /* The mobile top-edge marker becomes a left rail */
+    .nav-btn.active::before {
+        top: 9px;
+        bottom: 9px;
+        left: 0;
+        right: auto;
+        height: auto;
+        width: 3px;
+        border-radius: 0 3px 3px 0;
+    }
+
+    .nav-btn i.icon {
+        font-size: 17px;
+        width: 20px;
+        text-align: center;
+    }
+
+    /* Push the badge to the far end of the row instead of over the icon */
+    .nav-badge {
+        position: static;
+        margin: 0 0 0 auto;
+    }
+
+    .views {
+        grid-area: views;
+        padding: 20px 24px 24px 24px;
+    }
+
+    /* ── Scan view: controls left, result right ─────────────────────────── */
+    #view-scan.active {
+        display: grid;
+        grid-template-columns: minmax(320px, 400px) 1fr;
+        gap: 20px;
+        align-items: start;
+    }
+
+    .shortcut-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        color: var(--muted);
+        font-size: 12px;
+    }
+
+    kbd {
+        display: inline-block;
+        min-width: 20px;
+        padding: 1px 5px;
+        border: 1px solid var(--border);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        background: var(--surface-2);
+        color: var(--text);
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 600;
+        text-align: center;
+    }
+
+    /* ── Item lists become tables ───────────────────────────────────────── */
+    .list-head,
+    .item-row {
+        display: grid;
+        grid-template-columns:
+            minmax(200px, 2.2fr)   /* name + badges */
+            minmax(120px, 1fr)     /* barcode */
+            minmax(100px, 1fr)     /* location */
+            90px                   /* price */
+            120px                  /* expiry */
+            120px                  /* warranty */
+            90px;                  /* quantity */
+        gap: 12px;
+        align-items: center;
+    }
+
+    .list-head {
+        padding: 9px 14px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface-2);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+
+    .list-head .qty {
+        text-align: right;
+    }
+
+    .item-row {
+        padding: 9px 14px;
+        min-height: 54px;
+    }
+
+    .item-row:hover {
+        background: var(--surface-2);
+    }
+
+    .item-row .cell {
+        display: block;
+        font-size: 13px;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .item-row .cell small {
+        display: block;
+        font-size: 11px;
+        color: var(--muted);
+    }
+
+    .item-row .cell.warn,
+    .item-row .cell.warn small {
+        color: var(--warn);
+    }
+
+    .item-row .cell.danger,
+    .item-row .cell.danger small {
+        color: var(--danger);
+    }
+
+    .item-row .col-barcode {
+        font-family: "SFMono-Regular", Consolas, "Roboto Mono", monospace;
+        font-size: 12px;
+    }
+
+    .item-row .col-price {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Location and price already have their own columns up here */
+    .item-row .meta {
+        display: none;
+    }
+
+    .item-row .badges {
+        margin-top: 4px;
+    }
+
+    /* ── Sheets become centred dialogs ──────────────────────────────────── */
+    .sheet {
+        top: 50%;
+        left: 50%;
+        right: auto;
+        bottom: auto;
+        transform: translate(-50%, -50%);
+        width: min(760px, calc(100% - 80px));
+        max-height: min(84vh, 860px);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+    }
+
+    .sheet-head {
+        padding: 12px 16px;
+    }
+
+    .sheet-body {
+        padding: 16px;
+    }
+
+    .sheet-foot {
+        padding: 12px 16px;
+    }
+
+    .sheet-foot > .btn {
+        flex: 0 0 auto;
+        min-width: 130px;
+        margin-left: auto;
+    }
+
+    .sheet-foot > .btn ~ .btn {
+        margin-left: 0;
+    }
+
+    #toast {
+        left: auto;
+        right: 24px;
+        bottom: 24px;
+        width: 340px;
+    }
+
+    /* Roomier stats now that there is width to spend */
+    .stat-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    /* Settings read better in a column than stretched across the window */
+    #view-more {
+        max-width: 900px;
+    }
+
+    #view-more .btn-row > .btn {
+        flex: 0 1 auto;
+        min-width: 180px;
+    }
+
+    .keypad {
+        max-width: 340px;
+    }
+}
+
+/* Very wide windows: give the search results a comfortable reading measure */
+@media (min-width: 1400px) {
+    .views {
+        padding-left: 40px;
+        padding-right: 40px;
+    }
+
+    #view-scan.active {
+        grid-template-columns: 420px 1fr;
     }
 }

@@ -28,6 +28,13 @@ if (!incoming || typeof incoming !== "object") {
         } else if (typeof defaults[key] === "number") {
             var num = parseFloat(incoming[key]);
             if (!isNaN(num) && num >= 0) data.settings[key] = num;
+        } else if (key === "softKeyboard") {
+            // Enum, not free text - an unknown policy would disable the
+            // handheld IME suppression the scan field depends on
+            var mode = ("" + incoming[key]).trim();
+            if (INV_SOFT_KEYBOARD_MODES.indexOf(mode) !== -1) {
+                data.settings[key] = mode;
+            }
         } else {
             data.settings[key] = ("" + incoming[key]).trim();
         }

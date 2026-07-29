@@ -222,6 +222,21 @@ var InvScanner = (function () {
         if (!enabled) state.buffer = "";
     }
 
+    /*
+        True when the device has an on-screen keyboard that would cover the UI
+        if a field took focus - handhelds, phones and tablets. A desktop with a
+        USB or Bluetooth wedge reports false, so its fields behave normally.
+    */
+    function deviceHasSoftKeyboard() {
+        try {
+            if (navigator.maxTouchPoints > 0) return true;
+            if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return true;
+            return "ontouchstart" in window;
+        } catch (e) {
+            return false;
+        }
+    }
+
     /* Lets the UI reset the bounce guard, e.g. to count the same item twice */
     function clearDuplicateGuard() {
         state.lastCode = "";
@@ -232,6 +247,7 @@ var InvScanner = (function () {
         init: init,
         applySettings: applySettings,
         setEnabled: setEnabled,
+        deviceHasSoftKeyboard: deviceHasSoftKeyboard,
         clearDuplicateGuard: clearDuplicateGuard,
         feedbackOk: feedbackOk,
         feedbackWarn: feedbackWarn,

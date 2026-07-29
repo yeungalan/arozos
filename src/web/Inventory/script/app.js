@@ -25,6 +25,9 @@ var App = (function () {
         query: "",
         filter: "all",
         session: [],            // this shift's operations, newest first
+        searchResults: [],      // last rendered result set, for keyboard nav
+        searchIndex: -1,        // highlighted row on the Find view, -1 = none
+        searchTyping: false,    // operator lifted the IME to type a query
         lastResult: null,
         busy: false
     };
@@ -221,6 +224,14 @@ var App = (function () {
         }
         if (state.busy) return;
 
+        // Scanning on the Find view means "find this", not "apply the current
+        // mode to it" - that view exists to look things up. Every other view
+        // hands the scan to the active mode on the Scan view.
+        if (state.view === "search") {
+            findByScan(code);
+            return;
+        }
+
         if (state.view !== "scan") switchView("scan");
 
         if (state.mode === "lookup") {
@@ -359,6 +370,31 @@ var App = (function () {
         });
     }
 
+    /*
+        Handles a scan that arrived while the Find view was open: show the code
+        as the query so the list matches what was scanned, then open the item
+        outright when the barcode is an exact hit.
+    */
+    function findByScan(code) {
+        var input = $("searchInput");
+        input.value = code;
+        state.query = code;
+        $("searchClear").className = "search-clear visible";
+        renderSearch();
+
+        var direct = findByBarcode(code);
+        if (direct) {
+            InvScanner.feedbackOk();
+            openItemDetail(direct.id);
+        } else if (state.searchResults.length) {
+            InvScanner.feedbackWarn();
+            toast("No exact barcode match - showing the closest items", "warn");
+        } else {
+            InvScanner.feedbackError();
+            toast("Nothing matches " + code, "err");
+        }
+    }
+
     /* ── Scan view rendering ────────────────────────────────────────────── */
 
     var MODES = [
@@ -378,7 +414,7 @@ var App = (function () {
         }
         renderContext();
         setScanStatus(null, true);
-        focusScan();
+        armInput();
     }
 
     var STEP_CHOICES = [1, 2, 5, 10, 25];
@@ -431,7 +467,7 @@ var App = (function () {
                 } else {
                     state.moveTarget = select.value;
                 }
-                focusScan();
+                armInput();
             });
         }
     }
@@ -460,12 +496,114 @@ var App = (function () {
         setTimeout(function () { setScanStatus(null, true); }, 700);
     }
 
-    function focusScan() {
-        if (state.view !== "scan") return;
-        if ($("sheet").className.indexOf("open") !== -1) return;
-        var input = $("scanInput");
-        if (input && document.activeElement !== input) {
-            try { input.focus(); } catch (e) {}
+    /* ── Layout, on-screen keyboard and focus ───────────────────────────── */
+
+    // Mirrors the breakpoint in css/app.css: below it the handheld stack, at
+    // or above it the desktop sidebar + wide list layout.
+    var DESKTOP_MIN_WIDTH = 900;
+
+    function isDesktopLayout() {
+        if (window.matchMedia) {
+            return window.matchMedia("(min-width: " + DESKTOP_MIN_WIDTH + "px)").matches;
+        }
+        return window.innerWidth >= DESKTOP_MIN_WIDTH;
+    }
+
+    function isSheetOpen() {
+        return $("sheet").className.indexOf("open") !== -1;
+    }
+
+    /*
+        Resolves the on-screen-keyboard policy for this device. "auto" - the
+        default - suppresses the IME wherever one exists, which is what keeps a
+        handheld usable: the app re-arms a field after every scan, and without
+        suppression that would throw the Android keyboard over half of a 4.7"
+        screen on every single trigger pull.
+    */
+    function suppressSoftKeyboard() {
+        var mode = state.settings.softKeyboard || "auto";
+        if (mode === "always") return false;
+        if (mode === "never") return true;
+        return InvScanner.deviceHasSoftKeyboard();
+    }
+
+    /*
+        inputmode="none" tells the browser the field is filled by hardware, so
+        no on-screen keyboard is raised. Removing it restores normal typing.
+    */
+    function setFieldKeyboard(input, allowTyping) {
+        if (!input) return;
+        if (allowTyping) {
+            input.removeAttribute("inputmode");
+        } else {
+            input.setAttribute("inputmode", "none");
+        }
+    }
+
+    function applyKeyboardPolicy() {
+        var suppress = suppressSoftKeyboard();
+        setFieldKeyboard($("scanInput"), !suppress);
+        // The search box follows the same policy; its keyboard button lifts it
+        // for as long as the operator wants to type instead of scan.
+        setFieldKeyboard($("searchInput"), !suppress || state.searchTyping);
+
+        // Nothing to toggle on a device without an on-screen keyboard
+        var hasSoftKeyboard = InvScanner.deviceHasSoftKeyboard();
+        var scanBtn = $("kbToggle");
+        var searchBtn = $("searchKb");
+        if (scanBtn) {
+            scanBtn.style.display = hasSoftKeyboard ? "" : "none";
+            scanBtn.className = "btn square" + (suppress ? "" : " primary");
+        }
+        if (searchBtn) {
+            searchBtn.style.display = hasSoftKeyboard ? "" : "none";
+            searchBtn.className = "search-kb" + (state.searchTyping ? " active" : "");
+        }
+    }
+
+    /*
+        Re-arms the field that should receive the next trigger pull for the
+        current view. Called after every operation, view change, sheet close,
+        window focus and tap, plus a watchdog: a handheld that has quietly lost
+        focus drops the next scan, which is the worst failure mode this app has.
+    */
+    function armInput() {
+        if (isSheetOpen()) return;
+
+        var target = null;
+        if (state.view === "scan") target = $("scanInput");
+        else if (state.view === "search") target = $("searchInput");
+        if (!target) return;
+
+        if (document.activeElement === target) return;
+        try { target.focus(); } catch (e) {}
+    }
+
+    /*
+        Focus can be lost outright with nothing to notice it - an Android IME
+        closing, a system dialog dismissed, a tap on dead space - so poll for
+        the case where nothing at all holds focus and hand it back.
+    */
+    function startFocusWatchdog() {
+        setInterval(function () {
+            if (isSheetOpen()) return;
+            // Re-arming collapses a selection, and copying a barcode out of the
+            // list is normal desktop work - leave the operator alone until done
+            if (hasTextSelection()) return;
+
+            var active = document.activeElement;
+            // Never yank focus off a control the operator is actually using
+            if (active && active !== document.body && active !== document.documentElement) return;
+            armInput();
+        }, 700);
+    }
+
+    function hasTextSelection() {
+        try {
+            var selection = window.getSelection();
+            return !!selection && !selection.isCollapsed && ("" + selection).length > 0;
+        } catch (e) {
+            return false;
         }
     }
 
@@ -605,7 +743,7 @@ var App = (function () {
         $("clearSession").onclick = function () {
             state.session = [];
             renderSession();
-            focusScan();
+            armInput();
         };
     }
 
@@ -661,19 +799,52 @@ var App = (function () {
         }
     }
 
+    /*
+        One row markup for both layouts. The .cell columns are hidden on the
+        handheld, where the same facts are folded into the .meta line instead,
+        and become real table columns once the desktop breakpoint applies.
+    */
     function itemRowHtml(item, query) {
         var alerts = itemAlerts(item);
         var qtyClass = item.qty <= 0 ? " zero" : ((item.minQty > 0 && item.qty <= item.minQty) ? " low" : "");
+
         var meta = [];
         if (item.location) meta.push(InvSearch.highlight(item.location, query));
         if (item.barcode) meta.push(InvSearch.highlight(item.barcode, query));
         if (item.price) meta.push(esc(money(item.price)));
 
+        var expiryDays = daysUntil(item.expiryDate);
+        var warrantyDays = daysUntil(item.warrantyEnd);
+        var dateCell = function (iso, days, warnDays, column) {
+            if (!iso) return '<div class="cell ' + column + ' muted">-</div>';
+            var tone = days < 0 ? " danger" : (days <= warnDays ? " warn" : "");
+            return '<div class="cell ' + column + tone + '">' + esc(iso) +
+                "<small>" + esc(relativeDays(days)) + "</small></div>";
+        };
+
         return '<div class="item-row" data-id="' + esc(item.id) + '">' +
             '<div class="body"><div class="name">' + InvSearch.highlight(item.name, query) + "</div>" +
             '<div class="meta">' + (meta.length ? meta.join(" &middot; ") : "&nbsp;") + "</div>" +
             badgesHtml(alerts) + "</div>" +
+            '<div class="cell col-barcode">' + InvSearch.highlight(item.barcode || "-", query) + "</div>" +
+            '<div class="cell col-location">' + InvSearch.highlight(item.location || "-", query) + "</div>" +
+            '<div class="cell col-price">' + esc(money(item.price)) + "</div>" +
+            dateCell(item.expiryDate, expiryDays, state.settings.expiryWarnDays, "col-expiry") +
+            dateCell(item.warrantyEnd, warrantyDays, state.settings.warrantyWarnDays, "col-warranty") +
             '<div class="qty' + qtyClass + '">' + qtyText(item.qty) + "<small>" + esc(item.unit) + "</small></div>" +
+            "</div>";
+    }
+
+    /* Column captions, shown only in the desktop table layout */
+    function listHeadHtml() {
+        return '<div class="list-head">' +
+            '<div class="body">Item</div>' +
+            '<div class="cell col-barcode">Barcode</div>' +
+            '<div class="cell col-location">Location</div>' +
+            '<div class="cell col-price">Price</div>' +
+            '<div class="cell col-expiry">Expiry</div>' +
+            '<div class="cell col-warranty">Warranty</div>' +
+            '<div class="qty">Qty</div>' +
             "</div>";
     }
 
@@ -702,6 +873,10 @@ var App = (function () {
             meta.textContent = results.length + (results.length === 1 ? " item" : " items");
         }
 
+        // Kept so Enter and the arrow keys can act on exactly what is shown
+        state.searchResults = results;
+        state.searchIndex = -1;
+
         var host = $("searchResults");
         if (!results.length) {
             host.innerHTML = '<div class="empty"><i class="box icon"></i>' +
@@ -710,12 +885,41 @@ var App = (function () {
             return;
         }
 
-        var html = "";
+        var html = listHeadHtml();
         for (var i = 0; i < results.length; i++) {
             html += itemRowHtml(results[i].item, state.query);
         }
         host.innerHTML = html;
         bindItemRows(host);
+    }
+
+    /*
+        Moves the highlight through the result list. Desktop keyboard driving:
+        type, arrow down to the right row, Enter to open it - no mouse needed.
+    */
+    function moveSearchSelection(delta) {
+        var rows = $("searchResults").querySelectorAll(".item-row");
+        if (!rows.length) return;
+
+        var next = state.searchIndex + delta;
+        if (next < 0) next = 0;
+        if (next > rows.length - 1) next = rows.length - 1;
+        state.searchIndex = next;
+
+        for (var i = 0; i < rows.length; i++) {
+            rows[i].className = "item-row" + (i === next ? " selected" : "");
+        }
+        if (rows[next].scrollIntoView) {
+            rows[next].scrollIntoView({ block: "nearest" });
+        }
+    }
+
+    /* The item Enter should act on: the highlighted row, else the top hit */
+    function currentSearchItem() {
+        if (!state.searchResults.length) return null;
+        var index = state.searchIndex >= 0 ? state.searchIndex : 0;
+        var hit = state.searchResults[index];
+        return hit ? hit.item : null;
     }
 
     /* ── Alerts view ────────────────────────────────────────────────────── */
@@ -760,7 +964,8 @@ var App = (function () {
             }
 
             html += '<div class="section-title"><i class="' + group.icon + ' icon"></i> ' +
-                esc(group.title) + " (" + list.length + ")</div><div class=\"card flush\">";
+                esc(group.title) + " (" + list.length + ")</div><div class=\"card flush\">" +
+                listHeadHtml();
             for (var j = 0; j < list.length; j++) {
                 html += itemRowHtml(list[j], "");
             }
@@ -824,8 +1029,29 @@ var App = (function () {
             switchHtml("scanAnywhere", "Capture scans anywhere", "Read the wedge even when the scan box has lost focus", s.scanAnywhere) +
             switchHtml("beep", "Beep on scan", "Audible confirm / warn / error tones", s.beep) +
             switchHtml("vibrate", "Vibrate on scan", "Haptic feedback through the handheld", s.vibrate) +
-            switchHtml("softKeyboard", "Show on-screen keyboard", "Leave off on a handheld so the hardware scanner does not raise the Android keyboard", s.softKeyboard) +
             "</div>";
+
+        var kbModes = [
+            { id: "auto", label: "Automatic" },
+            { id: "always", label: "Always show" },
+            { id: "never", label: "Never show" }
+        ];
+        var kbHtml = '<div class="chip-row">';
+        for (var k = 0; k < kbModes.length; k++) {
+            kbHtml += '<button class="chip kb-mode' + (s.softKeyboard === kbModes[k].id ? " active" : "") +
+                '" data-kbmode="' + kbModes[k].id + '">' + esc(kbModes[k].label) + "</button>";
+        }
+        kbHtml += "</div>";
+
+        html +=
+            '<div class="section-title">On-screen keyboard</div><div class="card">' +
+            '<div class="context-label">' +
+            (InvScanner.deviceHasSoftKeyboard()
+                ? "This device has an on-screen keyboard. Automatic keeps it down so the hardware scanner can type into the armed field without covering the screen."
+                : "No on-screen keyboard on this device, so Automatic leaves every field typing normally.") +
+            "</div>" + kbHtml +
+            '<div class="hint" style="margin-top:8px;">Currently: ' +
+            (suppressSoftKeyboard() ? "suppressed" : "allowed") + "</div></div>";
 
         html +=
             '<div class="section-title">Thresholds</div><div class="card">' +
@@ -845,11 +1071,17 @@ var App = (function () {
             "</div>";
 
         html +=
-            '<div class="section-title">Handheld setup</div><div class="card muted" style="font-size:13px;line-height:1.55;">' +
-            "<p style=\"margin-top:0;\">On an FZ-N1, set the scanner service to <b>keyboard wedge</b> output with an <b>Enter</b> suffix, " +
-            "then open this app full screen. The scan box stays armed on its own - just pull the trigger.</p>" +
+            '<div class="section-title">How to use it</div><div class="card muted" style="font-size:13px;line-height:1.55;">' +
+            "<p style=\"margin-top:0;\"><b>On a handheld</b> (FZ-N1 and similar): set the scanner service to " +
+            "<b>keyboard wedge</b> output with an <b>Enter</b> suffix, then open this app full screen. The field " +
+            "you are scanning into re-arms itself after every operation, and the on-screen keyboard is kept down " +
+            "automatically so it never covers the screen - just pull the trigger.</p>" +
             "<p>Pick the operation first (Look up, Stock in, Stock out, Move, Count), then keep scanning: " +
-            "every trigger pull applies that operation, so a whole pallet is one mode change and N pulls.</p>" +
+            "every trigger pull applies that operation, so a whole pallet is one mode change and N pulls. " +
+            "Scanning while the Find tab is open looks the item up instead of changing it.</p>" +
+            "<p><b>On a desktop</b> with a USB or Bluetooth scanner the same flow works, plus shortcuts: " +
+            "<b>F1-F5</b> pick the mode, <b>Ctrl+F</b> jumps to Find, <b>Ctrl+N</b> adds an item, arrow keys " +
+            "walk the results, <b>Enter</b> opens the highlighted one and <b>Esc</b> closes.</p>" +
             "<p style=\"margin-bottom:0;\">Data lives in <code>user:/Document/Inventory/</code> and exports land in " +
             "<code>user:/Document/Inventory/exports/</code>.</p></div>";
 
@@ -863,6 +1095,14 @@ var App = (function () {
         $("exportMoves").onclick = function () { runExport("movements"); };
 
         bindSwitches();
+
+        var kbButtons = document.querySelectorAll(".kb-mode");
+        for (var m = 0; m < kbButtons.length; m++) {
+            kbButtons[m].onclick = function () {
+                saveSettings({ softKeyboard: this.getAttribute("data-kbmode") });
+                renderMore();
+            };
+        }
 
         $("saveThresholds").onclick = function () {
             var next = {
@@ -909,16 +1149,7 @@ var App = (function () {
 
     function applySettings() {
         InvScanner.applySettings(state.settings);
-        var input = $("scanInput");
-        if (input) {
-            // inputmode="none" is what keeps the Android soft keyboard down while
-            // the hardware wedge keeps typing into the field
-            if (state.settings.softKeyboard) {
-                input.removeAttribute("inputmode");
-            } else {
-                input.setAttribute("inputmode", "none");
-            }
-        }
+        applyKeyboardPolicy();
         renderAlertBadge();
     }
 
@@ -951,7 +1182,7 @@ var App = (function () {
         $("sheet").className = "sheet";
         $("sheetBackdrop").className = "sheet-backdrop";
         InvScanner.setEnabled(true);
-        focusScan();
+        armInput();
     }
 
     function openItemDetail(itemId) {
@@ -1432,7 +1663,10 @@ var App = (function () {
         if (name === "search") renderSearch();
         if (name === "alerts") renderAlerts();
         if (name === "more") renderMore();
-        if (name === "scan") focusScan();
+
+        // Arm whichever field this view scans into, so a trigger pull always
+        // lands somewhere without the operator having to tap first
+        armInput();
     }
 
     function refreshAllViews() {
@@ -1516,7 +1750,7 @@ var App = (function () {
                 state.step = parseFloat(stepNode.getAttribute("data-step"));
                 renderContext();
                 setScanStatus(null, true);
-                focusScan();
+                armInput();
                 return;
             }
             if (closestClass(event.target, "step-custom")) {
@@ -1530,21 +1764,23 @@ var App = (function () {
                 state.step = value;
                 renderContext();
                 setScanStatus(null, true);
-                focusScan();
+                armInput();
             }
         });
 
         $("scanSubmit").onclick = function () {
             scanner.submit();
-            focusScan();
+            armInput();
         };
 
         $("kbToggle").onclick = function () {
-            saveSettings({ softKeyboard: !state.settings.softKeyboard });
+            // One tap flips between the automatic policy and hand typing
+            var next = suppressSoftKeyboard() ? "always" : "auto";
+            saveSettings({ softKeyboard: next });
             var input = $("scanInput");
             input.blur();
             setTimeout(function () { input.focus(); }, 30);
-            toast(state.settings.softKeyboard ? "On-screen keyboard on" : "On-screen keyboard off", "");
+            toast(next === "always" ? "On-screen keyboard on" : "On-screen keyboard off (automatic)", "");
         };
 
         $("btnAdd").onclick = function () { openItemEditor(null, ""); };
@@ -1575,20 +1811,45 @@ var App = (function () {
         searchInput.addEventListener("keydown", function (event) {
             var now = new Date().getTime();
 
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                moveSearchSelection(event.key === "ArrowDown" ? 1 : -1);
+                return;
+            }
+
             if (event.key === "Enter") {
                 event.preventDefault();
+
                 // Prefer the trailing fast-typed run (the scan) over the whole
                 // field, then fall back to the field for hand-typed codes.
                 var direct = findByBarcode(searchBurst.text) || findByBarcode(searchInput.value);
                 searchBurst.text = "";
-                if (!direct) return;
 
-                // Leave the box showing what was scanned, not the stale query
-                searchInput.value = direct.barcode;
-                state.query = direct.barcode;
-                $("searchClear").className = "search-clear visible";
-                renderSearch();
-                openItemDetail(direct.id);
+                if (direct) {
+                    // Leave the box showing what was scanned, not a stale query
+                    searchInput.value = direct.barcode;
+                    state.query = direct.barcode;
+                    $("searchClear").className = "search-clear visible";
+                    renderSearch();
+                    openItemDetail(direct.id);
+                    return;
+                }
+
+                // Not a barcode: Enter opens the highlighted row, or the best
+                // match, so a typed query always leads somewhere.
+                if (searchTimer) {
+                    clearTimeout(searchTimer);
+                    searchTimer = null;
+                    state.query = searchInput.value;
+                    renderSearch();
+                }
+                var best = currentSearchItem();
+                if (best) {
+                    openItemDetail(best.id);
+                } else if (searchInput.value !== "") {
+                    InvScanner.feedbackError();
+                    toast("Nothing matches that search", "err");
+                }
                 return;
             }
 
@@ -1598,6 +1859,15 @@ var App = (function () {
                 : searchBurst.text + event.key;
             searchBurst.at = now;
         });
+
+        // Lifts the on-screen keyboard for this field when the operator wants
+        // to type a query rather than scan one
+        $("searchKb").onclick = function () {
+            state.searchTyping = !state.searchTyping;
+            applyKeyboardPolicy();
+            searchInput.blur();
+            setTimeout(function () { searchInput.focus(); }, 30);
+        };
         $("searchClear").onclick = function () {
             searchInput.value = "";
             state.query = "";
@@ -1606,14 +1876,89 @@ var App = (function () {
             searchInput.focus();
         };
 
-        // Keep the scan field armed: any tap on the scan view re-arms it
-        $("view-scan").addEventListener("click", function (event) {
+        // Keep a field armed at all times: a button keeps focus after a click,
+        // which would swallow the next trigger pull, so hand it straight back.
+        document.addEventListener("click", function (event) {
+            if (isSheetOpen()) return;
             var tag = (event.target.tagName || "").toLowerCase();
             if (tag === "input" || tag === "select" || tag === "textarea") return;
-            setTimeout(focusScan, 0);
+            setTimeout(armInput, 0);
         });
 
-        window.addEventListener("focus", focusScan);
+        window.addEventListener("focus", armInput);
+
+        // Coming back from a locked screen or another app must re-arm too
+        document.addEventListener("visibilitychange", function () {
+            if (!document.hidden) setTimeout(armInput, 50);
+        });
+
+        // The layout swaps between handheld and desktop on resize; the Find
+        // view has to re-render so its columns match the new layout.
+        var wasDesktop = isDesktopLayout();
+        window.addEventListener("resize", function () {
+            var nowDesktop = isDesktopLayout();
+            if (nowDesktop === wasDesktop) return;
+            wasDesktop = nowDesktop;
+            refreshAllViews();
+        });
+
+        bindShortcuts();
+    }
+
+    /*
+        Desktop keyboard shortcuts. Function keys and Ctrl/Cmd chords are used
+        deliberately: no keyboard-wedge scanner emits either, so these can never
+        be triggered by a barcode arriving mid-shortcut.
+    */
+    function bindShortcuts() {
+        var MODE_KEYS = { F1: "lookup", F2: "in", F3: "out", F4: "move", F5: "set" };
+
+        document.addEventListener("keydown", function (event) {
+            var chord = event.ctrlKey || event.metaKey;
+
+            if (event.key === "Escape") {
+                if (isSheetOpen()) {
+                    closeSheet();
+                } else if (state.view === "search" && state.query !== "") {
+                    $("searchClear").click();
+                } else {
+                    switchView("scan");
+                }
+                event.preventDefault();
+                return;
+            }
+
+            if (isSheetOpen()) return;
+
+            if (!chord && MODE_KEYS[event.key]) {
+                switchView("scan");
+                setMode(MODE_KEYS[event.key]);
+                event.preventDefault();
+                return;
+            }
+
+            if (chord && (event.key === "f" || event.key === "F")) {
+                switchView("search");
+                state.searchTyping = true;
+                applyKeyboardPolicy();
+                $("searchInput").select();
+                event.preventDefault();
+                return;
+            }
+
+            if (chord && (event.key === "n" || event.key === "N")) {
+                openItemEditor(null, "");
+                event.preventDefault();
+                return;
+            }
+
+            // Arrow keys drive the result list even when the box is not focused
+            if (state.view === "search" && !chord &&
+                (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+                moveSearchSelection(event.key === "ArrowDown" ? 1 : -1);
+                event.preventDefault();
+            }
+        });
     }
 
     /* Walks up from `node` looking for an ancestor carrying `className` */
@@ -1650,8 +1995,10 @@ var App = (function () {
 
         renderContext();
         setScanStatus(null, true);
+        applyKeyboardPolicy();
+        startFocusWatchdog();
         load(false);
-        focusScan();
+        armInput();
     }
 
     return {
