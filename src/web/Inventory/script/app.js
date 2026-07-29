@@ -27,7 +27,7 @@ var App = (function () {
         session: [],            // this shift's operations, newest first
         searchResults: [],      // last rendered result set, for keyboard nav
         searchIndex: -1,        // highlighted row on the Find view, -1 = none
-        searchTyping: false,    // operator lifted the IME to type a query
+        scanTyping: false,      // operator tapped the scan box to type by hand
         pairing: null,          // InvPairing status, null until it reports in
         forwarding: false,      // a scan is in flight to the paired desktop
         lastResult: null,
@@ -884,24 +884,25 @@ var App = (function () {
         }
     }
 
+    /*
+        Suppression applies to the scan box and nothing else.
+
+        The scan box is the only field fed by hardware, so it is the only one
+        that gains anything from keeping the on-screen keyboard down. Applying
+        the same policy to the search box - or to any form field - just leaves
+        the operator tapping a field that refuses to type, which is worse than
+        an on-screen keyboard appearing. Tapping the scan box itself is read as
+        "I want to type", and lifts the suppression for that field too.
+    */
     function applyKeyboardPolicy() {
-        var suppress = suppressSoftKeyboard();
+        var suppress = suppressSoftKeyboard() && !state.scanTyping;
         setFieldKeyboard($("scanInput"), !suppress);
-        // The search box follows the same policy; its keyboard button lifts it
-        // for as long as the operator wants to type instead of scan.
-        setFieldKeyboard($("searchInput"), !suppress || state.searchTyping);
 
         // Nothing to toggle on a device without an on-screen keyboard
-        var hasSoftKeyboard = InvScanner.deviceHasSoftKeyboard();
         var scanBtn = $("kbToggle");
-        var searchBtn = $("searchKb");
         if (scanBtn) {
-            scanBtn.style.display = hasSoftKeyboard ? "" : "none";
+            scanBtn.style.display = InvScanner.deviceHasSoftKeyboard() ? "" : "none";
             scanBtn.className = "btn square" + (suppress ? "" : " primary");
-        }
-        if (searchBtn) {
-            searchBtn.style.display = hasSoftKeyboard ? "" : "none";
-            searchBtn.className = "search-kb" + (state.searchTyping ? " active" : "");
         }
     }
 
@@ -915,22 +916,36 @@ var App = (function () {
         if (isSheetOpen()) return;
 
         var target = null;
-        if (state.view === "scan") target = $("scanInput");
-        else if (state.view === "search") target = $("searchInput");
+        if (state.view === "scan") {
+            target = $("scanInput");
+        } else if (state.view === "search") {
+            // Focusing this on a handheld would throw the on-screen keyboard
+            // over the results the moment the view opens. The wedge is read
+            // document-wide there, so a scan still lands without focus, and
+            // tapping the box when you actually want to type works normally.
+            if (InvScanner.deviceHasSoftKeyboard()) return;
+            target = $("searchInput");
+        }
         if (!target) return;
 
-        // In an ArozOS float window the app runs inside an iframe. Until that
-        // frame holds the window focus, key events go to the parent document no
-        // matter what has DOM focus inside here - which is exactly why the first
-        // scan after opening the app can go nowhere. Only claim it when this
-        // document does not already have focus, so a desktop with several
-        // windows open never has focus yanked out from under it.
-        try {
-            if (document.hasFocus && !document.hasFocus() && window.focus) window.focus();
-        } catch (e) {}
+        claimWindowFocus();
 
         if (document.activeElement === target) return;
         try { target.focus(); } catch (e) {}
+    }
+
+    /*
+        In an ArozOS float window the app runs inside an iframe. Until that frame
+        holds the window focus, key events go to the parent document no matter
+        what has DOM focus inside here - which is exactly why the first scan
+        after opening the app can go nowhere. Only claimed when this document
+        does not already have focus, so a desktop with several windows open
+        never has focus yanked out from under it.
+    */
+    function claimWindowFocus() {
+        try {
+            if (document.hasFocus && !document.hasFocus() && window.focus) window.focus();
+        } catch (e) {}
     }
 
     /*
@@ -1446,8 +1461,8 @@ var App = (function () {
             '<div class="section-title">On-screen keyboard</div><div class="card">' +
             '<div class="context-label">' +
             (InvScanner.deviceHasSoftKeyboard()
-                ? "This device has an on-screen keyboard. Automatic keeps it down so the hardware scanner can type into the armed field without covering the screen."
-                : "No on-screen keyboard on this device, so Automatic leaves every field typing normally.") +
+                ? "Applies to the scan box only. Automatic keeps the keyboard down while the box waits for the hardware scanner, so it never covers the screen - tap the box and it comes up so you can type a code by hand. Search and every other field always type normally."
+                : "No on-screen keyboard on this device, so every field types normally.") +
             "</div>" + kbHtml +
             '<div class="hint" style="margin-top:8px;">Currently: ' +
             (suppressSoftKeyboard() ? "suppressed" : "allowed") + "</div></div>";
@@ -2171,19 +2186,41 @@ var App = (function () {
             }
         });
 
+        var scanInput = $("scanInput");
+
+        // Deliberately pointerdown, not focus: the attribute has to be lifted
+        // before the focus lands, or the browser has already decided not to
+        // raise the on-screen keyboard for this tap.
+        scanInput.addEventListener("pointerdown", function () {
+            if (state.scanTyping) return;
+            state.scanTyping = true;
+            applyKeyboardPolicy();
+        });
+
+        // Leaving the field puts it back to hardware-fed, so the next time it is
+        // armed automatically no keyboard comes up
+        scanInput.addEventListener("blur", function () {
+            if (!state.scanTyping) return;
+            state.scanTyping = false;
+            applyKeyboardPolicy();
+        });
+
         $("scanSubmit").onclick = function () {
             scanner.submit();
             armInput();
         };
 
         $("kbToggle").onclick = function () {
-            // One tap flips between the automatic policy and hand typing
+            // Tapping the box already lifts the keyboard for one entry; this
+            // pins the choice so it survives the next scan and the next reload
             var next = suppressSoftKeyboard() ? "always" : "auto";
+            state.scanTyping = false;
             saveSettings({ softKeyboard: next });
-            var input = $("scanInput");
-            input.blur();
-            setTimeout(function () { input.focus(); }, 30);
-            toast(next === "always" ? "On-screen keyboard on" : "On-screen keyboard off (automatic)", "");
+            scanInput.blur();
+            setTimeout(function () { scanInput.focus(); }, 30);
+            toast(next === "always"
+                ? "On-screen keyboard stays on"
+                : "On-screen keyboard off for scanning - tap the box to type", "");
         };
 
         $("btnAdd").onclick = function () { openItemEditor(null, ""); };
@@ -2263,14 +2300,6 @@ var App = (function () {
             searchBurst.at = now;
         });
 
-        // Lifts the on-screen keyboard for this field when the operator wants
-        // to type a query rather than scan one
-        $("searchKb").onclick = function () {
-            state.searchTyping = !state.searchTyping;
-            applyKeyboardPolicy();
-            searchInput.blur();
-            setTimeout(function () { searchInput.focus(); }, 30);
-        };
         $("searchClear").onclick = function () {
             searchInput.value = "";
             state.query = "";
@@ -2342,8 +2371,7 @@ var App = (function () {
 
             if (chord && (event.key === "f" || event.key === "F")) {
                 switchView("search");
-                state.searchTyping = true;
-                applyKeyboardPolicy();
+                $("searchInput").focus();
                 $("searchInput").select();
                 event.preventDefault();
                 return;
@@ -2431,9 +2459,11 @@ var App = (function () {
         setTimeout(armInput, 250);
 
         // The first touch anywhere is the point at which a browser will let this
-        // frame take the window focus, so take it then too
+        // frame take the window focus. Claim only that - moving DOM focus here
+        // would pull it out of whatever the operator just put their finger on,
+        // which breaks a select the moment its dropdown tries to open.
         document.addEventListener("pointerdown", function () {
-            setTimeout(armInput, 0);
+            claimWindowFocus();
         }, true);
     }
 

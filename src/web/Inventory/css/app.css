@@ -1169,7 +1169,7 @@ select,
     color: var(--text);
     font-family: inherit;
     font-size: 16px;
-    padding: 0 88px 0 40px;
+    padding: 0 46px 0 40px;
 }
 
 #searchInput:focus {
@@ -1177,8 +1177,7 @@ select,
     border-color: var(--accent);
 }
 
-.search-clear,
-.search-kb {
+.search-clear {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
@@ -1197,15 +1196,6 @@ select,
 
 .search-clear.visible {
     display: block;
-}
-
-/* Lifts the on-screen keyboard for a typed query; hidden where there is none */
-.search-kb {
-    right: 46px;
-}
-
-.search-kb.active {
-    color: var(--accent);
 }
 
 mark {
