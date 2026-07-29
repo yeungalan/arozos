@@ -1,0 +1,38 @@
+/*
+    Inventory - Persist user settings
+
+    POST: settingsJson (JSON string of a settings object)
+    Only keys present in the default schema are accepted, each coerced to the
+    type the default declares.
+*/
+includes("store.js");
+
+var incoming;
+try {
+    incoming = JSON.parse(settingsJson);
+} catch (e) {
+    incoming = null;
+}
+
+if (!incoming || typeof incoming !== "object") {
+    sendJSONResp({ error: "Invalid settings data" });
+} else {
+    var data = invLoad();
+    var defaults = invDefaultSettings();
+
+    for (var key in defaults) {
+        if (incoming[key] === undefined) continue;
+
+        if (typeof defaults[key] === "boolean") {
+            data.settings[key] = (incoming[key] === true || incoming[key] === "true");
+        } else if (typeof defaults[key] === "number") {
+            var num = parseFloat(incoming[key]);
+            if (!isNaN(num) && num >= 0) data.settings[key] = num;
+        } else {
+            data.settings[key] = ("" + incoming[key]).trim();
+        }
+    }
+
+    invSave(data);
+    sendJSONResp({ ok: true, settings: data.settings });
+}

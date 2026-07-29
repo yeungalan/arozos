@@ -1,0 +1,74 @@
+/*
+    Inventory - Create or update a single item
+
+    POST: itemData (JSON string of the item object)
+    An item with an empty id is created; otherwise the matching item is updated.
+
+    Returns { ok: true, item: <saved item>, locations: [...] } or { error }.
+*/
+includes("store.js");
+
+var incoming;
+try {
+    incoming = JSON.parse(itemData);
+} catch (e) {
+    incoming = null;
+}
+
+var item = invNormaliseItem(incoming);
+
+if (!item) {
+    sendJSONResp({ error: "Invalid item data" });
+} else if (item.name === "" && item.barcode === "") {
+    sendJSONResp({ error: "An item needs at least a name or a barcode" });
+} else {
+    var data = invLoad();
+
+    // A barcode is the scan key, so it has to stay unique across the store
+    var clash = invIndexOfBarcode(data, item.barcode);
+    var existing = item.id === "" ? -1 : invIndexOfId(data, item.id);
+
+    if (item.barcode !== "" && clash !== -1 && clash !== existing) {
+        sendJSONResp({
+            error: "Barcode " + item.barcode + " is already used by \"" + data.items[clash].name + "\""
+        });
+    } else if (item.id !== "" && existing === -1) {
+        sendJSONResp({ error: "Item no longer exists" });
+    } else {
+        var isNew = (existing === -1);
+        var previous = isNew ? null : data.items[existing];
+
+        if (isNew) {
+            item.id = invNewId("it_");
+            item.createdAt = invNow();
+        } else {
+            item.createdAt = previous.createdAt;
+        }
+        item.updatedAt = invNow();
+
+        if (item.name === "") item.name = "Item " + item.barcode;
+
+        if (isNew) {
+            data.items.push(item);
+        } else {
+            data.items[existing] = item;
+        }
+
+        invRememberLocation(data, item.location);
+        invSave(data);
+
+        invAddMovement({
+            itemId: item.id,
+            barcode: item.barcode,
+            name: item.name,
+            type: isNew ? "create" : "edit",
+            delta: isNew ? item.qty : (item.qty - previous.qty),
+            qtyAfter: item.qty,
+            fromLocation: isNew ? "" : previous.location,
+            toLocation: item.location,
+            note: isNew ? "Item created" : "Item details updated"
+        });
+
+        sendJSONResp({ ok: true, item: item, locations: data.locations });
+    }
+}

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="invBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3d8bfd"/>
+      <stop offset="1" stop-color="#1b4fa8"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="url(#invBg)"/>
+
+  <!-- Carton -->
+  <path d="M24 46 L64 30 L104 46 L64 62 Z" fill="#ffffff" opacity="0.95"/>
+  <path d="M24 46 L64 62 L64 104 L24 88 Z" fill="#dce8fb"/>
+  <path d="M104 46 L64 62 L64 104 L104 88 Z" fill="#b7cdf0"/>
+
+  <!-- Barcode printed on the carton face -->
+  <g fill="#1b4fa8">
+    <rect x="32" y="62" width="3" height="20"/>
+    <rect x="38" y="64" width="2" height="20"/>
+    <rect x="43" y="65" width="4" height="20"/>
+    <rect x="50" y="68" width="2" height="20"/>
+    <rect x="55" y="69" width="3" height="20"/>
+  </g>
+
+  <!-- Scan beam -->
+  <rect x="70" y="70" width="34" height="4" rx="2" fill="#ff4d4d"/>
+</svg>

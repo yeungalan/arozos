@@ -1,0 +1,36 @@
+/*
+    Inventory - Initialize / load the whole store
+
+    Ensures the data folder exists and returns everything the front end needs
+    for offline-style client side search:
+        { items, locations, settings, movements, serverTime }
+
+    POST (optional): movementLimit (number, default 200)
+*/
+includes("store.js");
+
+filelib.mkdir(INV_DIR);
+
+var data = invLoad();
+
+// First run - persist the seeded defaults so settings survive a reload
+if (!filelib.fileExists(INV_DATA_PATH)) {
+    invSave(data);
+}
+
+var limit = 200;
+if (typeof movementLimit !== "undefined") {
+    var parsedLimit = parseInt(movementLimit);
+    if (!isNaN(parsedLimit) && parsedLimit > 0) limit = parsedLimit;
+}
+
+var movements = invLoadMovements();
+if (movements.length > limit) movements = movements.slice(0, limit);
+
+sendJSONResp({
+    items: data.items,
+    locations: data.locations,
+    settings: data.settings,
+    movements: movements,
+    serverTime: invNow()
+});

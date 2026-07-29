@@ -1,0 +1,36 @@
+/*
+    Inventory - Replace the known-locations list
+
+    POST: locationsJson (JSON string array of location names)
+    Names are trimmed, de-duplicated case-insensitively and sorted.
+*/
+includes("store.js");
+
+var incoming;
+try {
+    incoming = JSON.parse(locationsJson);
+} catch (e) {
+    incoming = null;
+}
+
+if (!Array.isArray(incoming)) {
+    sendJSONResp({ error: "Invalid locations data" });
+} else {
+    var cleaned = [];
+    var seen = {};
+    for (var i = 0; i < incoming.length; i++) {
+        var name = ("" + incoming[i]).trim();
+        if (name === "") continue;
+        var key = name.toLowerCase();
+        if (seen[key]) continue;
+        seen[key] = true;
+        cleaned.push(name);
+    }
+    cleaned.sort();
+
+    var data = invLoad();
+    data.locations = cleaned;
+    invSave(data);
+
+    sendJSONResp({ ok: true, locations: cleaned });
+}

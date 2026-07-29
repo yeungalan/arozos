@@ -1,0 +1,45 @@
+/*
+    Inventory - Read the movement journal
+
+    POST (all optional):
+        itemId (string) - only entries for this item
+        limit  (number) - page size, default 100
+        offset (number) - entries to skip, default 0
+
+    Returns { movements, total, offset, limit }.
+*/
+includes("store.js");
+
+var filterId = (typeof itemId !== "undefined") ? ("" + itemId).trim() : "";
+
+var pageSize = 100;
+if (typeof limit !== "undefined") {
+    var parsedLimit = parseInt(limit);
+    if (!isNaN(parsedLimit) && parsedLimit > 0) pageSize = parsedLimit;
+}
+
+var start = 0;
+if (typeof offset !== "undefined") {
+    var parsedOffset = parseInt(offset);
+    if (!isNaN(parsedOffset) && parsedOffset > 0) start = parsedOffset;
+}
+
+var movements = invLoadMovements();
+
+if (filterId !== "") {
+    var matched = [];
+    for (var i = 0; i < movements.length; i++) {
+        if (movements[i].itemId === filterId) matched.push(movements[i]);
+    }
+    movements = matched;
+}
+
+var total = movements.length;
+var page = movements.slice(start, start + pageSize);
+
+sendJSONResp({
+    movements: page,
+    total: total,
+    offset: start,
+    limit: pageSize
+});

@@ -1,0 +1,39 @@
+/*
+    Inventory - Delete an item
+
+    POST: itemId (string)
+    The movement journal keeps the item's history plus a final "delete" entry,
+    so a stock take can still be audited after the item is gone.
+*/
+includes("store.js");
+
+var targetId = (typeof itemId !== "undefined") ? ("" + itemId).trim() : "";
+
+if (targetId === "") {
+    sendJSONResp({ error: "Missing itemId" });
+} else {
+    var data = invLoad();
+    var index = invIndexOfId(data, targetId);
+
+    if (index === -1) {
+        sendJSONResp({ error: "Item not found" });
+    } else {
+        var removed = data.items[index];
+        data.items.splice(index, 1);
+        invSave(data);
+
+        invAddMovement({
+            itemId: removed.id,
+            barcode: removed.barcode,
+            name: removed.name,
+            type: "delete",
+            delta: -removed.qty,
+            qtyAfter: 0,
+            fromLocation: removed.location,
+            toLocation: "",
+            note: "Item deleted"
+        });
+
+        sendJSONResp({ ok: true, itemId: removed.id });
+    }
+}

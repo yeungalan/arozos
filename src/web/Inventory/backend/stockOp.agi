@@ -1,0 +1,104 @@
+/*
+    Inventory - Stock operation (the scan workhorse)
+
+    Applies a quantity or location change to one item and journals it, so the
+    handheld only has to send the scan result plus the active mode.
+
+    POST:
+        barcode      (string)  - scan key; used when itemId is absent
+        itemId       (string)  - explicit target, wins over barcode
+        op           (string)  - "in" | "out" | "set" | "move"
+        amount       (number)  - delta for in/out, absolute qty for set
+        toLocation   (string)  - destination, required for "move"
+        note         (string)  - optional free text stored on the journal entry
+
+    Returns { ok, item, movement, locations, warning } or { error, unknownBarcode }.
+*/
+includes("store.js");
+
+var operation = (typeof op !== "undefined") ? ("" + op).trim() : "";
+var scanned = (typeof barcode !== "undefined") ? ("" + barcode).trim() : "";
+var targetId = (typeof itemId !== "undefined") ? ("" + itemId).trim() : "";
+var opNote = (typeof note !== "undefined") ? ("" + note).trim() : "";
+var destination = (typeof toLocation !== "undefined") ? ("" + toLocation).trim() : "";
+
+var amountValue = 1;
+if (typeof amount !== "undefined") {
+    amountValue = parseFloat(amount);
+    if (isNaN(amountValue)) amountValue = 1;
+}
+
+if (operation !== "in" && operation !== "out" && operation !== "set" && operation !== "move") {
+    sendJSONResp({ error: "Unknown operation: " + operation });
+} else if (targetId === "" && scanned === "") {
+    sendJSONResp({ error: "Nothing to look up - send a barcode or an itemId" });
+} else {
+    var data = invLoad();
+    var index = targetId !== "" ? invIndexOfId(data, targetId) : invIndexOfBarcode(data, scanned);
+
+    if (index === -1) {
+        // Signal the front end to offer "create this item" instead of erroring out
+        sendJSONResp({ error: "No item matches this barcode", unknownBarcode: scanned });
+    } else if (operation === "move" && destination === "") {
+        sendJSONResp({ error: "Pick a destination location first" });
+    } else {
+        var item = data.items[index];
+        var fromLocation = item.location;
+        var before = item.qty;
+        var warning = "";
+        var delta = 0;
+
+        if (operation === "in") {
+            delta = Math.abs(amountValue);
+            item.qty = before + delta;
+        } else if (operation === "out") {
+            delta = -Math.abs(amountValue);
+            if (before + delta < 0) {
+                // Clamp rather than block: the count on the shelf is the truth,
+                // but flag it so the operator can see the book value was wrong.
+                warning = "Stock would have gone negative - clamped to 0";
+                delta = -before;
+            }
+            item.qty = before + delta;
+        } else if (operation === "set") {
+            var absolute = amountValue;
+            if (absolute < 0) {
+                warning = "Negative count is not allowed - stored as 0";
+                absolute = 0;
+            }
+            delta = absolute - before;
+            item.qty = absolute;
+        } else {
+            // move - quantity is untouched, only the location changes
+            if (destination.toLowerCase() === fromLocation.toLowerCase()) {
+                warning = "Item was already in " + destination;
+            }
+            item.location = destination;
+            invRememberLocation(data, destination);
+        }
+
+        item.updatedAt = invNow();
+        data.items[index] = item;
+        invSave(data);
+
+        var movement = invAddMovement({
+            itemId: item.id,
+            barcode: item.barcode,
+            name: item.name,
+            type: operation,
+            delta: delta,
+            qtyAfter: item.qty,
+            fromLocation: fromLocation,
+            toLocation: operation === "move" ? destination : item.location,
+            note: opNote
+        });
+
+        sendJSONResp({
+            ok: true,
+            item: item,
+            movement: movement,
+            locations: data.locations,
+            warning: warning
+        });
+    }
+}

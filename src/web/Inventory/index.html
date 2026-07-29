@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <!--
+        user-scalable=no keeps a double-tap or a gloved pinch from zooming the
+        UI mid-count; the layout is already sized for the handheld's screen.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Inventory</title>
+    <link rel="icon" href="img/module_icon.svg">
+    <link rel="stylesheet" href="../script/semantic/components/icon.min.css">
+    <link rel="stylesheet" href="css/app.css">
+    <script src="../script/jquery.min.js"></script>
+    <script src="../script/ao_module.js"></script>
+    <!--
+        Backend AGI scripts (server-side, user:/Document/Inventory/):
+          Inventory/backend/init.agi           load items, locations, settings, recent movements
+          Inventory/backend/stockOp.agi        stock in / out / count / move, journalled
+          Inventory/backend/saveItem.agi       create or update an item
+          Inventory/backend/deleteItem.agi     delete an item
+          Inventory/backend/saveLocations.agi  replace the location pick list
+          Inventory/backend/saveSettings.agi   persist thresholds and scanner options
+          Inventory/backend/history.agi        paged movement journal
+          Inventory/backend/exportCsv.agi      CSV export of items or the journal
+    -->
+</head>
+
+<body>
+    <div id="app">
+
+        <div class="topbar">
+            <div class="title">Inventory<span class="subtitle" id="topSubtitle">Loading...</span></div>
+            <button class="icon-btn" id="btnAdd" title="New item"><i class="plus icon"></i></button>
+            <button class="icon-btn" id="btnTheme" title="Toggle theme"><i class="moon icon" id="themeIcon"></i></button>
+        </div>
+
+        <div class="views" id="views">
+
+            <!-- ── Scan ──────────────────────────────────────────────────── -->
+            <div class="view active" id="view-scan">
+                <!-- Mode buttons are rendered by app.js so the list stays in one place -->
+                <div class="mode-grid" id="modeGrid"></div>
+
+                <div class="card" id="contextCard"></div>
+
+                <div class="scan-box listening" id="scanBox">
+                    <div class="scan-status">
+                        <span class="scan-dot"></span>
+                        <span id="scanStatusText">Ready</span>
+                    </div>
+                    <div class="scan-row">
+                        <!--
+                            inputmode="none" is toggled by the keyboard button: off
+                            by default so the FZ-N1's hardware wedge can type into
+                            this field without raising the Android soft keyboard.
+                        -->
+                        <input id="scanInput" type="text" inputmode="none" placeholder="Scan barcode"
+                            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                        <button class="btn square primary" id="scanSubmit" title="Submit code">
+                            <i class="arrow right icon"></i>
+                        </button>
+                        <button class="btn square" id="kbToggle" title="On-screen keyboard">
+                            <i class="keyboard icon"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="scanResult"></div>
+                <div id="sessionLog"></div>
+            </div>
+
+            <!-- ── Find ──────────────────────────────────────────────────── -->
+            <div class="view" id="view-search">
+                <div class="search-wrap">
+                    <i class="search icon"></i>
+                    <input id="searchInput" type="text" placeholder="Name, barcode, SKU, location..."
+                        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                    <button class="search-clear" id="searchClear" title="Clear">
+                        <i class="times circle icon"></i>
+                    </button>
+                </div>
+                <div class="chip-row" id="filterChips"></div>
+                <div class="section-title" id="searchMeta"></div>
+                <div class="card flush" id="searchResults"></div>
+            </div>
+
+            <!-- ── Alerts ────────────────────────────────────────────────── -->
+            <div class="view" id="view-alerts">
+                <div id="alertsBody"></div>
+            </div>
+
+            <!-- ── More ──────────────────────────────────────────────────── -->
+            <div class="view" id="view-more">
+                <div id="moreBody"></div>
+            </div>
+
+        </div>
+
+        <div class="navbar">
+            <button class="nav-btn active" data-view="scan">
+                <i class="barcode icon"></i><span>Scan</span>
+            </button>
+            <button class="nav-btn" data-view="search">
+                <i class="search icon"></i><span>Find</span>
+            </button>
+            <button class="nav-btn" data-view="alerts">
+                <i class="bell icon"></i><span>Alerts</span>
+                <span class="nav-badge hidden" id="alertBadge">0</span>
+            </button>
+            <button class="nav-btn" data-view="more">
+                <i class="ellipsis horizontal icon"></i><span>More</span>
+            </button>
+        </div>
+
+        <div class="sheet-backdrop" id="sheetBackdrop"></div>
+        <div class="sheet" id="sheet">
+            <div class="sheet-head">
+                <button class="icon-btn" id="sheetClose" title="Close"><i class="close icon"></i></button>
+                <div class="title" id="sheetTitle"></div>
+            </div>
+            <div class="sheet-body" id="sheetBody"></div>
+            <div class="sheet-foot" id="sheetFoot"></div>
+        </div>
+
+        <div id="toast"></div>
+    </div>
+
+    <script src="script/search.js"></script>
+    <script src="script/scanner.js"></script>
+    <script src="script/app.js"></script>
+</body>
+
+</html>
