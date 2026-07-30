@@ -1125,6 +1125,102 @@ var App = (function () {
         return RUN_STATES[0];
     }
 
+    /*
+        What actually gets pulled through a building, offered as a pick list so a
+        run is filed under "Cat6a" rather than as cat6a / CAT-6A / "cat 6a" - three
+        spellings of one cable make the register useless to search or total up.
+        Anything missing is still typeable through "+ New type...", and a type
+        already recorded anywhere here is offered from then on, which is why this
+        needs no separately stored list.
+    */
+    var CABLE_TYPES = [
+        "Cat5e", "Cat6", "Cat6a", "Cat7", "Cat8",
+        "Fibre OM3", "Fibre OM4", "Fibre OS2",
+        "Coax RG6", "Coax RG59",
+        "HDMI", "DisplayPort", "DVI", "VGA",
+        "USB-A to USB-C", "USB-C to USB-C", "USB-A to micro USB",
+        "3.5mm audio", "XLR", "Speaker",
+        "IEC C13", "IEC C19", "Mains", "Telephone", "Alarm", "Control"
+    ];
+
+    /* Every type worth offering: the common ones, then whatever this site uses */
+    function cableTypeList(current) {
+        var seen = {};
+        var extra = [];
+        var add = function (name, into) {
+            var text = ("" + (name === undefined || name === null ? "" : name)).trim();
+            if (text === "") return;
+            var key = text.toLowerCase();
+            if (seen[key]) return;
+            seen[key] = true;
+            if (into) into.push(text);
+        };
+
+        for (var i = 0; i < CABLE_TYPES.length; i++) add(CABLE_TYPES[i], null);
+        for (var j = 0; j < state.runs.length; j++) add(state.runs[j].cableType, extra);
+        for (var k = 0; k < state.items.length; k++) {
+            if (state.items[k].kind === "cable") add(state.items[k].cableType, extra);
+        }
+        add(current, extra);   // an older spelling must survive being edited
+
+        extra.sort(function (a, b) {
+            return a.toLowerCase() < b.toLowerCase() ? -1 : (a.toLowerCase() > b.toLowerCase() ? 1 : 0);
+        });
+        return CABLE_TYPES.concat(extra);
+    }
+
+    function cableTypeOptions(current) {
+        var list = cableTypeList(current);
+        var chosen = ("" + (current === undefined || current === null ? "" : current)).trim().toLowerCase();
+        var html = '<option value="">- unspecified -</option>';
+        for (var i = 0; i < list.length; i++) {
+            html += '<option value="' + esc(list[i]) + '"' +
+                (list[i].toLowerCase() === chosen ? " selected" : "") + ">" +
+                esc(list[i]) + "</option>";
+        }
+        return html + '<option value="__new__">+ New type...</option>';
+    }
+
+    /*
+        Wires up the "+ New ..." escape hatch on a pick list: what is typed becomes
+        an option and the selection, matched without case so "cat6" does not become
+        a second Cat6. Cancelling puts the previous choice back rather than leaving
+        "__new__" selected.
+    */
+    function bindNewOptionSelect(select, promptText, fallback) {
+        select.addEventListener("change", function () {
+            if (select.value !== "__new__") return;
+
+            var typed = window.prompt(promptText);
+            typed = (typed === null ? "" : typed).trim();
+            if (typed === "") {
+                select.value = fallback;
+                return;
+            }
+
+            var match = "";
+            for (var i = 0; i < select.options.length; i++) {
+                var value = select.options[i].value;
+                if (value === "__new__" || value === "") continue;
+                if (value.toLowerCase() === typed.toLowerCase()) { match = value; break; }
+            }
+            if (match === "") {
+                var option = document.createElement("option");
+                option.value = typed;
+                option.text = typed;
+                // Before the last entry, so "+ New ..." stays at the bottom
+                select.add(option, select.options[select.options.length - 1]);
+                match = typed;
+            }
+            select.value = match;
+        });
+    }
+
+    /* "__new__" only survives a cancelled prompt, and means "nothing chosen" */
+    function chosenValue(select) {
+        return select.value === "__new__" ? "" : select.value;
+    }
+
     function findRunByCode(code) {
         var needle = ("" + code).trim().toLowerCase();
         if (needle === "") return null;
@@ -2202,7 +2298,7 @@ var App = (function () {
 
             '<div class="field-row">' +
             '<div class="field"><label>Cable type</label>' +
-            '<input type="text" id="rType" value="' + esc(r.cableType) + '" placeholder="Cat6a"></div>' +
+            '<select id="rType">' + cableTypeOptions(r.cableType) + "</select></div>" +
             '<div class="field"><label>Length (m)</label>' +
             '<input type="number" inputmode="decimal" step="any" min="0" id="rLength" value="' + esc(r.length) + '"></div>' +
             "</div>" +
@@ -2244,13 +2340,16 @@ var App = (function () {
             '<button class="btn" id="rCancel">Cancel</button>' +
             '<button class="btn primary" id="rSave"><i class="save icon"></i>Save</button>');
 
+        var typeSelect = $("rType");
+        bindNewOptionSelect(typeSelect, "New cable type", r.cableType || "");
+
         $("rCancel").onclick = closeSheet;
         $("rSave").onclick = function () {
             var payload = {
                 id: r.id,
                 label: $("rLabel").value,
                 barcode: $("rBarcode").value,
-                cableType: $("rType").value,
+                cableType: chosenValue(typeSelect),
                 length: $("rLength").value,
                 fromLocation: $("rFromLoc").value,
                 fromPort: $("rFromPort").value,
@@ -2885,7 +2984,7 @@ var App = (function () {
             '<div class="section-title">Cable</div>' +
             '<div class="field-row">' +
             '<div class="field"><label>Cable type</label>' +
-            '<input type="text" id="fCableType" value="' + esc(it.cableType) + '" placeholder="Cat6a"></div>' +
+            '<select id="fCableType">' + cableTypeOptions(it.cableType) + "</select></div>" +
             '<div class="field"><label>Length (m)</label>' +
             '<input type="number" inputmode="decimal" step="any" min="0" id="fCableLength" value="' + esc(it.cableLength) + '"></div>' +
             "</div>" +
@@ -2965,6 +3064,9 @@ var App = (function () {
             });
         }
 
+        var cableTypeSelect = $("fCableType");
+        bindNewOptionSelect(cableTypeSelect, "New cable type", it.cableType || "");
+
         var kindSelect = $("fKind");
         var syncKind = function () {
             // The cable block is only noise on a box of gloves. "block" rather
@@ -3003,7 +3105,7 @@ var App = (function () {
                 serial: $("fSerial").value,
                 notes: $("fNotes").value,
                 batches: editorBatches,
-                cableType: $("fCableType").value,
+                cableType: chosenValue(cableTypeSelect),
                 cableLength: $("fCableLength").value,
                 connectorA: $("fConnA").value,
                 connectorB: $("fConnB").value,
