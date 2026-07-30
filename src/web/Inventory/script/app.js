@@ -27,7 +27,8 @@ var App = (function () {
         session: [],            // this shift's operations, newest first
         searchResults: [],      // last rendered result set, for keyboard nav
         searchIndex: -1,        // highlighted row on the Find view, -1 = none
-        scanTyping: false,      // operator tapped the scan box to type by hand
+        scanTyping: false,      // kept for the settings toggle; per-field state
+                                // now lives on the element as data-typing
         runs: [],               // installed cable runs
         catalogueSize: 0,
         counting: null,         // the open blind count, null when none
@@ -702,6 +703,15 @@ var App = (function () {
         return html;
     }
 
+    /*
+        Shown under a scan field on a device with an on-screen keyboard, because
+        the two-tap behaviour is not something anyone would guess.
+    */
+    function scanFieldHint() {
+        if (!InvScanner.deviceHasSoftKeyboard()) return "";
+        return "<b>Armed for scanning</b> - tap again to type by hand. ";
+    }
+
     /* Handheld side: key in the code shown on the desktop */
     function openJoinSheet() {
         var defaultName = InvScanner.deviceHasSoftKeyboard() ? "Handheld" : "This computer";
@@ -1206,15 +1216,76 @@ var App = (function () {
         an on-screen keyboard appearing. Tapping the scan box itself is read as
         "I want to type", and lifts the suppression for that field too.
     */
+    /*
+        A "scan field" is any box a barcode can legitimately land in: the scan
+        box, the search box, an item's barcode, a batch lot number, a cable
+        label. They all follow one rule, which resolves the awkward pair of
+        requirements a handheld has:
+
+          - armed without being tapped, so a trigger pull lands somewhere
+          - no on-screen keyboard, because arming one would otherwise cover the
+            screen every time the app re-armed it
+
+        so the field is focused with the keyboard suppressed, and a tap on an
+        already-focused field is read as "I want to type this one by hand" and
+        lifts the suppression. Every other field - name, price, notes - is left
+        completely alone and types normally on the first tap.
+    */
+    function scanFieldsIn(root) {
+        return (root || document).querySelectorAll("input[data-scan]");
+    }
+
+    function firstScanField(root) {
+        var fields = scanFieldsIn(root);
+        return fields.length ? fields[0] : null;
+    }
+
+    function applyScanFieldKeyboard(input) {
+        var typing = input.getAttribute("data-typing") === "1";
+        setFieldKeyboard(input, !suppressSoftKeyboard() || typing);
+    }
+
+    function prepareScanField(input) {
+        if (!input || input.getAttribute("data-scan-ready") === "1") return;
+        input.setAttribute("data-scan-ready", "1");
+        applyScanFieldKeyboard(input);
+
+        // pointerdown, not focus: the attribute has to change before the focus
+        // lands or the browser has already decided not to raise the keyboard
+        input.addEventListener("pointerdown", function () {
+            // Nothing to lift where there is no on-screen keyboard
+            if (!InvScanner.deviceHasSoftKeyboard()) return;
+            if (document.activeElement !== input) return;   // first tap = arm
+            input.setAttribute("data-typing", "1");
+            applyScanFieldKeyboard(input);
+        });
+
+        // Leaving puts it back to hardware-fed, so the next automatic arming
+        // does not bring the keyboard up with it
+        input.addEventListener("blur", function () {
+            if (input.getAttribute("data-typing") !== "1") return;
+            input.removeAttribute("data-typing");
+            applyScanFieldKeyboard(input);
+        });
+    }
+
+    /* Arms every scan field in a freshly rendered region and focuses the first */
+    function prepareScanFields(root) {
+        var fields = scanFieldsIn(root);
+        for (var i = 0; i < fields.length; i++) prepareScanField(fields[i]);
+        return fields.length ? fields[0] : null;
+    }
+
     function applyKeyboardPolicy() {
-        var suppress = suppressSoftKeyboard() && !state.scanTyping;
-        setFieldKeyboard($("scanInput"), !suppress);
+        var fields = scanFieldsIn(document);
+        for (var i = 0; i < fields.length; i++) applyScanFieldKeyboard(fields[i]);
 
         // Nothing to toggle on a device without an on-screen keyboard
         var scanBtn = $("kbToggle");
         if (scanBtn) {
             scanBtn.style.display = InvScanner.deviceHasSoftKeyboard() ? "" : "none";
-            scanBtn.className = "btn square" + (suppress ? "" : " primary");
+            scanBtn.className = "btn square" +
+                (suppressSoftKeyboard() ? "" : " primary");
         }
     }
 
@@ -1225,17 +1296,16 @@ var App = (function () {
         focus drops the next scan, which is the worst failure mode this app has.
     */
     function armInput() {
-        if (isSheetOpen()) return;
-
         var target = null;
-        if (state.view === "scan") {
+
+        if (isSheetOpen()) {
+            // An open sheet owns the wedge: arm its own first scan field, so a
+            // barcode can be scanned into an item's editor without tapping it
+            target = firstScanField($("sheetBody"));
+            if (!target) return;
+        } else if (state.view === "scan") {
             target = $("scanInput");
         } else if (state.view === "search") {
-            // Focusing this on a handheld would throw the on-screen keyboard
-            // over the results the moment the view opens. The wedge is read
-            // document-wide there, so a scan still lands without focus, and
-            // tapping the box when you actually want to type works normally.
-            if (InvScanner.deviceHasSoftKeyboard()) return;
             target = $("searchInput");
         }
         if (!target) return;
@@ -1817,11 +1887,12 @@ var App = (function () {
 
         var html =
             '<div class="field"><label>Label on the cable</label>' +
-            '<input type="text" id="rLabel" value="' + esc(r.label) + '" placeholder="LAN-0142">' +
-            '<div class="hint">What is printed or written on it. Must be unique.</div></div>' +
+            '<input type="text" id="rLabel" data-scan="1" value="' + esc(r.label) + '" placeholder="LAN-0142">' +
+            '<div class="hint">' + scanFieldHint() +
+            "What is printed or written on it. Must be unique.</div></div>" +
 
             '<div class="field"><label>Barcode</label>' +
-            '<input type="text" id="rBarcode" autocomplete="off" value="' + esc(r.barcode) + '">' +
+            '<input type="text" id="rBarcode" data-scan="1" autocomplete="off" value="' + esc(r.barcode) + '">' +
             '<div class="hint">Optional. Scan it in Look up to jump straight to this run.</div></div>' +
 
             '<div class="field-row">' +
@@ -2258,8 +2329,8 @@ var App = (function () {
     /* ── Sheets: item detail, editor, keypad, locations, history ────────── */
 
     function openSheet(title, bodyHtml, footHtml) {
-        // A sheet always owns the keyboard: its fields must not have to fight
-        // the wedge capture for keystrokes.
+        // The sheet's own fields receive the wedge directly, so the document
+        // level capture stands down while one is open
         InvScanner.setEnabled(false);
         $("sheetTitle").textContent = title;
         $("sheetBody").innerHTML = bodyHtml;
@@ -2268,6 +2339,15 @@ var App = (function () {
         $("sheet").className = "sheet open";
         $("sheetBackdrop").className = "sheet-backdrop open";
         $("sheetBody").scrollTop = 0;
+
+        // Arm the sheet's barcode field so a trigger pull lands in it with no
+        // tap and no keyboard
+        var first = prepareScanFields($("sheetBody"));
+        if (first) {
+            setTimeout(function () {
+                try { first.focus(); } catch (e) {}
+            }, 60);
+        }
     }
 
     function closeSheet() {
@@ -2444,8 +2524,10 @@ var App = (function () {
 
         var html =
             '<div class="field"><label>Barcode</label>' +
-            '<input type="text" id="fBarcode" autocomplete="off" value="' + esc(it.barcode) + '" placeholder="Scan or type">' +
-            '<div class="hint">The scan key. Must be unique across the inventory.</div></div>' +
+            '<input type="text" id="fBarcode" data-scan="1" autocomplete="off" value="' +
+            esc(it.barcode) + '" placeholder="Scan or type">' +
+            '<div class="hint">' + scanFieldHint() +
+            "The scan key. Must be unique across the inventory.</div></div>" +
 
             '<div class="field"><label>Name</label>' +
             '<input type="text" id="fName" value="' + esc(it.name) + '" placeholder="What is it"></div>' +
@@ -2540,6 +2622,44 @@ var App = (function () {
             }
         });
 
+        /*
+            The barcode box is armed when this sheet opens, so a trigger pull
+            lands here. Once a code arrives, ask the local catalogue what it is
+            and fill the name in when the operator has not typed one - which is
+            the whole point of keeping a catalogue.
+        */
+        var barcodeInput = $("fBarcode");
+        barcodeInput.addEventListener("keydown", function (event) {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            lookupIntoEditor();
+        });
+        barcodeInput.addEventListener("change", lookupIntoEditor);
+
+        function lookupIntoEditor() {
+            var code = barcodeInput.value.trim();
+            if (code === "") return;
+
+            api("catalogueLookup.agi", { barcode: code }, function (data) {
+                if (!$("fName")) return;   // sheet closed while we were asking
+
+                if (data.checkDigitOk === false) {
+                    toast("That barcode's check digit does not add up", "warn");
+                }
+                if (data.found && $("fName").value.trim() === "") {
+                    $("fName").value = data.name;
+                    if (data.category && $("fCategory").value.trim() === "") {
+                        $("fCategory").value = data.category;
+                    }
+                    if (data.unit && $("fUnit").value.trim() === "") {
+                        $("fUnit").value = data.unit;
+                    }
+                    InvScanner.feedbackOk();
+                    toast("Name filled in from your catalogue", "ok");
+                }
+            });
+        }
+
         var kindSelect = $("fKind");
         var syncKind = function () {
             // The cable block is only noise on a box of gloves. "block" rather
@@ -2623,10 +2743,16 @@ var App = (function () {
             };
         }
 
-        setTimeout(function () {
-            var focusTarget = isNew && it.barcode ? $("fName") : $("fBarcode");
-            if (focusTarget) focusTarget.focus();
-        }, 60);
+        // When the barcode is already known (created from a scan) the operator's
+        // next job is the name, so send them there instead of the armed barcode
+        if (isNew && it.barcode) {
+            setTimeout(function () {
+                var name = $("fName");
+                if (!name) return;
+                name.setAttribute("data-typing", "1");
+                try { name.focus(); } catch (e) {}
+            }, 90);
+        }
     }
 
     // Batch rows being edited in the open item sheet
@@ -2674,7 +2800,7 @@ var App = (function () {
             html += '<div class="batch-edit" data-index="' + i + '">' +
                 '<div class="field-row">' +
                 '<div class="field"><label>Batch / lot</label>' +
-                '<input type="text" class="b-label" value="' + esc(batch.batch) + '" placeholder="L-2409"></div>' +
+                '<input type="text" class="b-label" data-scan="1" value="' + esc(batch.batch) + '" placeholder="L-2409"></div>' +
                 '<div class="field"><label>Quantity</label>' +
                 '<input type="number" inputmode="decimal" step="any" class="b-qty" value="' + esc(batch.qty) + '"></div>' +
                 "</div>" +
@@ -2686,6 +2812,7 @@ var App = (function () {
                 "</div></div>";
         }
         host.innerHTML = html;
+        prepareScanFields(host);
 
         var removes = host.querySelectorAll(".b-remove");
         for (var r = 0; r < removes.length; r++) {
@@ -3125,22 +3252,8 @@ var App = (function () {
 
         var scanInput = $("scanInput");
 
-        // Deliberately pointerdown, not focus: the attribute has to be lifted
-        // before the focus lands, or the browser has already decided not to
-        // raise the on-screen keyboard for this tap.
-        scanInput.addEventListener("pointerdown", function () {
-            if (state.scanTyping) return;
-            state.scanTyping = true;
-            applyKeyboardPolicy();
-        });
-
-        // Leaving the field puts it back to hardware-fed, so the next time it is
-        // armed automatically no keyboard comes up
-        scanInput.addEventListener("blur", function () {
-            if (!state.scanTyping) return;
-            state.scanTyping = false;
-            applyKeyboardPolicy();
-        });
+        // The scan box and the search box are scan fields like any other
+        prepareScanFields(document);
 
         $("scanSubmit").onclick = function () {
             scanner.submit();
@@ -3148,10 +3261,10 @@ var App = (function () {
         };
 
         $("kbToggle").onclick = function () {
-            // Tapping the box already lifts the keyboard for one entry; this
+            // Tapping a box already lifts the keyboard for that one entry; this
             // pins the choice so it survives the next scan and the next reload
             var next = suppressSoftKeyboard() ? "always" : "auto";
-            state.scanTyping = false;
+            scanInput.removeAttribute("data-typing");
             saveSettings({ softKeyboard: next });
             scanInput.blur();
             setTimeout(function () { scanInput.focus(); }, 30);

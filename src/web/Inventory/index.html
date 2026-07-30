@@ -82,14 +82,17 @@
                         </div>
                         <div class="scan-row">
                             <!--
-                                inputmode is managed by app.js: on any device that
-                                has an on-screen keyboard it is set to "none" so the
-                                FZ-N1's hardware wedge can type into this field
-                                without raising the Android IME. The keyboard button
-                                lifts it for manual entry; on a desktop, where there
-                                is no soft keyboard, the button is hidden entirely.
+                                data-scan marks a field a barcode can land in. app.js
+                                arms every one of them without a tap and with the
+                                on-screen keyboard suppressed, so a trigger pull always
+                                has somewhere to go and the keyboard never covers the
+                                screen. Tapping an already-armed field lifts the
+                                suppression so it can be typed by hand. On a desktop,
+                                where there is no soft keyboard, none of this applies
+                                and the fields behave completely normally.
                             -->
-                            <input id="scanInput" type="text" inputmode="none" placeholder="Scan barcode"
+                            <input id="scanInput" type="text" data-scan="1" inputmode="none"
+                                placeholder="Scan barcode"
                                 autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
                             <button class="btn square primary" id="scanSubmit" title="Submit code">
                                 <i class="arrow right icon"></i>
@@ -119,7 +122,8 @@
             <div class="view" id="view-search">
                 <div class="search-wrap">
                     <i class="search icon"></i>
-                    <input id="searchInput" type="text" placeholder="Name, barcode, SKU, location..."
+                    <input id="searchInput" type="text" data-scan="1"
+                        placeholder="Name, barcode, SKU, location..."
                         autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
                     <button class="search-clear" id="searchClear" title="Clear">
                         <i class="times circle icon"></i>
