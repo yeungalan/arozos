@@ -356,6 +356,7 @@ var App = (function () {
                 fromLocation: previousLocation
             });
 
+            armInput();
             setScanStatus(null, true);
             renderAlertBadge();
             if (state.view === "search") renderSearch();
@@ -504,8 +505,8 @@ var App = (function () {
                         (data.queueLength === 1 ? " scan waiting" : " scans waiting") +
                         " for the connection"
                 });
-                setScanStatus(null, true);
                 armInput();
+                setScanStatus(null, true);
                 return;
             }
 
@@ -518,14 +519,14 @@ var App = (function () {
                     (data.hostMode === "in" || data.hostMode === "out"
                         ? " " + qtyText(data.hostStep) : "")
             });
-            setScanStatus(null, true);
             armInput();
+            setScanStatus(null, true);
         }, function (message) {
             state.forwarding = false;
             InvScanner.feedbackError();
             showResult({ type: "error", message: message });
-            setScanStatus(null, true);
             armInput();
+            setScanStatus(null, true);
         });
     }
 
@@ -980,8 +981,8 @@ var App = (function () {
             };
             state.countBatch = {};
             renderContext();
-            setScanStatus(null, true);
             armInput();
+            setScanStatus(null, true);
             if (onReady) onReady();
         });
     }
@@ -1013,8 +1014,8 @@ var App = (function () {
             state.counting.lines = data.totalLines;
             renderContext();
             showResult({ type: "tally", line: data.line });
-            setScanStatus(null, true);
             armInput();
+            setScanStatus(null, true);
         }, function (data) {
             state.busy = false;
 
@@ -1101,9 +1102,9 @@ var App = (function () {
             state.counting = null;
             state.countBatch = {};
             renderContext();
+            armInput();
             setScanStatus(null, true);
             toast("Count discarded - no stock was changed", "");
-            armInput();
         });
     }
 
@@ -1153,8 +1154,8 @@ var App = (function () {
             buttons[i].className = "mode-btn" + (isActive ? " active" : "");
         }
         renderContext();
-        setScanStatus(null, true);
         armInput();
+        setScanStatus(null, true);
     }
 
     var STEP_CHOICES = [1, 2, 5, 10, 25];
@@ -1239,6 +1240,18 @@ var App = (function () {
     function setScanStatus(message, listening) {
         var box = $("scanBox");
         var text = $("scanStatusText");
+        /*
+            Told from actual focus rather than assumed. A box that says "Ready"
+            while the wedge has nowhere to type is the single most confusing state
+            this app can be in, so when it is not armed it says what to do about
+            it instead.
+        */
+        if ((message === null || message === undefined) && state.loaded && !scanBoxArmed()) {
+            text.textContent = "Tap the screen once to arm the scanner";
+            box.className = "scan-box unarmed";
+            return;
+        }
+
         if ((message === null || message === undefined) && !state.loaded) {
             text.textContent = "Loading inventory...";
             box.className = "scan-box";
@@ -1421,6 +1434,11 @@ var App = (function () {
         window focus and tap, plus a watchdog: a handheld that has quietly lost
         focus drops the next scan, which is the worst failure mode this app has.
     */
+    function scanBoxArmed() {
+        var input = $("scanInput");
+        return !!input && document.activeElement === input;
+    }
+
     function armInput() {
         var target = null;
 
@@ -1468,11 +1486,39 @@ var App = (function () {
             // list is normal desktop work - leave the operator alone until done
             if (hasTextSelection()) return;
 
-            var active = document.activeElement;
-            // Never yank focus off a control the operator is actually using
-            if (active && active !== document.body && active !== document.documentElement) return;
-            armInput();
+            if (!focusHeldMeaningfully(document.activeElement)) {
+                claimWindowFocus();
+                armInput();
+            }
+            // The box must never claim to be ready when it is not armed
+            if (state.view === "scan" && !state.forwarding && !state.busy) {
+                setScanStatus(null, true);
+            }
         }, 700);
+    }
+
+    /*
+        Whether something is holding focus that the watchdog must not disturb.
+
+        A text field being filled in always counts. On a handheld, focus parked on
+        a button or some other element does NOT - a scanner has to get its field
+        back, and previously any such element blocked re-arming for good, which is
+        exactly how a page ends up needing a tap before it will scan. On a desktop
+        the stricter rule stays, so tabbing between controls still works.
+    */
+    function focusHeldMeaningfully(active) {
+        if (!active) return false;
+        if (active === document.body || active === document.documentElement) return false;
+
+        var tag = (active.tagName || "").toLowerCase();
+        if (tag === "textarea" || tag === "select") return true;
+        if (tag === "input") {
+            var type = (active.getAttribute("type") || "text").toLowerCase();
+            if (type !== "button" && type !== "checkbox" && type !== "radio" && type !== "submit") {
+                return true;
+            }
+        }
+        return !InvScanner.deviceHasSoftKeyboard();
     }
 
     function hasTextSelection() {
@@ -3426,10 +3472,10 @@ var App = (function () {
 
             applySettings();
             renderContext();
-            setScanStatus(null, true);
             refreshAllViews();
             updateSubtitle();
             armInput();
+            setScanStatus(null, true);
             flushPendingScans();
 
             if (showToast) toast("Reloaded " + state.items.length + " items", "ok");
@@ -3467,16 +3513,16 @@ var App = (function () {
             if (stepNode) {
                 state.step = parseFloat(stepNode.getAttribute("data-step"));
                 renderContext();
-                setScanStatus(null, true);
                 armInput();
+                setScanStatus(null, true);
                 return;
             }
             var methodNode = closestClass(event.target, "count-method");
             if (methodNode) {
                 state.countMethod = methodNode.getAttribute("data-method");
                 renderContext();
-                setScanStatus(null, true);
                 armInput();
+                setScanStatus(null, true);
                 return;
             }
             if (closestClass(event.target, "count-start") ||
@@ -3504,8 +3550,8 @@ var App = (function () {
                 }
                 state.step = value;
                 renderContext();
-                setScanStatus(null, true);
                 armInput();
+                setScanStatus(null, true);
             }
         });
 
@@ -3765,11 +3811,11 @@ var App = (function () {
         });
 
         renderContext();
-        setScanStatus(null, true);
         applyKeyboardPolicy();
         startFocusWatchdog();
         load(false);
         armInput();
+        setScanStatus(null, true);
 
         // start() runs at DOMContentLoaded; stylesheets, fonts and - in a float
         // window - the parent's own focus handling can still land after it
@@ -3782,6 +3828,13 @@ var App = (function () {
         // which breaks a select the moment its dropdown tries to open.
         document.addEventListener("pointerdown", function () {
             claimWindowFocus();
+        }, true);
+
+        // Chrome on older Android delivers touchstart ahead of pointerdown, and
+        // the first touch is the gesture that lets this frame take window focus
+        document.addEventListener("touchstart", function () {
+            claimWindowFocus();
+            setTimeout(armInput, 0);
         }, true);
     }
 

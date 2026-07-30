@@ -1864,3 +1864,13 @@ input.remote-filled {
 .remote-big.held .remote-big-label {
     color: var(--warn);
 }
+
+/* Not armed: the box says what to do rather than claiming to be ready */
+.scan-box.unarmed {
+    border-color: var(--warn);
+    border-style: dashed;
+}
+
+.scan-box.unarmed .scan-dot {
+    background: var(--warn);
+}
