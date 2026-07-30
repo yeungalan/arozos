@@ -23,7 +23,6 @@ var InvPairing = (function () {
     // an idle host makes ~5 requests a minute, short enough that a proxy or a
     // sleeping laptop never leaves the connection in limbo.
     var POLL_HOLD_MS = 12000;
-    var POLL_RETRY_MS = 3000;
 
     // Floor between empty polls. The server normally holds the request for
     // POLL_HOLD_MS, but a reverse proxy that buffers or shortens the response
@@ -34,6 +33,26 @@ var InvPairing = (function () {
     // refreshes the host's mode, so the operator can see what the next trigger
     // pull will do before pulling it rather than after.
     var PING_EVERY_MS = 6000;
+
+    /*
+        Reconnection.
+
+        A handheld walks out of Wi-Fi range, a desktop gets reloaded, a switch
+        reboots. None of that should cost the operator their pairing or, worse, a
+        scan. So: retry with a widening gap rather than a fixed one, re-establish
+        the session automatically instead of dropping to the pairing screen, and
+        hold scans taken while offline until they can be delivered.
+
+        A transport failure is retried indefinitely - the server being
+        unreachable is temporary and the pairing is still valid. A session the
+        server actively says is gone is retried only for GRACE_MS, which is long
+        enough to cover a desktop reload but short enough that a deliberate
+        "stop pairing" tells the handheld reasonably soon.
+    */
+    var RECONNECT_MIN_MS = 1000;
+    var RECONNECT_MAX_MS = 15000;
+    var GRACE_MS = 90000;
+    var OUTBOX_MAX = 200;
 
     var state = {
         role: "none",        // "none" | "host" | "remote"
@@ -47,11 +66,16 @@ var InvPairing = (function () {
         after: 0,            // newest scan timestamp already delivered
         polling: false,
         stopped: true,
+        online: false,          // last exchange with the server succeeded
+        attempt: 0,             // consecutive reconnection attempts
+        offlineSince: 0,        // when contact was lost, 0 when connected
         lastError: ""
     };
 
     var seenScanIds = {};    // guards the inclusive-timestamp window
     var pingTimer = null;
+    var reconnectTimer = null;
+    var outbox = [];         // scans taken while offline, oldest first
     var handlers = {};       // onScan / onDevices / onStatus / onError
     var apiCall = null;      // injected: function(script, payload, done, fail)
 
@@ -69,7 +93,9 @@ var InvPairing = (function () {
             devices: state.devices,
             hostMode: state.hostMode,
             hostStep: state.hostStep,
-            online: state.polling,
+            online: state.online,
+            reconnecting: !state.online && state.role !== "none" && !state.stopped,
+            queued: outbox.length,
             lastError: state.lastError
         };
     }
@@ -91,7 +117,10 @@ var InvPairing = (function () {
                 sessionId: state.sessionId,
                 deviceId: state.deviceId,
                 deviceName: state.deviceName,
-                code: state.code
+                code: state.code,
+                // Held scans survive a reload of the handheld too, so closing
+                // the app by accident mid-outage does not lose them
+                outbox: outbox
             }));
         } catch (e) {
             // Private mode or a storage quota - pairing just will not resume
@@ -130,19 +159,196 @@ var InvPairing = (function () {
             var changed = (state.hostMode !== data.hostMode) || (state.hostStep !== data.hostStep);
             state.hostMode = data.hostMode || state.hostMode;
             state.hostStep = data.hostStep || state.hostStep;
-            state.lastError = "";
+            goOnline();
             if (changed) announce();
         }, function (data) {
-            if (data && data.expired) {
-                state.lastError = data.error || "The desktop ended the session";
-                emit("onError", state.lastError);
-                reset();
+            if (endedByHost(data)) {
+                giveUp("The desktop ended the session");
+                return;
             }
+            // The heartbeat is the first thing to notice an outage
+            goOffline(data && data.expired
+                ? "Reconnecting to the desktop..."
+                : "Reconnecting to the server...", !!(data && data.network));
         });
+    }
+
+    /* ── Reconnection ───────────────────────────────────────────────────── */
+
+    function backoffDelay() {
+        var steps = state.attempt > 4 ? 4 : state.attempt;
+        var delay = RECONNECT_MIN_MS * Math.pow(2, steps);
+        return delay > RECONNECT_MAX_MS ? RECONNECT_MAX_MS : delay;
+    }
+
+    /*
+        The desktop saying it ended the session is final - there is nothing to
+        reconnect to, and continuing to hold scans would let an operator fill a
+        queue that can never be delivered.
+    */
+    function endedByHost(data) {
+        return !!(data && data.ended);
+    }
+
+    function giveUp(message) {
+        emit("onError", message);
+        reset();
+    }
+
+    function goOffline(reason, isNetwork) {
+        if (state.online || state.offlineSince === 0) {
+            state.offlineSince = new Date().getTime();
+        }
+        state.online = false;
+        state.polling = false;
+        state.lastError = reason || "Reconnecting...";
+
+        // A session the server says is gone is only worth chasing for a while;
+        // an unreachable server is worth chasing indefinitely
+        if (!isNetwork && (new Date().getTime() - state.offlineSince) > GRACE_MS) {
+            emit("onError", "The desktop ended the session - pair again");
+            reset();
+            return;
+        }
+
+        announce();
+        scheduleReconnect();
+    }
+
+    function goOnline() {
+        var wasOffline = !state.online;
+        state.online = true;
+        state.attempt = 0;
+        state.offlineSince = 0;
+        state.lastError = "";
+
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+        announce();
+
+        if (wasOffline) {
+            emit("onReconnect", status());
+            flushOutbox();
+        }
+    }
+
+    function scheduleReconnect() {
+        if (reconnectTimer || state.stopped || state.role === "none") return;
+
+        var delay = backoffDelay();
+        state.attempt++;
+        reconnectTimer = setTimeout(function () {
+            reconnectTimer = null;
+            if (state.stopped) return;
+            if (state.role === "host") reconnectHost();
+            else if (state.role === "remote") reconnectRemote();
+        }, delay);
+    }
+
+    /*
+        The host re-establishes by asking for its session again. pairHost reuses
+        the one already on disk, so a reload or an outage keeps the same code and
+        any paired handheld never notices.
+    */
+    function reconnectHost() {
+        apiCall("pairHost.agi", { reset: "false" }, function (data) {
+            if (state.role !== "host" || state.stopped) return;
+
+            var sameSession = (data.sessionId === state.sessionId);
+            state.sessionId = data.sessionId;
+            state.code = data.code;
+            state.devices = data.devices || [];
+            if (!sameSession) {
+                // A brand new session: nothing from the old one is pending
+                state.after = data.serverTime || new Date().getTime();
+                seenScanIds = {};
+            }
+            remember();
+            goOnline();
+            pollOnce();
+        }, function (data) {
+            if (state.role !== "host" || state.stopped) return;
+            goOffline("Reconnecting to the server...", !!(data && data.network));
+        });
+    }
+
+    /*
+        The handheld re-joins with the code it still remembers, reusing its own
+        device id so the desktop sees the same handheld coming back rather than a
+        second one appearing.
+    */
+    function reconnectRemote() {
+        apiCall("pairJoin.agi", {
+            code: state.code,
+            deviceName: state.deviceName,
+            deviceId: state.deviceId
+        }, function (data) {
+            if (state.role !== "remote" || state.stopped) return;
+
+            state.sessionId = data.sessionId;
+            state.deviceId = data.deviceId;
+            state.hostMode = data.hostMode || state.hostMode;
+            state.hostStep = data.hostStep || state.hostStep;
+            remember();
+            goOnline();
+            startPing();
+        }, function (data) {
+            if (state.role !== "remote" || state.stopped) return;
+            if (endedByHost(data)) {
+                giveUp("The desktop ended the session - pair again");
+                return;
+            }
+            goOffline("Reconnecting to the desktop...", !!(data && data.network));
+        });
+    }
+
+    /* Sends everything held during the outage, in the order it was scanned */
+    function flushOutbox() {
+        if (state.role !== "remote" || !outbox.length || !state.online) return;
+
+        var next = outbox[0];
+        apiCall("pairPush.agi", {
+            sessionId: state.sessionId,
+            deviceId: state.deviceId,
+            barcode: next.code
+        }, function (data) {
+            outbox.shift();
+            remember();
+            state.hostMode = data.hostMode || state.hostMode;
+            state.hostStep = data.hostStep || state.hostStep;
+            announce();
+            emit("onFlush", { code: next.code, remaining: outbox.length });
+            flushOutbox();
+        }, function (data) {
+            if (endedByHost(data)) {
+                giveUp("The desktop ended the session - the held scans were not sent");
+                return;
+            }
+            // Back offline mid-flush: the rest stay held
+            goOffline("Reconnecting to the desktop...", !!(data && data.network));
+        });
+    }
+
+    function queueScan(code) {
+        if (outbox.length >= OUTBOX_MAX) return false;
+        outbox.push({ code: code, at: new Date().getTime() });
+        remember();
+        announce();
+        return true;
     }
 
     function reset() {
         stopPing();
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+        outbox = [];
+        state.online = false;
+        state.attempt = 0;
+        state.offlineSince = 0;
         state.role = "none";
         state.sessionId = "";
         state.deviceId = "";
@@ -181,11 +387,13 @@ var InvPairing = (function () {
             seenScanIds = {};
 
             remember();
-            announce();
+            goOnline();
             pollOnce();
         }, function (data) {
             state.lastError = (data && data.error) || "Could not start pairing";
             emit("onError", state.lastError);
+            // Starting is also worth retrying: the server may just be booting
+            if (state.role === "host") goOffline(state.lastError, !!(data && data.network));
         });
     }
 
@@ -206,7 +414,7 @@ var InvPairing = (function () {
             if (state.role !== "host" || state.stopped) return;
 
             state.devices = data.devices || [];
-            state.lastError = "";
+            goOnline();
             emit("onDevices", state.devices);
 
             var scans = data.scans || [];
@@ -234,20 +442,13 @@ var InvPairing = (function () {
             }
         }, function (data) {
             if (state.role !== "host" || state.stopped) return;
-            state.polling = false;
 
-            if (data && data.expired) {
-                state.lastError = data.error || "Pairing session ended";
-                emit("onError", state.lastError);
-                reset();
-                return;
-            }
-
-            // A dropped connection is normal on a handheld network; back off
-            // briefly and pick the poll back up rather than ending the pairing
-            state.lastError = (data && data.error) || "Connection lost - retrying";
-            announce();
-            setTimeout(pollOnce, POLL_RETRY_MS);
+            // Both an unreachable server and a session the server has forgotten
+            // are recoverable: reconnectHost re-establishes it, keeping the same
+            // code so any paired handheld never notices
+            goOffline(data && data.expired
+                ? "Restoring the pairing session..."
+                : "Reconnecting to the server...", !!(data && data.network));
         });
     }
 
@@ -283,11 +484,10 @@ var InvPairing = (function () {
             state.code = ("" + code).toUpperCase();
             state.hostMode = data.hostMode || "";
             state.hostStep = data.hostStep || 1;
-            state.lastError = "";
             state.stopped = false;
 
             remember();
-            announce();
+            goOnline();
             startPing();
             if (onDone) onDone(status());
         }, function (data) {
@@ -306,6 +506,21 @@ var InvPairing = (function () {
             if (onFail) onFail("Not paired to a desktop");
             return;
         }
+
+        /*
+            Already offline: hold it rather than failing. The operator has
+            scanned a real barcode and should be able to keep working through a
+            dead spot - the queue goes out the moment contact is back.
+        */
+        if (!state.online) {
+            if (queueScan(barcode)) {
+                if (onDone) onDone({ queued: true, queueLength: outbox.length });
+            } else if (onFail) {
+                onFail("Too many scans waiting - reconnect before scanning more");
+            }
+            return;
+        }
+
         apiCall("pairPush.agi", {
             sessionId: state.sessionId,
             deviceId: state.deviceId,
@@ -313,18 +528,27 @@ var InvPairing = (function () {
         }, function (data) {
             state.hostMode = data.hostMode || state.hostMode;
             state.hostStep = data.hostStep || state.hostStep;
-            state.lastError = "";
-            announce();
+            goOnline();
             if (onDone) onDone(data);
         }, function (data) {
-            state.lastError = (data && data.error) || "Could not reach the desktop";
-            if (data && data.expired) {
-                emit("onError", state.lastError);
-                reset();
-            } else {
-                announce();
+            if (endedByHost(data)) {
+                giveUp("The desktop ended the session - pair again");
+                if (onFail) onFail("The desktop ended the session");
+                return;
             }
-            if (onFail) onFail(state.lastError);
+
+            var held = queueScan(barcode);
+            goOffline(data && data.expired
+                ? "Reconnecting to the desktop..."
+                : "Reconnecting to the server...", !!(data && data.network));
+
+            // Held, so as far as the operator is concerned the pull worked - it
+            // just has not landed yet
+            if (held) {
+                if (onDone) onDone({ queued: true, queueLength: outbox.length });
+            } else if (onFail) {
+                onFail("Too many scans waiting - reconnect before scanning more");
+            }
         });
     }
 
@@ -352,6 +576,8 @@ var InvPairing = (function () {
             options.onScan     function(scan)     - host received a barcode
             options.onDevices  function(devices)  - host device list changed
             options.onStatus   function(status)   - anything changed
+            options.onReconnect function(status)  - contact restored after an outage
+            options.onFlush    function({code, remaining}) - a held scan went out
             options.onError    function(message)
         Resumes a stored pairing when there is one.
     */
@@ -361,6 +587,8 @@ var InvPairing = (function () {
         handlers.onDevices = options.onDevices;
         handlers.onStatus = options.onStatus;
         handlers.onError = options.onError;
+        handlers.onReconnect = options.onReconnect;
+        handlers.onFlush = options.onFlush;
         handlers.getContext = options.getContext;
 
         // Coming back to the app should show the desktop's current mode at once
@@ -371,14 +599,22 @@ var InvPairing = (function () {
         var saved = recall();
         if (!saved) return;
 
+        outbox = (saved.outbox && saved.outbox.length) ? saved.outbox : [];
+
         if (saved.role === "host") {
             startHost({ reset: false });
         } else if (saved.role === "remote" && saved.code) {
+            state.role = "remote";
+            state.stopped = false;
+            state.sessionId = saved.sessionId || "";
             state.deviceId = saved.deviceId || "";
-            join(saved.code, saved.deviceName || "Handheld", null, function () {
-                // The desktop is gone or the code was rotated - start clean
-                reset();
-            });
+            state.deviceName = saved.deviceName || "Handheld";
+            state.code = saved.code;
+            announce();
+
+            // Straight into the reconnection path, so a handheld that was closed
+            // mid-outage comes back holding its queue instead of losing it
+            reconnectRemote();
         }
     }
 
@@ -389,6 +625,7 @@ var InvPairing = (function () {
         join: join,
         push: push,
         ping: ping,
+        queued: function () { return outbox.length; },
         leave: leave,
         status: status,
         reset: reset,

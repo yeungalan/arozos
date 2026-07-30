@@ -23,7 +23,9 @@ var session = pairLoadSession();
 if (givenCode === "") {
     sendJSONResp({ error: "Enter the code shown on the desktop" });
 } else if (!session) {
-    sendJSONResp({ error: "No desktop is waiting to be paired" });
+    sendJSONResp(pairSessionWasEnded()
+        ? { error: "The desktop ended this session", expired: true, ended: true }
+        : { error: "No desktop is waiting to be paired" });
 } else if (pairNormaliseCode(session.code) !== givenCode) {
     sendJSONResp({ error: "That code does not match the desktop" });
 } else {

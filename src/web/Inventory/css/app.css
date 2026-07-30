@@ -1685,3 +1685,182 @@ input[data-scan]:focus {
 input[data-scan][data-typing="1"]:focus {
     box-shadow: none;
 }
+
+/* ── Cable diagram ──────────────────────────────────────────────────────── */
+.diagram-card {
+    padding: 6px;
+}
+
+.cable-diagram {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 70vh;
+}
+
+.cd-node,
+.cd-link,
+.cd-label {
+    cursor: pointer;
+}
+
+.cd-node rect,
+.cd-link,
+.cd-label rect {
+    transition: opacity 0.15s ease;
+}
+
+.cd-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin-bottom: 6px;
+}
+
+.cd-key {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.cd-swatch {
+    width: 14px;
+    height: 4px;
+    border-radius: 2px;
+}
+
+/* A field that just received a barcode from a paired handheld */
+input.remote-filled {
+    border-color: var(--ok);
+    box-shadow: inset 0 0 0 2px var(--ok);
+}
+
+/* ── Dedicated handheld scanner page ────────────────────────────────────── */
+.remote-app .views {
+    padding-bottom: 20px;
+}
+
+.remote-target {
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--move);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.remote-target .k {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.remote-target .v {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+/*
+    The one thing an operator looks at between trigger pulls, so it is sized to
+    be readable at arm's length rather than to fit tidily.
+*/
+.remote-big {
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 16px 14px;
+    margin-bottom: 12px;
+    text-align: center;
+    min-height: 118px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+}
+
+.remote-big.ok {
+    border-color: var(--ok);
+    background: rgba(36, 181, 81, 0.14);
+}
+
+.remote-big.err {
+    border-color: var(--danger);
+    background: rgba(240, 69, 63, 0.14);
+}
+
+.remote-big.sending {
+    border-color: var(--accent);
+}
+
+.remote-big-label {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.remote-big.ok .remote-big-label {
+    color: var(--ok);
+}
+
+.remote-big.err .remote-big-label {
+    color: var(--danger);
+}
+
+.remote-big-code {
+    font-family: "SFMono-Regular", Consolas, "Roboto Mono", monospace;
+    font-size: 26px;
+    font-weight: 700;
+    word-break: break-all;
+    line-height: 1.15;
+}
+
+.remote-big-detail {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+@media (min-width: 900px) {
+    .remote-app {
+        max-width: 560px;
+    }
+
+    .remote-big-code {
+        font-size: 32px;
+    }
+}
+
+/* Connection lost, pairing kept */
+.pair-bar.offline {
+    border-left-color: var(--warn);
+}
+
+.pair-bar.offline > i.icon {
+    color: var(--warn);
+    animation: pulse 1.4s ease-in-out infinite;
+}
+
+.scan-box.offline {
+    border-color: var(--warn);
+}
+
+.scan-box.offline .scan-dot {
+    background: var(--warn);
+}
+
+.remote-target.offline {
+    border-left-color: var(--warn);
+}
+
+.remote-big.held {
+    border-color: var(--warn);
+    background: rgba(237, 160, 26, 0.14);
+}
+
+.remote-big.held .remote-big-label {
+    color: var(--warn);
+}

@@ -35,6 +35,8 @@ var App = (function () {
         countMethod: "keypad",  // how Count mode works: "keypad" | "blind"
         countBatch: {},         // itemId -> batch chosen for it in this count
         runFilter: "all",
+        cableView: "list",      // "list" | "diagram"
+        diagramFocus: "",       // location the diagram is centred on, "" = all
         pairing: null,          // InvPairing status, null until it reports in
         forwarding: false,      // a scan is in flight to the paired desktop
         lastResult: null,
@@ -148,7 +150,7 @@ var App = (function () {
             if (onDone) onDone(data);
         }, function () {
             toast("Cannot reach the server", "err");
-            if (onFail) onFail({ error: "Network error" });
+            if (onFail) onFail({ error: "Network error" , network: true });
         });
     }
 
@@ -491,6 +493,22 @@ var App = (function () {
 
         InvPairing.push(code, function (data) {
             state.forwarding = false;
+
+            if (data.queued) {
+                // Held, not lost: the operator can keep working through a dead spot
+                InvScanner.feedbackWarn();
+                showResult({
+                    type: "sent",
+                    barcode: code,
+                    detail: "Held - " + data.queueLength +
+                        (data.queueLength === 1 ? " scan waiting" : " scans waiting") +
+                        " for the connection"
+                });
+                setScanStatus(null, true);
+                armInput();
+                return;
+            }
+
             InvScanner.feedbackOk();
             var did = MODE_LABELS[data.hostMode] || "handled";
             showResult({
@@ -516,7 +534,50 @@ var App = (function () {
         so the operator can see the value land, then run it through exactly the
         same path a locally scanned barcode takes.
     */
+    /*
+        Desktop side: a paired handheld scanned something.
+
+        It behaves exactly as a wedge plugged into this machine would - the value
+        lands in whatever field is focused. So if the operator is on the Cables
+        tab with a run's label box focused, the scan fills that box; if they are
+        on the Scan view with the scan box armed, it runs the active mode. That
+        is the difference between a remote scanner and a remote button.
+    */
+    /*
+        Remote scans arrive in batches - three at once when a handheld's queue
+        drains after an outage - and each one may start a server round trip that
+        sets state.busy. onScan ignores a scan while busy, so they are queued and
+        applied one at a time; otherwise a flush of five would apply one and
+        silently discard four.
+    */
+    var remoteQueue = [];
+
     function receiveRemoteScan(scan) {
+        remoteQueue.push(scan);
+        drainRemoteQueue();
+    }
+
+    function drainRemoteQueue() {
+        if (!remoteQueue.length) return;
+        if (state.busy || !state.loaded) {
+            setTimeout(drainRemoteQueue, 120);
+            return;
+        }
+
+        applyRemoteScan(remoteQueue.shift());
+        if (remoteQueue.length) setTimeout(drainRemoteQueue, 120);
+    }
+
+    function applyRemoteScan(scan) {
+        toast(scan.deviceName + ": " + scan.code, "");
+
+        var active = document.activeElement;
+        if (isRemoteTypeTarget(active)) {
+            deliverToField(active, scan.code);
+            InvScanner.feedbackOk();
+            return;
+        }
+
         var input = $("scanInput");
         if (input) {
             input.value = scan.code;
@@ -526,9 +587,52 @@ var App = (function () {
                 if (input.value === scan.code) input.value = "";
             }, 600);
         }
-
-        toast(scan.deviceName + ": " + scan.code, "");
         onScan(scan.code, "remote");
+    }
+
+    /*
+        Which focused elements should simply receive the text. The scan box is
+        excluded because it is the workflow's own entry point, not a field being
+        filled in, and a textarea is excluded because a barcode is never prose.
+    */
+    function isRemoteTypeTarget(element) {
+        if (!element || element === $("scanInput")) return false;
+        if ((element.tagName || "").toLowerCase() !== "input") return false;
+
+        var type = (element.getAttribute("type") || "text").toLowerCase();
+        return type === "text" || type === "search" || type === "number" || type === "tel";
+    }
+
+    /*
+        Puts the value in and tells the page about it. The synthetic events matter:
+        the search box filters on input, the item editor looks a barcode up on
+        change, and Enter is what a wedge would have sent - so a field that acts
+        on Enter acts here too.
+    */
+    function deliverToField(input, value) {
+        input.value = value;
+
+        var fire = function (name, Ctor, init) {
+            try {
+                input.dispatchEvent(new Ctor(name, init));
+            } catch (e) {
+                // Older engines without the constructors - the value is still set
+            }
+        };
+
+        fire("input", Event, { bubbles: true });
+        fire("change", Event, { bubbles: true });
+        fire("keydown", KeyboardEvent, { bubbles: true, key: "Enter", cancelable: true });
+
+        flashField(input);
+    }
+
+    /* Brief highlight so it is obvious which box just received a remote scan */
+    function flashField(input) {
+        input.className = (input.className ? input.className + " " : "") + "remote-filled";
+        setTimeout(function () {
+            input.className = input.className.replace(/\s*remote-filled/, "");
+        }, 700);
     }
 
     function pairingStatusHtml() {
@@ -536,11 +640,19 @@ var App = (function () {
         if (!pairing || pairing.role === "none") return "";
 
         if (pairing.role === "remote") {
-            return '<div class="pair-bar remote">' +
-                '<i class="mobile alternate icon"></i>' +
-                '<div class="body"><div class="t">Sending scans to the desktop</div>' +
-                '<div class="s">Paired as ' + esc(pairing.deviceName) +
-                (pairing.hostMode ? " &middot; desktop is on " + esc(MODE_LABELS[pairing.hostMode] || pairing.hostMode) : "") +
+            var offline = pairing.reconnecting;
+            return '<div class="pair-bar remote' + (offline ? " offline" : "") + '">' +
+                '<i class="' + (offline ? "sync" : "mobile alternate") + ' icon"></i>' +
+                '<div class="body"><div class="t">' +
+                (offline ? "Reconnecting to the desktop" : "Sending scans to the desktop") + "</div>" +
+                '<div class="s">' +
+                (pairing.queued
+                    ? pairing.queued + (pairing.queued === 1 ? " scan held" : " scans held") +
+                      " - they go out as soon as it is back"
+                    : "Paired as " + esc(pairing.deviceName) +
+                      (pairing.hostMode
+                        ? " &middot; desktop is on " + esc(MODE_LABELS[pairing.hostMode] || pairing.hostMode)
+                        : "")) +
                 "</div></div>" +
                 '<button class="btn small" id="pairLeave">Stop</button></div>';
         }
@@ -549,12 +661,17 @@ var App = (function () {
         for (var i = 0; i < pairing.devices.length; i++) {
             if (pairing.devices[i].online) online++;
         }
-        return '<div class="pair-bar host' + (online ? " live" : "") + '">' +
-            '<i class="wifi icon"></i>' +
+        var lost = pairing.reconnecting;
+        return '<div class="pair-bar host' + (lost ? " offline" : (online ? " live" : "")) + '">' +
+            '<i class="' + (lost ? "sync" : "wifi") + ' icon"></i>' +
             '<div class="body"><div class="t">' +
-            (online ? online + (online === 1 ? " handheld connected" : " handhelds connected")
-                    : "Waiting for a handheld") + "</div>" +
-            '<div class="s">Pairing code ' + esc(pairing.code) + "</div></div>" +
+            (lost
+                ? "Reconnecting to the server"
+                : (online ? online + (online === 1 ? " handheld connected" : " handhelds connected")
+                          : "Waiting for a handheld")) + "</div>" +
+            '<div class="s">' +
+            (lost ? "The pairing is kept - scans resume automatically"
+                  : "Pairing code " + esc(pairing.code)) + "</div></div>" +
             '<button class="btn small" id="pairPanel">Manage</button></div>';
     }
 
@@ -653,8 +770,12 @@ var App = (function () {
 
             html += '<button class="btn primary block" id="pairBeHost" style="margin-bottom:10px;">' +
                 '<i class="desktop icon"></i>Receive scans on this device</button>' +
-                '<button class="btn block" id="pairBeRemote">' +
-                '<i class="mobile alternate icon"></i>Send my scans to a desktop</button>';
+                '<button class="btn block" id="pairBeRemote" style="margin-bottom:10px;">' +
+                '<i class="mobile alternate icon"></i>Send my scans to a desktop</button>' +
+                '<button class="btn block ghost" id="pairOpenRemotePage">' +
+                '<i class="expand icon"></i>Open the dedicated scanner page</button>' +
+                '<div class="hint">A stripped-down screen with nothing but the scan box - ' +
+                "what you want open on the handheld itself.</div>";
         }
 
         openSheet("Remote scanner", html, foot);
@@ -682,6 +803,11 @@ var App = (function () {
         }
         if ($("pairBeRemote")) {
             $("pairBeRemote").onclick = openJoinSheet;
+        }
+        if ($("pairOpenRemotePage")) {
+            $("pairOpenRemotePage").onclick = function () {
+                window.location.href = "remote.html";
+            };
         }
     }
 
@@ -1788,8 +1914,23 @@ var App = (function () {
         var html =
             '<button class="btn primary block" id="runAdd" style="margin-bottom:12px;">' +
             '<i class="plus icon"></i>New cable run</button>' +
-            '<div class="chip-row">' + chips + "</div>" +
-            '<div class="section-title">' + visible.length +
+            '<div class="chip-row" style="margin-bottom:10px;">' +
+            '<button class="chip cable-view' + (state.cableView === "list" ? " active" : "") +
+            '" data-cable-view="list"><i class="list icon"></i>List</button>' +
+            '<button class="chip cable-view' + (state.cableView === "diagram" ? " active" : "") +
+            '" data-cable-view="diagram"><i class="sitemap icon"></i>Diagram</button>' +
+            "</div>" +
+            '<div class="chip-row">' + chips + "</div>";
+
+        if (state.cableView === "diagram") {
+            html += diagramHtml(visible);
+            $("cablesBody").innerHTML = html;
+            bindCablesChrome();
+            bindDiagram(visible);
+            return;
+        }
+
+        html += '<div class="section-title">' + visible.length +
             (visible.length === 1 ? " run" : " runs") + "</div>";
 
         if (!visible.length) {
@@ -1805,15 +1946,7 @@ var App = (function () {
         }
 
         $("cablesBody").innerHTML = html;
-        $("runAdd").onclick = function () { openRunEditor(null); };
-
-        var chipNodes = document.querySelectorAll(".run-chip");
-        for (i = 0; i < chipNodes.length; i++) {
-            chipNodes[i].onclick = function () {
-                state.runFilter = this.getAttribute("data-run-filter");
-                renderCables();
-            };
-        }
+        bindCablesChrome();
 
         if ($("runList")) {
             var rows = $("runList").querySelectorAll(".item-row");
@@ -1825,6 +1958,132 @@ var App = (function () {
                     }
                 };
             }
+        }
+    }
+
+    function bindCablesChrome() {
+        $("runAdd").onclick = function () { openRunEditor(null); };
+
+        var chipNodes = document.querySelectorAll(".run-chip");
+        for (var i = 0; i < chipNodes.length; i++) {
+            chipNodes[i].onclick = function () {
+                state.runFilter = this.getAttribute("data-run-filter");
+                renderCables();
+            };
+        }
+        var viewNodes = document.querySelectorAll(".cable-view");
+        for (var v = 0; v < viewNodes.length; v++) {
+            viewNodes[v].onclick = function () {
+                state.cableView = this.getAttribute("data-cable-view");
+                state.diagramFocus = "";
+                renderCables();
+            };
+        }
+    }
+
+    /*
+        The wiring picture. Locations are nodes, runs are the links between them,
+        and a colour legend explains the states - which is the one thing a list of
+        runs cannot show you.
+    */
+    function diagramHtml(runs) {
+        var drawn = InvCableDiagram.render(runs, { highlight: state.diagramFocus });
+        lastDiagram = drawn;
+
+        if (!drawn.nodeCount) {
+            return '<div class="card"><div class="empty"><i class="sitemap icon"></i>' +
+                (runs.length
+                    ? "These runs have no locations recorded, so there is nothing to draw."
+                    : "No cable runs yet.<br>Record one and it appears here as a link between two locations.") +
+                "</div></div>";
+        }
+
+        var legend = "";
+        var states = [
+            { id: "tested", label: "Tested" },
+            { id: "installed", label: "Installed" },
+            { id: "planned", label: "Planned" },
+            { id: "faulty", label: "Faulty" },
+            { id: "retired", label: "Retired" }
+        ];
+        for (var i = 0; i < states.length; i++) {
+            legend += '<span class="cd-key"><span class="cd-swatch" style="background:' +
+                InvCableDiagram.STATE_COLOUR[states[i].id] + '"></span>' +
+                esc(states[i].label) + "</span>";
+        }
+
+        return '<div class="card diagram-card">' + drawn.svg + "</div>" +
+            '<div class="cd-legend">' + legend + "</div>" +
+            '<div class="hint">' + drawn.nodeCount +
+            (drawn.nodeCount === 1 ? " location" : " locations") + ", " +
+            drawn.linkCount + (drawn.linkCount === 1 ? " link" : " links") +
+            ". Tap a location to follow just its cables, or a link to list the runs on it." +
+            (drawn.dangling
+                ? " " + drawn.dangling + " run" + (drawn.dangling === 1 ? "" : "s") +
+                  " missing an end are not drawn."
+                : "") +
+            (drawn.truncated
+                ? " " + drawn.truncated + " quieter locations were left out to keep it readable."
+                : "") +
+            "</div>" +
+            (state.diagramFocus
+                ? '<button class="btn block small" id="diagramAll" style="margin-top:10px;">' +
+                  '<i class="close icon"></i>Show every location</button>'
+                : "");
+    }
+
+    // The most recent render, so a tapped link can be resolved to its runs
+    var lastDiagram = null;
+
+    function bindDiagram(runs) {
+        var i;
+        var nodes = document.querySelectorAll(".cd-node");
+        for (i = 0; i < nodes.length; i++) {
+            nodes[i].onclick = function () {
+                var name = this.getAttribute("data-location");
+                // Tapping the focused location clears the focus again
+                state.diagramFocus =
+                    InvCableDiagram.locationKey(state.diagramFocus) === InvCableDiagram.locationKey(name)
+                        ? "" : name;
+                renderCables();
+            };
+        }
+
+        var links = document.querySelectorAll(".cd-link, .cd-label");
+        for (i = 0; i < links.length; i++) {
+            links[i].onclick = function () {
+                openLinkRuns(parseInt(this.getAttribute("data-pair"), 10));
+            };
+        }
+
+        if ($("diagramAll")) {
+            $("diagramAll").onclick = function () {
+                state.diagramFocus = "";
+                renderCables();
+            };
+        }
+    }
+
+    /* The runs sitting on one link of the diagram */
+    function openLinkRuns(index) {
+        if (!lastDiagram || isNaN(index)) return;
+        var bundle = lastDiagram.bundles[index];
+        if (!bundle || !bundle.runs.length) return;
+
+        var html = '<div class="card flush" id="linkRuns">' + runListHeadHtml();
+        for (var j = 0; j < bundle.runs.length; j++) html += runRowHtml(bundle.runs[j]);
+        html += "</div>";
+
+        openSheet(bundle.from + " to " + bundle.to, html, "");
+
+        var rows = $("linkRuns").querySelectorAll(".item-row");
+        for (var r = 0; r < rows.length; r++) {
+            rows[r].onclick = function () {
+                var id = this.getAttribute("data-id");
+                for (var k = 0; k < state.runs.length; k++) {
+                    if (state.runs[k].id === id) { openRunEditor(state.runs[k]); return; }
+                }
+            };
         }
     }
 
@@ -3494,6 +3753,11 @@ var App = (function () {
                 state.pairing = pairingStatus;
                 renderPairingBar();
                 if (state.view === "more") renderMore();
+            },
+            onReconnect: function (info) {
+                toast(info.queued
+                    ? "Back online - sending " + info.queued + " held scans"
+                    : "Back online", "ok");
             },
             onError: function (message) {
                 toast(message, "err");

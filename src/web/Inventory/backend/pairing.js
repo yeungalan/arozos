@@ -69,11 +69,36 @@ function pairNormaliseCode(code) {
     return out;
 }
 
+/*
+    Reads the session file as it stands, tombstone included. A desktop that has
+    deliberately stopped pairing leaves a marker behind rather than deleting the
+    file, which is what lets a handheld tell "the desktop finished with me" from
+    "I cannot reach the server right now" - the first is final, the second is
+    worth retrying, and guessing wrong means either dropping a good pairing or
+    letting an operator scan into a void.
+*/
+function pairReadSessionFile() {
+    if (!filelib.fileExists(PAIR_SESSION_PATH)) return null;
+    try {
+        var raw = JSON.parse(filelib.readFile(PAIR_SESSION_PATH));
+        return (raw && typeof raw === "object") ? raw : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+/* True when the desktop ended the pairing on purpose */
+function pairSessionWasEnded() {
+    var raw = pairReadSessionFile();
+    return !!(raw && raw.ended);
+}
+
 function pairLoadSession() {
     if (!filelib.fileExists(PAIR_SESSION_PATH)) return null;
     try {
         var session = JSON.parse(filelib.readFile(PAIR_SESSION_PATH));
         if (!session || typeof session !== "object" || !session.id) return null;
+        if (session.ended) return null;   // tombstone, not a live session
         if (!pairIdIsSafe(session.id)) return null;
         // An abandoned session must not keep accepting handhelds forever
         if (invNow() - (session.hostSeenAt || session.createdAt || 0) > PAIR_SESSION_TTL_MS) {
@@ -130,15 +155,26 @@ function pairSaveQueue(vpath, queue) {
     return filelib.writeFile(vpath, JSON.stringify(queue));
 }
 
-/* Removes a session's queue files, and optionally the session itself */
+/*
+    Removes a session's queue files. When alsoSession is set the session is
+    replaced by a tombstone rather than deleted, so any handheld still holding
+    this pairing is told it is over instead of retrying against a missing file.
+*/
 function pairClear(sessionId, alsoSession) {
     var queues = pairListQueues(sessionId);
     for (var i = 0; i < queues.length; i++) {
         filelib.deleteFile(queues[i].path);
     }
-    if (alsoSession && filelib.fileExists(PAIR_SESSION_PATH)) {
-        filelib.deleteFile(PAIR_SESSION_PATH);
-    }
+    if (!alsoSession) return;
+
+    var previous = pairReadSessionFile();
+    filelib.mkdir(PAIR_DIR);
+    filelib.writeFile(PAIR_SESSION_PATH, JSON.stringify({
+        id: (previous && previous.id) || sessionId,
+        code: (previous && previous.code) || "",
+        ended: true,
+        endedAt: invNow()
+    }));
 }
 
 /* Handheld summary for the host's device list */

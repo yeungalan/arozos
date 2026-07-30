@@ -22,7 +22,13 @@ var session = pairLoadSession();
 if (!pairIdIsSafe(wantedSession) || !pairIdIsSafe(thisDevice)) {
     sendJSONResp({ error: "Bad pairing reference" });
 } else if (!session || session.id !== wantedSession) {
-    sendJSONResp({ error: "The desktop ended this session", expired: true });
+    // ended distinguishes a desktop that stopped on purpose from one that is
+    // merely unreachable, so the handheld knows whether to retry
+    sendJSONResp({
+        error: "The desktop ended this session",
+        expired: true,
+        ended: pairSessionWasEnded()
+    });
 } else {
     var vpath = pairQueuePath(session.id, thisDevice);
 

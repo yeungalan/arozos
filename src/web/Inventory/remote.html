@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Inventory Scanner</title>
+    <link rel="icon" href="img/module_icon.svg">
+    <link rel="stylesheet" href="../script/semantic/components/icon.min.css">
+    <link rel="stylesheet" href="css/app.css">
+    <script src="../script/jquery.min.js"></script>
+    <script src="../script/ao_module.js"></script>
+    <!--
+        The dedicated handheld scanner.
+
+        This page exists so a handheld can be nothing but a scanner: no tabs, no
+        item list, no modes to get lost in. Pair it once with the code shown on
+        the desktop and every trigger pull from then on goes straight there, into
+        whichever field that desktop has focused. The whole screen is given over
+        to the one thing that matters - whether the last pull was sent.
+
+        It shares scanner.js and pairing.js with the full app, so the wedge
+        handling and the transport are the same code, not a second copy.
+    -->
+</head>
+
+<body>
+    <div id="app" class="remote-app">
+
+        <div class="topbar">
+            <div class="title">Scanner<span class="subtitle" id="subtitle">Not paired</span></div>
+            <button class="icon-btn" id="btnFullscreen" title="Full screen">
+                <i class="expand icon" id="fullscreenIcon"></i>
+            </button>
+            <button class="icon-btn" id="btnApp" title="Open the full app">
+                <i class="th large icon"></i>
+            </button>
+        </div>
+
+        <div class="views">
+            <!-- Pairing: shown until this device is joined to a desktop -->
+            <div id="pairPane">
+                <div class="card muted" style="font-size:13px;line-height:1.55;">
+                    <p style="margin-top:0;">On the desktop, open <b>More</b> &rarr;
+                        <b>Remote scanner</b> &rarr; <b>Receive scans on this device</b>,
+                        then key its code in here.</p>
+                    <p style="margin-bottom:0;">Both devices must be signed in as the
+                        same ArozOS user.</p>
+                </div>
+
+                <div class="field">
+                    <label>Pairing code</label>
+                    <input type="text" id="joinCode" class="pair-input" maxlength="9"
+                        autocomplete="off" autocorrect="off" autocapitalize="characters"
+                        spellcheck="false" placeholder="ABC123">
+                </div>
+                <div class="field">
+                    <label>Name this device</label>
+                    <input type="text" id="joinName" maxlength="40" value="Handheld">
+                </div>
+                <button class="btn primary block" id="joinGo">
+                    <i class="linkify icon"></i>Pair with the desktop
+                </button>
+            </div>
+
+            <!-- Scanning: the whole point of the page -->
+            <div id="scanPane" style="display:none;">
+                <div class="remote-target" id="targetCard">
+                    <div class="k">Sending to</div>
+                    <div class="v" id="targetText">the desktop</div>
+                </div>
+
+                <div class="scan-box listening" id="scanBox">
+                    <div class="scan-status">
+                        <span class="scan-dot"></span>
+                        <span id="scanStatusText">Ready - pull the trigger</span>
+                    </div>
+                    <div class="scan-row">
+                        <!-- data-scan: armed with no tap and no keyboard, tap again to type -->
+                        <input id="scanInput" type="text" data-scan="1" inputmode="none"
+                            placeholder="Scan barcode" autocomplete="off" autocorrect="off"
+                            autocapitalize="off" spellcheck="false">
+                        <button class="btn square primary" id="scanSubmit" title="Send">
+                            <i class="arrow right icon"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="remote-big" id="lastCard">
+                    <div class="remote-big-label">No scans sent yet</div>
+                </div>
+
+                <div class="section-title">This session</div>
+                <div class="card flush" id="sentLog">
+                    <div class="empty">Nothing sent yet.</div>
+                </div>
+
+                <button class="btn danger block" id="leaveBtn">
+                    <i class="close icon"></i>Stop and unpair
+                </button>
+            </div>
+        </div>
+
+        <div id="toast"></div>
+    </div>
+
+    <script src="script/scanner.js"></script>
+    <script src="script/pairing.js"></script>
+    <script src="script/remote.js"></script>
+</body>
+
+</html>
