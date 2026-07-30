@@ -51,19 +51,76 @@ function invNewId(prefix) {
     return prefix + invNow().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
+function invNum(v, fallback) {
+    var n = parseFloat(v);
+    return isNaN(n) ? fallback : n;
+}
+
+function invStr(v) {
+    return (v === undefined || v === null) ? "" : ("" + v).trim();
+}
+
+/*
+    One batch (lot) of a product: its own lot number, expiry and quantity.
+    Nothing else about the product is duplicated - a batch belongs to exactly
+    one item, which is why search can show the item once with all its batches.
+*/
+function invNormaliseBatch(batch) {
+    if (!batch || typeof batch !== "object") return null;
+    return {
+        id: invStr(batch.id) || invNewId("bt_"),
+        batch: invStr(batch.batch),            // lot / batch number as printed
+        expiryDate: invStr(batch.expiryDate),  // ISO yyyy-mm-dd, "" when N/A
+        qty: invNum(batch.qty, 0),
+        receivedAt: invNum(batch.receivedAt, invNow()),
+        note: invStr(batch.note)
+    };
+}
+
+/*
+    Rolls batch quantities and expiries up onto the item.
+
+    Everything else in the app - search, alerts, the CSV export, the item rows -
+    reads item.qty and item.expiryDate. Deriving those from the batches keeps all
+    of it working unchanged, with the earliest expiry surfacing as the item's,
+    which is the one that matters for a shelf-life warning.
+*/
+function invDeriveFromBatches(item) {
+    if (!item || !Array.isArray(item.batches) || !item.batches.length) return item;
+
+    var total = 0;
+    var earliest = "";
+    for (var i = 0; i < item.batches.length; i++) {
+        total += item.batches[i].qty;
+        var expiry = item.batches[i].expiryDate;
+        if (expiry === "") continue;
+        if (earliest === "" || expiry < earliest) earliest = expiry;
+    }
+    item.qty = total;
+    item.expiryDate = earliest;
+    return item;
+}
+
 function invNormaliseItem(item) {
     if (!item || typeof item !== "object") return null;
 
-    var num = function (v, fallback) {
-        var n = parseFloat(v);
-        return isNaN(n) ? fallback : n;
-    };
-    var str = function (v) {
-        return (v === undefined || v === null) ? "" : ("" + v).trim();
-    };
+    var num = invNum;
+    var str = invStr;
 
-    return {
+    var batches = [];
+    if (Array.isArray(item.batches)) {
+        for (var i = 0; i < item.batches.length; i++) {
+            var batch = invNormaliseBatch(item.batches[i]);
+            if (batch) batches.push(batch);
+        }
+    }
+
+    var kind = str(item.kind).toLowerCase();
+    if (kind !== "cable") kind = "item";
+
+    var normalised = {
         id: str(item.id),
+        kind: kind,                            // "item" | "cable"
         barcode: str(item.barcode),
         name: str(item.name),
         sku: str(item.sku),
@@ -78,9 +135,51 @@ function invNormaliseItem(item) {
         supplier: str(item.supplier),
         serial: str(item.serial),
         notes: str(item.notes),
+
+        // Lots, when this product is batch tracked. Empty means it is not, and
+        // the item's own qty and expiryDate are used directly.
+        batches: batches,
+
+        // Cable stock: the details that decide whether a given cable will do
+        cableType: str(item.cableType),         // Cat6a, HDMI 2.1, IEC C13...
+        cableLength: num(item.cableLength, 0),  // metres, 0 when not applicable
+        connectorA: str(item.connectorA),
+        connectorB: str(item.connectorB),
+
         createdAt: num(item.createdAt, invNow()),
         updatedAt: num(item.updatedAt, invNow())
     };
+
+    return invDeriveFromBatches(normalised);
+}
+
+/* Index of a batch within an item, or -1 */
+function invIndexOfBatch(item, batchId) {
+    if (!item || !Array.isArray(item.batches)) return -1;
+    for (var i = 0; i < item.batches.length; i++) {
+        if (item.batches[i].id === batchId) return i;
+    }
+    return -1;
+}
+
+/* True when stock operations on this item have to name a batch */
+function invIsBatchTracked(item) {
+    return !!item && Array.isArray(item.batches) && item.batches.length > 0;
+}
+
+/*
+    Batches ordered by expiry, earliest first, with undated lots last. Used to
+    present the batch picker in the order an operator would normally pick.
+*/
+function invBatchesByExpiry(item) {
+    var ordered = item.batches.slice();
+    ordered.sort(function (a, b) {
+        if (a.expiryDate === b.expiryDate) return a.receivedAt - b.receivedAt;
+        if (a.expiryDate === "") return 1;
+        if (b.expiryDate === "") return -1;
+        return a.expiryDate < b.expiryDate ? -1 : 1;
+    });
+    return ordered;
 }
 
 /* Reads the store, repairing/seeding anything missing or corrupt */
@@ -96,6 +195,20 @@ function invLoad() {
     }
     if (!data) data = {};
     if (!Array.isArray(data.items)) data.items = [];
+
+    /*
+        Bring every stored item up to the current shape. Items written before
+        batches, cable fields or the kind flag existed simply do not have them,
+        and any code reading item.batches would fault on the first legacy row.
+        Normalising here means every consumer sees one consistent shape, and the
+        next save quietly persists the migration.
+    */
+    var repaired = [];
+    for (var n = 0; n < data.items.length; n++) {
+        var normalised = invNormaliseItem(data.items[n]);
+        if (normalised && normalised.id !== "") repaired.push(normalised);
+    }
+    data.items = repaired;
     if (!Array.isArray(data.locations)) data.locations = [];
     if (!data.settings || typeof data.settings !== "object") data.settings = {};
 
@@ -154,6 +267,7 @@ function invAddMovement(entry) {
         qtyAfter: (entry.qtyAfter === undefined || entry.qtyAfter === null) ? 0 : parseFloat(entry.qtyAfter),
         fromLocation: entry.fromLocation || "",
         toLocation: entry.toLocation || "",
+        batch: entry.batch || "",        // lot number, when the item is batch tracked
         note: entry.note || "",
         ts: invNow()
     };

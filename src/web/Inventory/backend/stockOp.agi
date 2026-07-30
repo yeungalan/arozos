@@ -10,17 +10,37 @@
         op           (string)  - "in" | "out" | "set" | "move"
         amount       (number)  - delta for in/out, absolute qty for set
         toLocation   (string)  - destination, required for "move"
+        batchId      (string)  - which lot to touch on a batch-tracked item
+        newBatch     (string)  - JSON {batch, expiryDate} to receive a new lot ("in")
         note         (string)  - optional free text stored on the journal entry
 
-    Returns { ok, item, movement, locations, warning } or { error, unknownBarcode }.
+    Returns { ok, item, movement, locations, warning }, or { error, ... } with
+    unknownBarcode when nothing matches, or needBatch plus the batch list when
+    the item is batch tracked and no lot was named.
 */
 includes("store.js");
 
 var operation = (typeof op !== "undefined") ? ("" + op).trim() : "";
+var wantedBatch = (typeof batchId !== "undefined") ? ("" + batchId).trim() : "";
 var scanned = (typeof barcode !== "undefined") ? ("" + barcode).trim() : "";
 var targetId = (typeof itemId !== "undefined") ? ("" + itemId).trim() : "";
 var opNote = (typeof note !== "undefined") ? ("" + note).trim() : "";
 var destination = (typeof toLocation !== "undefined") ? ("" + toLocation).trim() : "";
+
+/* True when this call is receiving a brand new lot rather than topping one up */
+function batchBeingReceived() {
+    if (typeof newBatch === "undefined") return false;
+    return ("" + newBatch).trim() !== "";
+}
+
+function parseNewBatch() {
+    try {
+        var parsed = JSON.parse("" + newBatch);
+        return (parsed && typeof parsed === "object") ? parsed : {};
+    } catch (e) {
+        return {};
+    }
+}
 
 var amountValue = 1;
 if (typeof amount !== "undefined") {
@@ -41,16 +61,52 @@ if (operation !== "in" && operation !== "out" && operation !== "set" && operatio
         sendJSONResp({ error: "No item matches this barcode", unknownBarcode: scanned });
     } else if (operation === "move" && destination === "") {
         sendJSONResp({ error: "Pick a destination location first" });
+    } else if (operation !== "move" && invIsBatchTracked(data.items[index]) &&
+               wantedBatch === "" && !batchBeingReceived()) {
+        /*
+            A quantity change on a batch-tracked product has to say which lot.
+            Guessing - even by earliest expiry - would silently move stock the
+            operator was not looking at, so the front end is asked to choose.
+        */
+        sendJSONResp({
+            error: "This item has several batches - pick one",
+            needBatch: true,
+            item: data.items[index],
+            batches: invBatchesByExpiry(data.items[index])
+        });
+    } else if (operation !== "move" && invIsBatchTracked(data.items[index]) &&
+               wantedBatch !== "" && invIndexOfBatch(data.items[index], wantedBatch) === -1) {
+        sendJSONResp({ error: "That batch is no longer on this item", needBatch: true,
+            item: data.items[index], batches: invBatchesByExpiry(data.items[index]) });
     } else {
         var item = data.items[index];
         var fromLocation = item.location;
-        var before = item.qty;
         var warning = "";
         var delta = 0;
 
+        /*
+            Quantity lives on the batch when there is one, and on the item when
+            there is not. `holder` is whichever of the two this operation moves,
+            so the arithmetic below is written once.
+        */
+        var holder = item;
+        var batchLabel = "";
+        if (operation === "in" && batchBeingReceived()) {
+            var received = invNormaliseBatch(parseNewBatch());
+            received.qty = 0;
+            item.batches.push(received);
+            holder = received;
+            batchLabel = received.batch;
+        } else if (wantedBatch !== "" && invIsBatchTracked(item)) {
+            holder = item.batches[invIndexOfBatch(item, wantedBatch)];
+            batchLabel = holder.batch;
+        }
+
+        var before = holder.qty;
+
         if (operation === "in") {
             delta = Math.abs(amountValue);
-            item.qty = before + delta;
+            holder.qty = before + delta;
         } else if (operation === "out") {
             delta = -Math.abs(amountValue);
             if (before + delta < 0) {
@@ -59,7 +115,7 @@ if (operation !== "in" && operation !== "out" && operation !== "set" && operatio
                 warning = "Stock would have gone negative - clamped to 0";
                 delta = -before;
             }
-            item.qty = before + delta;
+            holder.qty = before + delta;
         } else if (operation === "set") {
             var absolute = amountValue;
             if (absolute < 0) {
@@ -67,7 +123,7 @@ if (operation !== "in" && operation !== "out" && operation !== "set" && operatio
                 absolute = 0;
             }
             delta = absolute - before;
-            item.qty = absolute;
+            holder.qty = absolute;
         } else {
             // move - quantity is untouched, only the location changes
             if (destination.toLowerCase() === fromLocation.toLowerCase()) {
@@ -77,6 +133,8 @@ if (operation !== "in" && operation !== "out" && operation !== "set" && operatio
             invRememberLocation(data, destination);
         }
 
+        // Rolls the batch quantities and earliest expiry back up onto the item
+        invDeriveFromBatches(item);
         item.updatedAt = invNow();
         data.items[index] = item;
         invSave(data);
@@ -90,6 +148,7 @@ if (operation !== "in" && operation !== "out" && operation !== "set" && operatio
             qtyAfter: item.qty,
             fromLocation: fromLocation,
             toLocation: operation === "move" ? destination : item.location,
+            batch: batchLabel,
             note: opNote
         });
 
@@ -98,6 +157,8 @@ if (operation !== "in" && operation !== "out" && operation !== "set" && operatio
             item: item,
             movement: movement,
             locations: data.locations,
+            batchId: holder === item ? "" : holder.id,
+            batchLabel: batchLabel,
             warning: warning
         });
     }

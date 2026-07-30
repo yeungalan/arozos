@@ -1,0 +1,104 @@
+/*
+    Inventory - post a blind count's results to stock
+
+    Sets each counted line to the number counted and journals the correction.
+    Only lines the operator actually counted are touched; anything not scanned
+    during the count is left exactly as it was.
+
+    POST:
+        lineKeys (string) - optional JSON array of "itemId|batchId" keys to post.
+                            Absent means post every line.
+        close    (string) - "true" to end the count afterwards
+
+    Returns { ok, posted, skipped, closed } or { error, noSession }.
+*/
+includes("store.js");
+includes("countsession.js");
+
+var session = countLoad();
+
+if (!session) {
+    sendJSONResp({ error: "No count is open", noSession: true });
+} else {
+    var wanted = null;
+    if (typeof lineKeys !== "undefined" && ("" + lineKeys).trim() !== "") {
+        try {
+            var parsed = JSON.parse("" + lineKeys);
+            if (Array.isArray(parsed)) wanted = parsed;
+        } catch (e) {
+            wanted = null;
+        }
+    }
+
+    var data = invLoad();
+    var posted = 0;
+    var skipped = 0;
+    var remaining = [];
+
+    for (var i = 0; i < session.lines.length; i++) {
+        var line = session.lines[i];
+        var key = countLineKey(line.itemId, line.batchId);
+
+        if (wanted !== null && wanted.indexOf(key) === -1) {
+            remaining.push(line);   // not selected: keep it in the open count
+            continue;
+        }
+
+        var index = invIndexOfId(data, line.itemId);
+        if (index === -1) {
+            skipped++;
+            continue;
+        }
+
+        var item = data.items[index];
+        var holder = item;
+        var batchLabel = "";
+
+        if (line.batchId !== "") {
+            var batchIndex = invIndexOfBatch(item, line.batchId);
+            if (batchIndex === -1) {
+                skipped++;
+                continue;
+            }
+            holder = item.batches[batchIndex];
+            batchLabel = holder.batch;
+        }
+
+        var before = holder.qty;
+        holder.qty = line.counted < 0 ? 0 : line.counted;
+        invDeriveFromBatches(item);
+        item.updatedAt = invNow();
+        data.items[index] = item;
+
+        invAddMovement({
+            itemId: item.id,
+            barcode: item.barcode,
+            name: item.name,
+            type: "set",
+            delta: holder.qty - before,
+            qtyAfter: item.qty,
+            fromLocation: item.location,
+            toLocation: item.location,
+            batch: batchLabel,
+            note: "Blind count: " + session.name
+        });
+        posted++;
+    }
+
+    invSave(data);
+
+    var shouldClose = (typeof close !== "undefined") && ("" + close) === "true";
+    if (shouldClose || remaining.length === 0) {
+        countClear();
+    } else {
+        session.lines = remaining;
+        countSave(session);
+    }
+
+    sendJSONResp({
+        ok: true,
+        posted: posted,
+        skipped: skipped,
+        closed: shouldClose || remaining.length === 0
+    });
+}

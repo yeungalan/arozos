@@ -1,0 +1,25 @@
+/*
+    Inventory - remove an installed cable run
+
+    POST: runId (string)
+    Returns { ok, runId, runs } or { error }.
+*/
+includes("store.js");
+includes("cableruns.js");
+
+var targetId = (typeof runId !== "undefined") ? ("" + runId).trim() : "";
+
+if (targetId === "") {
+    sendJSONResp({ error: "Missing runId" });
+} else {
+    var store = runLoad();
+    var index = runIndexOfId(store, targetId);
+
+    if (index === -1) {
+        sendJSONResp({ error: "Cable run not found" });
+    } else {
+        store.runs.splice(index, 1);
+        runSave(store);
+        sendJSONResp({ ok: true, runId: targetId, runs: store.runs });
+    }
+}

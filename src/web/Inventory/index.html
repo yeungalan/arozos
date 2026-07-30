@@ -24,7 +24,18 @@
           Inventory/backend/saveLocations.agi  replace the location pick list
           Inventory/backend/saveSettings.agi   persist thresholds and scanner options
           Inventory/backend/history.agi        paged movement journal
-          Inventory/backend/exportCsv.agi      CSV export of items or the journal
+          Inventory/backend/exportCsv.agi      CSV export: items, batches, journal, runs
+
+        Batches, blind counts, cables and the local barcode catalogue:
+          Inventory/backend/countStart.agi     open or resume a blind cycle count
+          Inventory/backend/countTally.agi     one scan is one unit
+          Inventory/backend/countReview.agi    the variance report
+          Inventory/backend/countCommit.agi    post the counted numbers to stock
+          Inventory/backend/countCancel.agi    abandon the count
+          Inventory/backend/saveRun.agi        create or update an installed cable run
+          Inventory/backend/deleteRun.agi      remove a cable run
+          Inventory/backend/catalogueLookup.agi  local barcode to name, no network
+          Inventory/backend/catalogueImport.agi  import a UPC / JAN list
 
         Remote scanner pairing (scan on a handheld, act on a desktop):
           Inventory/backend/pairHost.agi       host: create or refresh a session
@@ -41,6 +52,9 @@
         <div class="topbar">
             <div class="title">Inventory<span class="subtitle" id="topSubtitle">Loading...</span></div>
             <button class="icon-btn" id="btnAdd" title="New item"><i class="plus icon"></i></button>
+            <button class="icon-btn" id="btnFullscreen" title="Full screen">
+                <i class="expand icon" id="fullscreenIcon"></i>
+            </button>
             <button class="icon-btn" id="btnTheme" title="Toggle theme"><i class="moon icon" id="themeIcon"></i></button>
         </div>
 
@@ -121,6 +135,11 @@
                 <div id="alertsBody"></div>
             </div>
 
+            <!-- ── Cables: installed runs between endpoints ───────────────── -->
+            <div class="view" id="view-cables">
+                <div id="cablesBody"></div>
+            </div>
+
             <!-- ── More ──────────────────────────────────────────────────── -->
             <div class="view" id="view-more">
                 <div id="moreBody"></div>
@@ -138,6 +157,9 @@
             <button class="nav-btn" data-view="alerts">
                 <i class="bell icon"></i><span>Alerts</span>
                 <span class="nav-badge hidden" id="alertBadge">0</span>
+            </button>
+            <button class="nav-btn" data-view="cables">
+                <i class="plug icon"></i><span>Cables</span>
             </button>
             <button class="nav-btn" data-view="more">
                 <i class="ellipsis horizontal icon"></i><span>More</span>

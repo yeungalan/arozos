@@ -1609,3 +1609,69 @@ mark {
         font-size: 54px;
     }
 }
+
+/* ── Batches, blind counts and cable runs ───────────────────────────────── */
+
+/* Quantity and expiry are derived once an item has batches, so they are locked */
+.field input.derived {
+    background: var(--surface-3);
+    color: var(--muted);
+}
+
+.batch-row {
+    cursor: pointer;
+}
+
+.batch-row:active {
+    background: var(--surface-2);
+}
+
+.batch-row .s.warn {
+    color: var(--warn);
+}
+
+.batch-row .s.danger {
+    color: var(--danger);
+}
+
+.batch-edit {
+    padding: 10px 12px 2px 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.batch-edit:last-child {
+    border-bottom: 0;
+}
+
+.batch-edit .field {
+    margin-bottom: 8px;
+}
+
+.batch-edit .b-remove {
+    width: 100%;
+    min-height: 48px;
+}
+
+/* Only shown when the item is a cable */
+.cable-fields {
+    display: none;
+}
+
+/* The live tally during a blind count - no system quantity anywhere near it */
+.count-live {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(237, 160, 26, 0.14);
+    border-left: 4px solid var(--warn);
+}
+
+.count-live .t {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.count-live .s {
+    font-size: 12px;
+    color: var(--muted);
+}

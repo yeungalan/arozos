@@ -1,0 +1,35 @@
+/*
+    Inventory - look a barcode up in the local catalogue
+
+    No outbound requests: this only consults the catalogue on this server, plus
+    the offline barcode arithmetic (check digit, GS1 issuing prefix).
+
+    POST: barcode (string)
+
+    Returns { found, name, brand, category, unit, source, origin, checkDigitOk,
+              normalised, catalogueSize }.
+*/
+includes("store.js");
+includes("catalogue.js");
+
+var scanned = (typeof barcode !== "undefined") ? ("" + barcode).trim() : "";
+
+if (scanned === "") {
+    sendJSONResp({ error: "No barcode given" });
+} else {
+    var catalogue = catLoad();
+    var hit = catLookup(catalogue, scanned);
+
+    sendJSONResp({
+        found: !!hit,
+        name: hit ? hit.name : "",
+        brand: hit ? hit.brand : "",
+        category: hit ? hit.category : "",
+        unit: hit ? hit.unit : "",
+        source: hit ? hit.source : "",
+        origin: catBarcodeOrigin(scanned),
+        checkDigitOk: catCheckDigitValid(scanned),
+        normalised: catNormaliseBarcode(scanned),
+        catalogueSize: catCount(catalogue)
+    });
+}

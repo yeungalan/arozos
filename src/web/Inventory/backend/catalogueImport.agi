@@ -1,0 +1,117 @@
+/*
+    Inventory - import a UPC/JAN list into the local catalogue
+
+    Takes the list as pasted text or from a file already in the user's storage.
+    CSV (with or without a header) or JSON is accepted:
+
+        CSV   barcode,name[,brand][,category][,unit]
+        JSON  [{"barcode":"...","name":"..."}, ...]
+              or {"<barcode>": "name", ...}
+
+    POST:
+        text  (string) - the list itself
+        vpath (string) - or a file to read it from, e.g. user:/Desktop/upc.csv
+        replace (string) - "true" to discard the existing catalogue first
+
+    Returns { ok, imported, skipped, catalogueSize }.
+*/
+includes("store.js");
+includes("catalogue.js");
+
+var raw = (typeof text !== "undefined") ? ("" + text) : "";
+var fromPath = (typeof vpath !== "undefined") ? ("" + vpath).trim() : "";
+var wipeFirst = (typeof replace !== "undefined") && ("" + replace) === "true";
+
+if (raw === "" && fromPath !== "") {
+    if (!filelib.fileExists(fromPath)) {
+        raw = "";
+    } else {
+        raw = filelib.readFile(fromPath);
+    }
+}
+
+if (invStr(raw) === "") {
+    sendJSONResp({ error: "Nothing to import - paste a list or pick a file" });
+} else {
+    var catalogue = wipeFirst ? { entries: {} } : catLoad();
+    var imported = 0;
+    var skipped = 0;
+
+    var trimmed = invStr(raw);
+    var looksLikeJson = trimmed.charAt(0) === "[" || trimmed.charAt(0) === "{";
+    var parsed = null;
+
+    if (looksLikeJson) {
+        try {
+            parsed = JSON.parse(trimmed);
+        } catch (e) {
+            parsed = null;
+        }
+    }
+
+    if (parsed && Array.isArray(parsed)) {
+        for (var i = 0; i < parsed.length; i++) {
+            var row = parsed[i];
+            if (row && catRemember(catalogue, row.barcode || row.upc || row.jan || row.ean, {
+                name: row.name || row.title || row.product,
+                brand: row.brand,
+                category: row.category,
+                unit: row.unit
+            }, "import")) {
+                imported++;
+            } else {
+                skipped++;
+            }
+        }
+    } else if (parsed && typeof parsed === "object") {
+        // The compact { barcode: name } shape
+        for (var key in parsed) {
+            if (!Object.prototype.hasOwnProperty.call(parsed, key)) continue;
+            if (catRemember(catalogue, key, { name: parsed[key] }, "import")) {
+                imported++;
+            } else {
+                skipped++;
+            }
+        }
+    } else {
+        var lines = trimmed.split("\n");
+        for (var j = 0; j < lines.length; j++) {
+            var line = lines[j];
+            // Strip a trailing CR from a Windows-authored file
+            if (line.charAt(line.length - 1) === "\r") line = line.substring(0, line.length - 1);
+            if (invStr(line) === "") continue;
+
+            var fields = catSplitCsvLine(line);
+            var code = invStr(fields[0]);
+
+            // A header row names its first column rather than carrying a code
+            if (j === 0 && !catIsAllDigits(code) && fields.length > 1) {
+                var lower = code.toLowerCase();
+                if (lower.indexOf("barcode") !== -1 || lower.indexOf("upc") !== -1 ||
+                    lower.indexOf("jan") !== -1 || lower.indexOf("ean") !== -1 ||
+                    lower.indexOf("code") !== -1) {
+                    continue;
+                }
+            }
+
+            if (catRemember(catalogue, code, {
+                name: fields[1],
+                brand: fields[2],
+                category: fields[3],
+                unit: fields[4]
+            }, "import")) {
+                imported++;
+            } else {
+                skipped++;
+            }
+        }
+    }
+
+    catSave(catalogue);
+    sendJSONResp({
+        ok: true,
+        imported: imported,
+        skipped: skipped,
+        catalogueSize: catCount(catalogue)
+    });
+}

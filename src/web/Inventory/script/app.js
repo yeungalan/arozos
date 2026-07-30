@@ -28,6 +28,12 @@ var App = (function () {
         searchResults: [],      // last rendered result set, for keyboard nav
         searchIndex: -1,        // highlighted row on the Find view, -1 = none
         scanTyping: false,      // operator tapped the scan box to type by hand
+        runs: [],               // installed cable runs
+        catalogueSize: 0,
+        counting: null,         // the open blind count, null when none
+        countMethod: "keypad",  // how Count mode works: "keypad" | "blind"
+        countBatch: {},         // itemId -> batch chosen for it in this count
+        runFilter: "all",
         pairing: null,          // InvPairing status, null until it reports in
         forwarding: false,      // a scan is in flight to the paired desktop
         lastResult: null,
@@ -253,18 +259,30 @@ var App = (function () {
             if (found) {
                 InvScanner.feedbackOk();
                 showResult({ type: "lookup", item: found });
-            } else {
-                InvScanner.feedbackError();
-                showResult({ type: "unknown", barcode: code });
+                return;
             }
+
+            // A cable label is a barcode too, so a scan that is not stock may
+            // still be an installed run
+            var run = findRunByCode(code);
+            if (run) {
+                InvScanner.feedbackOk();
+                showResult({ type: "run", run: run });
+                return;
+            }
+
+            reportUnknown(code);
             return;
         }
 
         if (state.mode === "set") {
+            if (state.countMethod === "blind") {
+                tallyScan(code);
+                return;
+            }
             var target = findByBarcode(code);
             if (!target) {
-                InvScanner.feedbackError();
-                showResult({ type: "unknown", barcode: code });
+                reportUnknown(code);
                 return;
             }
             InvScanner.feedbackOk();
@@ -295,9 +313,8 @@ var App = (function () {
             state.busy = false;
 
             if (data.error && data.unknownBarcode) {
-                InvScanner.feedbackError();
-                showResult({ type: "unknown", barcode: data.unknownBarcode });
                 setScanStatus(null, true);
+                reportUnknown(data.unknownBarcode);
                 return;
             }
 
@@ -342,8 +359,24 @@ var App = (function () {
             if (onSuccess) onSuccess(data);
         }, function (data) {
             state.busy = false;
-            InvScanner.feedbackError();
             setScanStatus(null, true);
+
+            if (data && data.unknownBarcode !== undefined && data.unknownBarcode !== "") {
+                reportUnknown(data.unknownBarcode);
+                return;
+            }
+            if (data && data.needBatch && data.item) {
+                InvScanner.feedbackWarn();
+                openBatchPicker(data.item, data.batches, false, function (batchId) {
+                    var retry = {};
+                    for (var key in payload) retry[key] = payload[key];
+                    retry.batchId = batchId;
+                    runStockOp(retry, onSuccess);
+                });
+                return;
+            }
+
+            InvScanner.feedbackError();
             showResult({ type: "error", message: (data && data.error) || "Operation failed" });
         });
     }
@@ -715,6 +748,257 @@ var App = (function () {
         return { mode: state.mode, step: state.step };
     }
 
+    /* ── Unknown barcodes and the local catalogue ───────────────────────── */
+
+    /*
+        An unknown scan is worth more than "not found": the local catalogue may
+        already know the product's name from a previous site or an imported
+        UPC/JAN list, and the code itself says which country issued it and
+        whether its check digit even adds up. All of that is resolved on this
+        server - nothing about the scan leaves the machine.
+    */
+    function reportUnknown(code) {
+        InvScanner.feedbackError();
+        showResult({ type: "unknown", barcode: code });
+
+        api("catalogueLookup.agi", { barcode: code }, function (data) {
+            // Only decorate the card if it is still the one on screen
+            if (!state.lastResult || state.lastResult.type !== "unknown") return;
+            if (state.lastResult.barcode !== code) return;
+            showResult({ type: "unknown", barcode: code, catalogue: data });
+        });
+    }
+
+    /* ── Batches ────────────────────────────────────────────────────────── */
+
+    function batchLabelOf(item, batchId) {
+        if (!item || !batchId) return "";
+        for (var i = 0; i < item.batches.length; i++) {
+            if (item.batches[i].id === batchId) return item.batches[i].batch;
+        }
+        return "";
+    }
+
+    function batchRowHtml(batch, hideQty) {
+        var days = daysUntil(batch.expiryDate);
+        var tone = days === null ? "" :
+            (days < 0 ? " danger" : (days <= state.settings.expiryWarnDays ? " warn" : ""));
+
+        return '<div class="log-row batch-row" data-batch="' + esc(batch.id) + '">' +
+            '<div class="log-icon lookup"><i class="tags icon"></i></div>' +
+            '<div class="body"><div class="t">' + esc(batch.batch || "(no lot number)") + "</div>" +
+            '<div class="s' + tone + '">' +
+            (batch.expiryDate
+                ? "expires " + esc(batch.expiryDate) + " (" + relativeDays(days) + ")"
+                : "no expiry date") +
+            "</div></div>" +
+            (hideQty
+                ? ""
+                : '<div class="qty">' + qtyText(batch.qty) + "</div>") +
+            "</div>";
+    }
+
+    /*
+        Asks which lot an operation applies to.
+
+        hideQty is set during a blind count: showing how many the system thinks
+        are in the lot is exactly the number a blind count must not reveal.
+    */
+    function openBatchPicker(item, batches, hideQty, onPick) {
+        var html = '<div class="card"><div class="result-name">' + esc(item.name) + "</div>" +
+            '<div class="result-sub">' + esc(item.barcode) + " &middot; " +
+            batches.length + " batches</div></div>" +
+            '<div class="section-title">Which batch' + (hideQty ? " are you counting" : "") + "?</div>" +
+            '<div class="card flush" id="batchChoices">';
+
+        for (var i = 0; i < batches.length; i++) {
+            html += batchRowHtml(batches[i], hideQty);
+        }
+        html += "</div>" +
+            '<div class="hint">Listed earliest expiry first.</div>';
+
+        openSheet("Pick a batch", html,
+            '<button class="btn block" id="batchCancel">Cancel</button>');
+
+        var rows = $("batchChoices").querySelectorAll(".batch-row");
+        for (var r = 0; r < rows.length; r++) {
+            rows[r].onclick = function () {
+                var chosen = this.getAttribute("data-batch");
+                closeSheet();
+                onPick(chosen);
+            };
+        }
+        $("batchCancel").onclick = closeSheet;
+    }
+
+    /* ── Blind cycle count ──────────────────────────────────────────────── */
+
+    function startBlindCount(onReady) {
+        var name = "Count " + new Date().toISOString().slice(0, 10);
+        api("countStart.agi", { name: name }, function (data) {
+            state.counting = {
+                id: data.session.id,
+                name: data.session.name,
+                startedAt: data.session.startedAt,
+                lines: data.session.lines.length
+            };
+            state.countBatch = {};
+            renderContext();
+            setScanStatus(null, true);
+            armInput();
+            if (onReady) onReady();
+        });
+    }
+
+    /*
+        One scan, one unit. The reply deliberately carries no book quantity, and
+        neither does anything shown here - the operator sees only their own
+        running tally until they open the review.
+    */
+    function tallyScan(code) {
+        if (!state.counting) {
+            startBlindCount(function () { tallyScan(code); });
+            return;
+        }
+
+        var item = findByBarcode(code);
+        var payload = { barcode: code, step: state.step };
+
+        // The lot is asked for once per item per count, then remembered - asking
+        // again on every one of fifty pulls would make a blind count unusable
+        if (item && state.countBatch[item.id]) {
+            payload.batchId = state.countBatch[item.id];
+        }
+
+        state.busy = true;
+        api("countTally.agi", payload, function (data) {
+            state.busy = false;
+            InvScanner.feedbackOk();
+            state.counting.lines = data.totalLines;
+            renderContext();
+            showResult({ type: "tally", line: data.line });
+            setScanStatus(null, true);
+            armInput();
+        }, function (data) {
+            state.busy = false;
+
+            if (data && data.needBatch && data.item) {
+                InvScanner.feedbackWarn();
+                openBatchPicker(data.item, data.batches, true, function (batchId) {
+                    state.countBatch[data.item.id] = batchId;
+                    tallyScan(code);
+                });
+                return;
+            }
+            if (data && data.unknownBarcode !== undefined && data.unknownBarcode !== "") {
+                reportUnknown(data.unknownBarcode);
+                return;
+            }
+            if (data && data.noSession) {
+                state.counting = null;
+                renderContext();
+            }
+            InvScanner.feedbackError();
+            showResult({ type: "error", message: (data && data.error) || "Could not count that" });
+        });
+    }
+
+    function openCountReview() {
+        openSheet("Count review",
+            '<div class="card flush" id="reviewBody"><div class="empty">Loading...</div></div>', "");
+
+        api("countReview.agi", {}, function (data) {
+            if (!$("reviewBody")) return;
+
+            if (!data.lines.length) {
+                $("reviewBody").innerHTML =
+                    '<div class="empty"><i class="clipboard list icon"></i>Nothing counted yet.</div>';
+                return;
+            }
+
+            var summary = data.summary;
+            var html = '<div class="stat-grid" style="padding:12px;">' +
+                '<div class="stat"><div class="v">' + summary.lines + '</div><div class="k">Lines</div></div>' +
+                '<div class="stat"><div class="v">' + summary.matched + '</div><div class="k">Match</div></div>' +
+                '<div class="stat"><div class="v">' + summary.over + '</div><div class="k">Over</div></div>' +
+                '<div class="stat"><div class="v">' + summary.under + '</div><div class="k">Short</div></div>' +
+                "</div>";
+
+            for (var i = 0; i < data.lines.length; i++) {
+                var line = data.lines[i];
+                var tone = line.variance === 0 ? "ok" : (line.variance > 0 ? "info" : "danger");
+                html += '<div class="log-row">' +
+                    '<div class="log-icon ' + (line.variance === 0 ? "in" : "out") + '">' +
+                    '<i class="' + (line.variance === 0 ? "check" : "exclamation") + ' icon"></i></div>' +
+                    '<div class="body"><div class="t">' + esc(line.name) +
+                    (line.batchLabel ? " &middot; " + esc(line.batchLabel) : "") + "</div>" +
+                    '<div class="s">counted ' + qtyText(line.counted) +
+                    " &middot; system " + qtyText(line.expected) +
+                    (line.location ? " &middot; " + esc(line.location) : "") +
+                    (line.gone ? " &middot; item deleted mid-count" : "") + "</div></div>" +
+                    '<span class="badge ' + tone + '">' +
+                    (line.variance > 0 ? "+" : "") + qtyText(line.variance) + "</span></div>";
+            }
+
+            $("reviewBody").innerHTML = html;
+            $("sheetFoot").style.display = "flex";
+            $("sheetFoot").innerHTML =
+                '<button class="btn" id="reviewKeep">Keep counting</button>' +
+                '<button class="btn primary" id="reviewPost"><i class="check icon"></i>Post ' +
+                summary.lines + " lines</button>";
+
+            $("reviewKeep").onclick = closeSheet;
+            $("reviewPost").onclick = function () {
+                api("countCommit.agi", { close: "true" }, function (posted) {
+                    state.counting = null;
+                    state.countBatch = {};
+                    closeSheet();
+                    toast(posted.posted + " lines posted to stock", "ok");
+                    load(false);
+                });
+            };
+        });
+    }
+
+    function cancelBlindCount() {
+        api("countCancel.agi", {}, function () {
+            state.counting = null;
+            state.countBatch = {};
+            renderContext();
+            setScanStatus(null, true);
+            toast("Count discarded - no stock was changed", "");
+            armInput();
+        });
+    }
+
+    /* ── Cable runs ─────────────────────────────────────────────────────── */
+
+    var RUN_STATES = [
+        { id: "planned", label: "Planned", icon: "clipboard outline" },
+        { id: "installed", label: "Installed", icon: "plug" },
+        { id: "tested", label: "Tested", icon: "check circle" },
+        { id: "faulty", label: "Faulty", icon: "exclamation triangle" },
+        { id: "retired", label: "Retired", icon: "archive" }
+    ];
+
+    function runStateInfo(id) {
+        for (var i = 0; i < RUN_STATES.length; i++) {
+            if (RUN_STATES[i].id === id) return RUN_STATES[i];
+        }
+        return RUN_STATES[0];
+    }
+
+    function findRunByCode(code) {
+        var needle = ("" + code).trim().toLowerCase();
+        if (needle === "") return null;
+        for (var i = 0; i < state.runs.length; i++) {
+            var run = state.runs[i];
+            if (("" + run.barcode).trim().toLowerCase() === needle) return run;
+            if (("" + run.label).trim().toLowerCase() === needle) return run;
+        }
+        return null;
+    }
+
     /* ── Scan view rendering ────────────────────────────────────────────── */
 
     var MODES = [
@@ -766,8 +1050,32 @@ var App = (function () {
             html += '<option value="__new__">+ New location...</option>';
             html += "</select>";
         } else if (state.mode === "set") {
-            html += '<div class="context-label">Stock take</div>' +
-                '<div class="muted" style="font-size:13px;">Scan an item, then key in the quantity you counted on the shelf.</div>';
+            html += '<div class="context-label">Stock take</div><div class="chip-row">' +
+                '<button class="chip count-method' + (state.countMethod === "keypad" ? " active" : "") +
+                '" data-method="keypad"><i class="calculator icon"></i>Keypad</button>' +
+                '<button class="chip count-method' + (state.countMethod === "blind" ? " active" : "") +
+                '" data-method="blind"><i class="barcode icon"></i>Blind tally</button></div>';
+
+            if (state.countMethod === "keypad") {
+                html += '<div class="muted" style="font-size:13px;margin-top:8px;">' +
+                    "Scan an item, then key in the quantity you counted on the shelf.</div>";
+            } else if (state.counting) {
+                html += '<div class="count-live"><div class="t">' + esc(state.counting.name) + "</div>" +
+                    '<div class="s">' + state.counting.lines +
+                    (state.counting.lines === 1 ? " line counted" : " lines counted") +
+                    " &middot; one scan is one " + esc(state.step === 1 ? "unit" : qtyText(state.step) + " units") +
+                    "</div></div>" +
+                    '<div class="btn-row" style="margin-top:8px;">' +
+                    '<button class="btn primary small" id="countReviewBtn"><i class="clipboard check icon"></i>Review</button>' +
+                    '<button class="btn small" id="countCancelBtn"><i class="close icon"></i>Discard</button>' +
+                    "</div>";
+            } else {
+                html += '<div class="muted" style="font-size:13px;margin-top:8px;">' +
+                    "Keep scanning and each pull adds one. You will not see the system quantity " +
+                    "until you review, which is what keeps the count honest.</div>" +
+                    '<button class="btn primary block small" id="countStartBtn" style="margin-top:8px;">' +
+                    '<i class="play icon"></i>Start a blind count</button>';
+            }
         } else {
             html += '<div class="context-label">Look up</div>' +
                 '<div class="muted" style="font-size:13px;">Scan an item to see its price, location, expiry and warranty. Nothing is changed.</div>';
@@ -817,7 +1125,11 @@ var App = (function () {
                 in: "Ready - scan to add " + qtyText(state.step),
                 out: "Ready - scan to remove " + qtyText(state.step),
                 move: state.moveTarget ? ("Ready - scan to move to " + state.moveTarget) : "Pick a destination first",
-                set: "Ready - scan, then key in the counted quantity"
+                set: state.countMethod === "blind"
+                    ? (state.counting
+                        ? "Counting - each scan adds " + qtyText(state.step)
+                        : "Start a blind count to begin")
+                    : "Ready - scan, then key in the counted quantity"
             };
             text.textContent = labels[state.mode] || "Ready";
         } else {
@@ -982,21 +1294,82 @@ var App = (function () {
 
         if (result.type === "unknown") {
             flashScanBox("err");
+
+            var known = result.catalogue && result.catalogue.found;
+            var hints = "";
+            if (result.catalogue) {
+                if (result.catalogue.origin) {
+                    hints += '<span class="badge info"><i class="globe icon"></i>' +
+                        esc(result.catalogue.origin) + "</span>";
+                }
+                if (result.catalogue.checkDigitOk === false) {
+                    // A failed check digit almost always means a misread label,
+                    // not a new product - worth saying before an item is created
+                    hints += '<span class="badge danger"><i class="exclamation triangle icon"></i>' +
+                        "Check digit fails - possible misread</span>";
+                }
+            }
+
             host.innerHTML =
-                '<div class="card result-card op-error">' +
-                '<div class="result-name">Unknown barcode</div>' +
+                '<div class="card result-card ' + (known ? "op-set" : "op-error") + '">' +
+                '<div class="result-name">' +
+                (known ? esc(result.catalogue.name) : "Unknown barcode") + "</div>" +
                 '<div class="result-sub">' + esc(result.barcode) + "</div>" +
+                (known
+                    ? '<div class="badges"><span class="badge ok"><i class="book icon"></i>' +
+                      "Name from your catalogue - not in stock yet</span>" + hints + "</div>"
+                    : (hints ? '<div class="badges">' + hints + "</div>" : "")) +
                 '<div class="btn-row" style="margin-top:12px;">' +
-                '<button class="btn primary" id="createFromScan"><i class="plus icon"></i>Add this item</button>' +
+                '<button class="btn primary" id="createFromScan"><i class="plus icon"></i>' +
+                (known ? "Add with this name" : "Add this item") + "</button>" +
                 '<button class="btn" id="searchFromScan"><i class="search icon"></i>Search</button>' +
                 "</div></div>";
-            $("createFromScan").onclick = function () { openItemEditor(null, result.barcode); };
+            $("createFromScan").onclick = function () {
+                openItemEditor(null, result.barcode, known ? result.catalogue : null);
+            };
             $("searchFromScan").onclick = function () {
                 switchView("search");
                 $("searchInput").value = result.barcode;
                 state.query = result.barcode;
                 renderSearch();
             };
+            return;
+        }
+
+        if (result.type === "tally") {
+            flashScanBox("ok");
+            var line = result.line;
+            host.innerHTML =
+                '<div class="card result-card op-set">' +
+                '<div class="result-head"><div class="body">' +
+                '<div class="result-name">' + esc(line.name) + "</div>" +
+                '<div class="result-sub">' + esc(line.barcode) +
+                (line.batchLabel ? " &middot; batch " + esc(line.batchLabel) : "") + "</div>" +
+                '<div class="badges"><span class="badge info"><i class="eye slash icon"></i>' +
+                "Blind - system quantity hidden until review</span></div>" +
+                '</div><div class="result-qty"><div class="value">' + qtyText(line.counted) + "</div>" +
+                '<div class="unit">counted</div></div></div></div>';
+            return;
+        }
+
+        if (result.type === "run") {
+            flashScanBox("ok");
+            var run = result.run;
+            var info = runStateInfo(run.state);
+            host.innerHTML =
+                '<div class="card result-card op-move">' +
+                '<div class="result-name">' + esc(run.label) + "</div>" +
+                '<div class="result-sub">' + esc(run.cableType || "cable") +
+                (run.length ? " &middot; " + qtyText(run.length) + " m" : "") + "</div>" +
+                '<div class="badges"><span class="badge info"><i class="' + info.icon + ' icon"></i>' +
+                esc(info.label) + "</span></div>" +
+                '<div class="kv-grid">' +
+                kv("From", (run.fromLocation || "-") + (run.fromPort ? " / " + run.fromPort : "")) +
+                kv("To", (run.toLocation || "-") + (run.toPort ? " / " + run.toPort : "")) +
+                "</div>" +
+                '<button class="btn block" id="runOpen" style="margin-top:12px;">' +
+                '<i class="pencil icon"></i>Open this run</button></div>';
+            $("runOpen").onclick = function () { openRunEditor(run); };
             return;
         }
 
@@ -1312,6 +1685,238 @@ var App = (function () {
         return hit ? hit.item : null;
     }
 
+    /* ── Cables view: installed runs ────────────────────────────────────── */
+
+    function renderCables() {
+        var counts = { all: state.runs.length };
+        var i;
+        for (i = 0; i < RUN_STATES.length; i++) counts[RUN_STATES[i].id] = 0;
+        for (i = 0; i < state.runs.length; i++) {
+            if (counts[state.runs[i].state] !== undefined) counts[state.runs[i].state]++;
+        }
+
+        var chips = '<button class="chip run-chip' + (state.runFilter === "all" ? " active" : "") +
+            '" data-run-filter="all">All<span class="count">' + counts.all + "</span></button>";
+        for (i = 0; i < RUN_STATES.length; i++) {
+            if (!counts[RUN_STATES[i].id]) continue;
+            chips += '<button class="chip run-chip' +
+                (state.runFilter === RUN_STATES[i].id ? " active" : "") +
+                '" data-run-filter="' + RUN_STATES[i].id + '">' + esc(RUN_STATES[i].label) +
+                '<span class="count">' + counts[RUN_STATES[i].id] + "</span></button>";
+        }
+
+        var visible = [];
+        for (i = 0; i < state.runs.length; i++) {
+            if (state.runFilter === "all" || state.runs[i].state === state.runFilter) {
+                visible.push(state.runs[i]);
+            }
+        }
+        visible.sort(function (a, b) {
+            return ("" + a.label).toLowerCase() < ("" + b.label).toLowerCase() ? -1 : 1;
+        });
+
+        var html =
+            '<button class="btn primary block" id="runAdd" style="margin-bottom:12px;">' +
+            '<i class="plus icon"></i>New cable run</button>' +
+            '<div class="chip-row">' + chips + "</div>" +
+            '<div class="section-title">' + visible.length +
+            (visible.length === 1 ? " run" : " runs") + "</div>";
+
+        if (!visible.length) {
+            html += '<div class="card"><div class="empty"><i class="plug icon"></i>' +
+                (state.runs.length
+                    ? "No runs in that state."
+                    : "No cable runs recorded yet.<br>A run is one installed cable and what each end plugs into.") +
+                "</div></div>";
+        } else {
+            html += '<div class="card flush" id="runList">' + runListHeadHtml();
+            for (i = 0; i < visible.length; i++) html += runRowHtml(visible[i]);
+            html += "</div>";
+        }
+
+        $("cablesBody").innerHTML = html;
+        $("runAdd").onclick = function () { openRunEditor(null); };
+
+        var chipNodes = document.querySelectorAll(".run-chip");
+        for (i = 0; i < chipNodes.length; i++) {
+            chipNodes[i].onclick = function () {
+                state.runFilter = this.getAttribute("data-run-filter");
+                renderCables();
+            };
+        }
+
+        if ($("runList")) {
+            var rows = $("runList").querySelectorAll(".item-row");
+            for (i = 0; i < rows.length; i++) {
+                rows[i].onclick = function () {
+                    var id = this.getAttribute("data-id");
+                    for (var k = 0; k < state.runs.length; k++) {
+                        if (state.runs[k].id === id) { openRunEditor(state.runs[k]); return; }
+                    }
+                };
+            }
+        }
+    }
+
+    function runListHeadHtml() {
+        return '<div class="list-head">' +
+            '<div class="body">Label</div>' +
+            '<div class="cell col-barcode">Type</div>' +
+            '<div class="cell col-location">From</div>' +
+            '<div class="cell col-price">To</div>' +
+            '<div class="cell col-expiry">State</div>' +
+            '<div class="qty">Length</div>' +
+            "</div>";
+    }
+
+    function runRowHtml(run) {
+        var info = runStateInfo(run.state);
+        var from = (run.fromLocation || "-") + (run.fromPort ? " / " + run.fromPort : "");
+        var to = (run.toLocation || "-") + (run.toPort ? " / " + run.toPort : "");
+        var tone = run.state === "faulty" ? " danger" : (run.state === "tested" ? "" : "");
+
+        return '<div class="item-row" data-id="' + esc(run.id) + '">' +
+            '<div class="body"><div class="name">' + esc(run.label) + "</div>" +
+            '<div class="meta">' + esc(run.cableType || "cable") + " &middot; " +
+            esc(from) + " to " + esc(to) + "</div>" +
+            '<div class="badges"><span class="badge' +
+            (run.state === "faulty" ? " danger" : (run.state === "tested" ? " ok" : "")) +
+            '"><i class="' + info.icon + ' icon"></i>' + esc(info.label) + "</span></div></div>" +
+            '<div class="cell col-barcode">' + esc(run.cableType || "-") + "</div>" +
+            '<div class="cell col-location">' + esc(from) + "</div>" +
+            '<div class="cell col-price" style="text-align:left;">' + esc(to) + "</div>" +
+            '<div class="cell col-expiry' + tone + '">' + esc(info.label) +
+            (run.testedOn ? "<small>" + esc(run.testedOn) + "</small>" : "") + "</div>" +
+            '<div class="qty">' + (run.length ? qtyText(run.length) : "-") +
+            "<small>m</small></div></div>";
+    }
+
+    function openRunEditor(run) {
+        var isNew = !run;
+        var r = run || {
+            id: "", label: "", barcode: "", cableType: "", length: 0,
+            fromLocation: "", fromPort: "", toLocation: "", toPort: "",
+            state: "planned", itemId: "", testedOn: "", notes: ""
+        };
+
+        var stateOptions = "";
+        for (var i = 0; i < RUN_STATES.length; i++) {
+            stateOptions += '<option value="' + RUN_STATES[i].id + '"' +
+                (RUN_STATES[i].id === r.state ? " selected" : "") + ">" +
+                esc(RUN_STATES[i].label) + "</option>";
+        }
+
+        // Cable stock items can be named as the source this run was drawn from
+        var sourceOptions = '<option value="">- not linked -</option>';
+        for (var j = 0; j < state.items.length; j++) {
+            if (state.items[j].kind !== "cable") continue;
+            sourceOptions += '<option value="' + esc(state.items[j].id) + '"' +
+                (state.items[j].id === r.itemId ? " selected" : "") + ">" +
+                esc(state.items[j].name) + "</option>";
+        }
+
+        var html =
+            '<div class="field"><label>Label on the cable</label>' +
+            '<input type="text" id="rLabel" value="' + esc(r.label) + '" placeholder="LAN-0142">' +
+            '<div class="hint">What is printed or written on it. Must be unique.</div></div>' +
+
+            '<div class="field"><label>Barcode</label>' +
+            '<input type="text" id="rBarcode" autocomplete="off" value="' + esc(r.barcode) + '">' +
+            '<div class="hint">Optional. Scan it in Look up to jump straight to this run.</div></div>' +
+
+            '<div class="field-row">' +
+            '<div class="field"><label>Cable type</label>' +
+            '<input type="text" id="rType" value="' + esc(r.cableType) + '" placeholder="Cat6a"></div>' +
+            '<div class="field"><label>Length (m)</label>' +
+            '<input type="number" inputmode="decimal" step="any" min="0" id="rLength" value="' + esc(r.length) + '"></div>' +
+            "</div>" +
+
+            '<div class="section-title">A end</div>' +
+            '<div class="field-row">' +
+            '<div class="field"><label>Location</label>' +
+            '<input type="text" id="rFromLoc" value="' + esc(r.fromLocation) + '" placeholder="Rack A"></div>' +
+            '<div class="field"><label>Port</label>' +
+            '<input type="text" id="rFromPort" value="' + esc(r.fromPort) + '" placeholder="SW1 port 24"></div>' +
+            "</div>" +
+
+            '<div class="section-title">B end</div>' +
+            '<div class="field-row">' +
+            '<div class="field"><label>Location</label>' +
+            '<input type="text" id="rToLoc" value="' + esc(r.toLocation) + '" placeholder="Room 3"></div>' +
+            '<div class="field"><label>Port</label>' +
+            '<input type="text" id="rToPort" value="' + esc(r.toPort) + '" placeholder="Wall plate B"></div>' +
+            "</div>" +
+
+            '<div class="field-row">' +
+            '<div class="field"><label>State</label><select id="rState">' + stateOptions + "</select></div>" +
+            '<div class="field"><label>Tested on</label>' +
+            '<input type="date" id="rTested" value="' + esc(r.testedOn) + '"></div>' +
+            "</div>" +
+
+            '<div class="field"><label>Drawn from stock item</label>' +
+            '<select id="rItem">' + sourceOptions + "</select>" +
+            '<div class="hint">Only items marked as cables appear here.</div></div>' +
+
+            '<div class="field"><label>Notes</label>' +
+            '<textarea id="rNotes">' + esc(r.notes) + "</textarea></div>";
+
+        if (!isNew) {
+            html += '<button class="btn danger block" id="rDelete"><i class="trash icon"></i>Delete this run</button>';
+        }
+
+        openSheet(isNew ? "New cable run" : r.label, html,
+            '<button class="btn" id="rCancel">Cancel</button>' +
+            '<button class="btn primary" id="rSave"><i class="save icon"></i>Save</button>');
+
+        $("rCancel").onclick = closeSheet;
+        $("rSave").onclick = function () {
+            var payload = {
+                id: r.id,
+                label: $("rLabel").value,
+                barcode: $("rBarcode").value,
+                cableType: $("rType").value,
+                length: $("rLength").value,
+                fromLocation: $("rFromLoc").value,
+                fromPort: $("rFromPort").value,
+                toLocation: $("rToLoc").value,
+                toPort: $("rToPort").value,
+                state: $("rState").value,
+                testedOn: $("rTested").value,
+                itemId: $("rItem").value,
+                notes: $("rNotes").value,
+                createdAt: r.createdAt
+            };
+            if (!payload.label.trim() && !payload.barcode.trim()) {
+                toast("Give the run a label", "err");
+                return;
+            }
+            api("saveRun.agi", { runData: JSON.stringify(payload) }, function (data) {
+                state.runs = data.runs;
+                closeSheet();
+                toast(isNew ? "Cable run added" : "Cable run saved", "ok");
+                updateSubtitle();
+                if (state.view === "cables") renderCables();
+            });
+        };
+
+        if (!isNew) {
+            $("rDelete").onclick = function () {
+                confirmSheet("Delete " + r.label + "?",
+                    "The run is removed from the register. Stock is not affected.",
+                    function () {
+                        api("deleteRun.agi", { runId: r.id }, function (data) {
+                            state.runs = data.runs;
+                            closeSheet();
+                            toast("Cable run deleted", "ok");
+                            updateSubtitle();
+                            if (state.view === "cables") renderCables();
+                        });
+                    },
+                    function () { openRunEditor(r); });
+            };
+        }
+    }
+
     /* ── Alerts view ────────────────────────────────────────────────────── */
 
     function renderAlerts() {
@@ -1408,10 +2013,24 @@ var App = (function () {
             '<button class="btn" id="moreHistory"><i class="history icon"></i>Full history</button>' +
             '<button class="btn" id="moreReload"><i class="sync icon"></i>Reload</button>' +
             "</div>" +
-            '<div class="btn-row">' +
+            '<div class="btn-row" style="margin-bottom:8px;">' +
             '<button class="btn" id="exportItems"><i class="file excel outline icon"></i>Export items</button>' +
             '<button class="btn" id="exportMoves"><i class="file alternate outline icon"></i>Export log</button>' +
+            "</div>" +
+            '<div class="btn-row">' +
+            '<button class="btn" id="exportBatches"><i class="tags icon"></i>Export batches</button>' +
+            '<button class="btn" id="exportRuns"><i class="plug icon"></i>Export cable runs</button>' +
             "</div></div>";
+
+        html +=
+            '<div class="section-title">Product catalogue</div><div class="card">' +
+            '<div class="context-label">' + state.catalogueSize +
+            (state.catalogueSize === 1 ? " barcode known" : " barcodes known") +
+            ". Naming an item teaches this list, so the next time the same UPC or JAN " +
+            "is scanned the name comes up on its own. Everything stays on this server - " +
+            "no barcode is ever sent anywhere.</div>" +
+            '<button class="btn block" id="catImport"><i class="upload icon"></i>' +
+            "Import a UPC / JAN list</button></div>";
 
         var pairing = state.pairing || { role: "none", devices: [] };
         var pairSummary;
@@ -1508,6 +2127,9 @@ var App = (function () {
         $("moreReload").onclick = function () { load(true); };
         $("exportItems").onclick = function () { runExport("items"); };
         $("exportMoves").onclick = function () { runExport("movements"); };
+        $("exportBatches").onclick = function () { runExport("batches"); };
+        $("exportRuns").onclick = function () { runExport("runs"); };
+        $("catImport").onclick = openCatalogueImport;
 
         bindSwitches();
 
@@ -1578,6 +2200,61 @@ var App = (function () {
         });
     }
 
+    /*
+        Import a barcode list. Deliberately offers a paste box and a path into
+        the user's own ArozOS storage rather than an upload to anywhere else.
+    */
+    function openCatalogueImport() {
+        openSheet("Import a barcode list",
+            '<div class="card muted" style="font-size:13px;line-height:1.55;">' +
+            "<p style=\"margin-top:0;\">One row per product. CSV or JSON, with or without a header:</p>" +
+            "<p style=\"margin:0;\"><code>4901777018888,Green Tea 500ml,Asahi</code><br>" +
+            "<code>barcode,name,brand,category,unit</code></p>" +
+            "<p style=\"margin-bottom:0;\">A 12-digit UPC-A and its 13-digit EAN form are stored as " +
+            "the same product, so either scan finds it.</p></div>" +
+
+            '<div class="field"><label>Paste the list</label>' +
+            '<textarea id="catText" style="min-height:140px;font-family:monospace;font-size:13px;" ' +
+            'placeholder="4901777018888,Green Tea 500ml"></textarea></div>' +
+
+            '<div class="field"><label>...or read it from a file</label>' +
+            '<input type="text" id="catPath" placeholder="user:/Desktop/upc.csv">' +
+            '<div class="hint">Any path in your own storage.</div></div>' +
+
+            '<div class="switch-row"><div class="label">Replace the catalogue' +
+            "<small>Off adds to what is already known</small></div>" +
+            '<div class="switch" id="catReplace"></div></div>',
+
+            '<button class="btn" id="catCancel">Cancel</button>' +
+            '<button class="btn primary" id="catGo"><i class="upload icon"></i>Import</button>');
+
+        var replace = false;
+        $("catReplace").onclick = function () {
+            replace = !replace;
+            this.className = "switch" + (replace ? " on" : "");
+        };
+        $("catCancel").onclick = closeSheet;
+        $("catGo").onclick = function () {
+            var text = $("catText").value;
+            var vpath = $("catPath").value.trim();
+            if (text.trim() === "" && vpath === "") {
+                toast("Paste a list or give a file path", "err");
+                return;
+            }
+            api("catalogueImport.agi", {
+                text: text,
+                vpath: vpath,
+                replace: replace ? "true" : "false"
+            }, function (data) {
+                state.catalogueSize = data.catalogueSize;
+                closeSheet();
+                toast(data.imported + " barcodes imported" +
+                    (data.skipped ? ", " + data.skipped + " skipped" : ""), "ok");
+                if (state.view === "more") renderMore();
+            });
+        };
+    }
+
     /* ── Sheets: item detail, editor, keypad, locations, history ────────── */
 
     function openSheet(title, bodyHtml, footHtml) {
@@ -1639,6 +2316,31 @@ var App = (function () {
             "</div>" +
             (item.notes ? '<div class="kv" style="margin-top:8px;"><div class="k">Notes</div><div class="v" style="white-space:normal;">' + esc(item.notes) + "</div></div>" : "") +
             "</div>";
+
+        if (item.kind === "cable") {
+            html += '<div class="section-title">Cable</div><div class="card"><div class="kv-grid">' +
+                kv("Type", item.cableType || "-") +
+                kv("Length", item.cableLength ? qtyText(item.cableLength) + " m" : "-") +
+                kv("Connector A", item.connectorA || "-") +
+                kv("Connector B", item.connectorB || "-") +
+                "</div></div>";
+        }
+
+        if (item.batches.length) {
+            html += '<div class="section-title">Batches (' + item.batches.length + ")</div>" +
+                '<div class="card flush">';
+            var ordered = item.batches.slice();
+            ordered.sort(function (x, y) {
+                if (x.expiryDate === y.expiryDate) return 0;
+                if (x.expiryDate === "") return 1;
+                if (y.expiryDate === "") return -1;
+                return x.expiryDate < y.expiryDate ? -1 : 1;
+            });
+            for (var b = 0; b < ordered.length; b++) {
+                html += batchRowHtml(ordered[b], false);
+            }
+            html += "</div>";
+        }
 
         html += '<div class="section-title">Recent movements</div><div class="card flush" id="itemHistory">' +
             '<div class="empty">Loading...</div></div>';
@@ -1713,13 +2415,20 @@ var App = (function () {
     }
 
     /* Item editor - the one place every tracked field can be set */
-    function openItemEditor(item, prefillBarcode) {
+    function openItemEditor(item, prefillBarcode, catalogueHit) {
         var isNew = !item;
         var it = item || {
-            id: "", barcode: prefillBarcode || "", name: "", sku: "", category: "",
-            qty: 0, unit: "pcs", minQty: 0, location: state.moveTarget || "", price: 0,
-            expiryDate: "", warrantyEnd: "", supplier: "", serial: "", notes: ""
+            id: "", kind: "item", barcode: prefillBarcode || "",
+            name: (catalogueHit && catalogueHit.name) || "",
+            sku: "", category: (catalogueHit && catalogueHit.category) || "",
+            qty: 0, unit: (catalogueHit && catalogueHit.unit) || "pcs",
+            minQty: 0, location: state.moveTarget || "", price: 0,
+            expiryDate: "", warrantyEnd: "", supplier: "", serial: "", notes: "",
+            batches: [], cableType: "", cableLength: 0, connectorA: "", connectorB: ""
         };
+
+        // Edited in place while the sheet is open, saved with the item
+        editorBatches = (it.batches || []).slice();
 
         var locationOptions = '<option value="">- none -</option>';
         var hasLocation = false;
@@ -1740,6 +2449,12 @@ var App = (function () {
 
             '<div class="field"><label>Name</label>' +
             '<input type="text" id="fName" value="' + esc(it.name) + '" placeholder="What is it"></div>' +
+
+            '<div class="field"><label>What is it</label>' +
+            '<select id="fKind">' +
+            '<option value="item"' + (it.kind !== "cable" ? " selected" : "") + ">Stock item</option>" +
+            '<option value="cable"' + (it.kind === "cable" ? " selected" : "") + ">Cable</option>" +
+            "</select></div>" +
 
             '<div class="field-row">' +
             '<div class="field"><label>Quantity</label>' +
@@ -1779,6 +2494,26 @@ var App = (function () {
             '<input type="text" id="fSerial" value="' + esc(it.serial) + '"></div>' +
             "</div>" +
 
+            '<div class="cable-fields" id="cableFields">' +
+            '<div class="section-title">Cable</div>' +
+            '<div class="field-row">' +
+            '<div class="field"><label>Cable type</label>' +
+            '<input type="text" id="fCableType" value="' + esc(it.cableType) + '" placeholder="Cat6a"></div>' +
+            '<div class="field"><label>Length (m)</label>' +
+            '<input type="number" inputmode="decimal" step="any" min="0" id="fCableLength" value="' + esc(it.cableLength) + '"></div>' +
+            "</div>" +
+            '<div class="field-row">' +
+            '<div class="field"><label>Connector A</label>' +
+            '<input type="text" id="fConnA" value="' + esc(it.connectorA) + '" placeholder="RJ45"></div>' +
+            '<div class="field"><label>Connector B</label>' +
+            '<input type="text" id="fConnB" value="' + esc(it.connectorB) + '" placeholder="RJ45"></div>' +
+            "</div></div>" +
+
+            '<div class="section-title">Batches</div>' +
+            '<div class="card flush" id="batchEditor"></div>' +
+            '<button class="btn block small" id="batchAdd" style="margin-bottom:12px;">' +
+            '<i class="plus icon"></i>Add a batch</button>' +
+
             '<div class="field"><label>Notes</label>' +
             '<textarea id="fNotes" placeholder="Anything worth remembering">' + esc(it.notes) + "</textarea></div>";
 
@@ -1805,11 +2540,29 @@ var App = (function () {
             }
         });
 
+        var kindSelect = $("fKind");
+        var syncKind = function () {
+            // The cable block is only noise on a box of gloves. "block" rather
+            // than "" because clearing the inline style hands the element back
+            // to the stylesheet, which hides .cable-fields by default.
+            $("cableFields").style.display = kindSelect.value === "cable" ? "block" : "none";
+        };
+        kindSelect.addEventListener("change", syncKind);
+        syncKind();
+
+        renderBatchEditor();
+        $("batchAdd").onclick = function () {
+            editorBatches.push({ id: "", batch: "", expiryDate: "", qty: 0, note: "" });
+            renderBatchEditor();
+        };
+
         $("fCancel").onclick = closeSheet;
 
         $("fSave").onclick = function () {
+            collectBatchEditor();
             var payload = {
                 id: it.id,
+                kind: kindSelect.value,
                 barcode: $("fBarcode").value,
                 name: $("fName").value,
                 sku: $("fSku").value,
@@ -1824,6 +2577,11 @@ var App = (function () {
                 supplier: $("fSupplier").value,
                 serial: $("fSerial").value,
                 notes: $("fNotes").value,
+                batches: editorBatches,
+                cableType: $("fCableType").value,
+                cableLength: $("fCableLength").value,
+                connectorA: $("fConnA").value,
+                connectorB: $("fConnB").value,
                 createdAt: it.createdAt
             };
 
@@ -1836,7 +2594,11 @@ var App = (function () {
                 upsertItem(data.item);
                 if (data.locations) state.locations = data.locations;
                 closeSheet();
-                toast(isNew ? "Item added" : "Item saved", "ok");
+                if (data.barcodeSuspect) {
+                    toast("Saved, but that barcode's check digit does not add up", "warn");
+                } else {
+                    toast(isNew ? "Item added" : "Item saved", "ok");
+                }
                 InvScanner.feedbackOk();
                 refreshAllViews();
                 if (isNew) showResult({ type: "lookup", item: data.item });
@@ -1865,6 +2627,105 @@ var App = (function () {
             var focusTarget = isNew && it.barcode ? $("fName") : $("fBarcode");
             if (focusTarget) focusTarget.focus();
         }, 60);
+    }
+
+    // Batch rows being edited in the open item sheet
+    var editorBatches = [];
+
+    /*
+        Batch rows in the item editor. While any exist the item's own quantity
+        and expiry are derived from them, so those two inputs are locked to stop
+        an operator editing a number that is about to be overwritten.
+    */
+    function renderBatchEditor() {
+        var host = $("batchEditor");
+        if (!host) return;
+
+        var qtyInput = $("fQty");
+        var expiryInput = $("fExpiry");
+        var derived = editorBatches.length > 0;
+
+        if (qtyInput) {
+            qtyInput.readOnly = derived;
+            qtyInput.className = derived ? "derived" : "";
+            if (derived) {
+                var total = 0;
+                for (var t = 0; t < editorBatches.length; t++) {
+                    total += parseFloat(editorBatches[t].qty) || 0;
+                }
+                qtyInput.value = total;
+            }
+        }
+        if (expiryInput) {
+            expiryInput.readOnly = derived;
+            expiryInput.className = derived ? "derived" : "";
+        }
+
+        if (!editorBatches.length) {
+            host.innerHTML = '<div class="empty" style="padding:16px;">' +
+                "Not batch tracked. Add a batch when the same product arrives with " +
+                "its own lot number and expiry date.</div>";
+            return;
+        }
+
+        var html = "";
+        for (var i = 0; i < editorBatches.length; i++) {
+            var batch = editorBatches[i];
+            html += '<div class="batch-edit" data-index="' + i + '">' +
+                '<div class="field-row">' +
+                '<div class="field"><label>Batch / lot</label>' +
+                '<input type="text" class="b-label" value="' + esc(batch.batch) + '" placeholder="L-2409"></div>' +
+                '<div class="field"><label>Quantity</label>' +
+                '<input type="number" inputmode="decimal" step="any" class="b-qty" value="' + esc(batch.qty) + '"></div>' +
+                "</div>" +
+                '<div class="field-row">' +
+                '<div class="field"><label>Expiry date</label>' +
+                '<input type="date" class="b-expiry" value="' + esc(batch.expiryDate) + '"></div>' +
+                '<div class="field" style="flex:0 0 auto;"><label>&nbsp;</label>' +
+                '<button class="btn small danger b-remove"><i class="trash icon"></i></button></div>' +
+                "</div></div>";
+        }
+        host.innerHTML = html;
+
+        var removes = host.querySelectorAll(".b-remove");
+        for (var r = 0; r < removes.length; r++) {
+            removes[r].onclick = function () {
+                collectBatchEditor();
+                var index = parseInt(closestClass(this, "batch-edit").getAttribute("data-index"), 10);
+                editorBatches.splice(index, 1);
+                renderBatchEditor();
+            };
+        }
+
+        // Keep the derived total honest as the operator types
+        var qtyFields = host.querySelectorAll(".b-qty");
+        for (var q = 0; q < qtyFields.length; q++) {
+            qtyFields[q].addEventListener("input", function () {
+                collectBatchEditor();
+                renderBatchEditor();
+            });
+        }
+    }
+
+    /* Reads the batch rows back out of the DOM into editorBatches */
+    function collectBatchEditor() {
+        var host = $("batchEditor");
+        if (!host) return;
+        var rows = host.querySelectorAll(".batch-edit");
+        var collected = [];
+        for (var i = 0; i < rows.length; i++) {
+            var index = parseInt(rows[i].getAttribute("data-index"), 10);
+            var previous = editorBatches[index] || {};
+            collected.push({
+                id: previous.id || "",
+                batch: rows[i].querySelector(".b-label").value,
+                qty: rows[i].querySelector(".b-qty").value,
+                expiryDate: rows[i].querySelector(".b-expiry").value,
+                note: previous.note || "",
+                receivedAt: previous.receivedAt
+            });
+        }
+        editorBatches = collected;
     }
 
     /* Numeric keypad for stock takes - usable with gloves, no soft keyboard */
@@ -2077,6 +2938,7 @@ var App = (function () {
 
         if (name === "search") renderSearch();
         if (name === "alerts") renderAlerts();
+        if (name === "cables") renderCables();
         if (name === "more") renderMore();
 
         // Arm whichever field this view scans into, so a trigger pull always
@@ -2085,12 +2947,59 @@ var App = (function () {
     }
 
     function refreshAllViews() {
+        updateSubtitle();
         renderAlertBadge();
         renderPairingBar();
         renderContext();
         if (state.view === "search") renderSearch();
         if (state.view === "alerts") renderAlerts();
+        if (state.view === "cables") renderCables();
         if (state.view === "more") renderMore();
+    }
+
+    /* ── Full screen ────────────────────────────────────────────────────── */
+
+    function fullscreenElement() {
+        return document.fullscreenElement || document.webkitFullscreenElement || null;
+    }
+
+    /*
+        Worth having on a handheld: the browser's own chrome eats 15% of a 4.7"
+        screen, and a warehouse app is used one screen at a time.
+    */
+    function toggleFullscreen() {
+        var root = document.documentElement;
+
+        if (fullscreenElement()) {
+            var exit = document.exitFullscreen || document.webkitExitFullscreen;
+            if (exit) exit.call(document);
+            return;
+        }
+
+        var request = root.requestFullscreen || root.webkitRequestFullscreen;
+        if (!request) {
+            toast("This browser will not go full screen", "warn");
+            return;
+        }
+
+        try {
+            var result = request.call(root);
+            // A float window's iframe may not carry allowfullscreen, in which
+            // case the request is rejected rather than throwing
+            if (result && result.then) {
+                result.then(syncFullscreenIcon, function () {
+                    toast("Full screen was blocked - open the app in its own tab", "warn");
+                });
+            }
+        } catch (e) {
+            toast("Full screen is not available here", "warn");
+        }
+    }
+
+    function syncFullscreenIcon() {
+        var icon = $("fullscreenIcon");
+        if (!icon) return;
+        icon.className = fullscreenElement() ? "compress icon" : "expand icon";
     }
 
     /* ── Theme ──────────────────────────────────────────────────────────── */
@@ -2122,6 +3031,9 @@ var App = (function () {
             state.locations = data.locations || [];
             state.settings = data.settings || {};
             state.movements = data.movements || [];
+            state.runs = data.runs || [];
+            state.catalogueSize = data.catalogueSize || 0;
+            state.counting = data.countSession || null;
             state.loaded = true;
 
             if (state.settings.defaultStep) state.step = state.settings.defaultStep;
@@ -2142,8 +3054,10 @@ var App = (function () {
     }
 
     function updateSubtitle() {
-        $("topSubtitle").textContent = state.items.length + " items · " +
-            state.locations.length + " locations";
+        var parts = [state.items.length + " items", state.locations.length + " locations"];
+        if (state.runs.length) parts.push(state.runs.length + " cable runs");
+        if (state.counting) parts.push("count open");
+        $("topSubtitle").textContent = parts.join(" · ");
     }
 
     function bindUi() {
@@ -2169,6 +3083,29 @@ var App = (function () {
                 renderContext();
                 setScanStatus(null, true);
                 armInput();
+                return;
+            }
+            var methodNode = closestClass(event.target, "count-method");
+            if (methodNode) {
+                state.countMethod = methodNode.getAttribute("data-method");
+                renderContext();
+                setScanStatus(null, true);
+                armInput();
+                return;
+            }
+            if (closestClass(event.target, "count-start") ||
+                (event.target.id === "countStartBtn")) {
+                startBlindCount(null);
+                return;
+            }
+            if (event.target.id === "countReviewBtn" ||
+                closestClass(event.target, "count-review")) {
+                openCountReview();
+                return;
+            }
+            if (event.target.id === "countCancelBtn" ||
+                closestClass(event.target, "count-cancel")) {
+                cancelBlindCount();
                 return;
             }
             if (closestClass(event.target, "step-custom")) {
@@ -2224,6 +3161,10 @@ var App = (function () {
         };
 
         $("btnAdd").onclick = function () { openItemEditor(null, ""); };
+
+        $("btnFullscreen").onclick = toggleFullscreen;
+        document.addEventListener("fullscreenchange", syncFullscreenIcon);
+        document.addEventListener("webkitfullscreenchange", syncFullscreenIcon);
 
         $("btnTheme").onclick = function () {
             if (typeof ao_module_toggleSystemTheme === "function") {

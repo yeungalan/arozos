@@ -1,0 +1,55 @@
+/*
+    Inventory - create or update an installed cable run
+
+    POST: runData (JSON string of the run object)
+    Returns { ok, run, runs } or { error }.
+*/
+includes("store.js");
+includes("cableruns.js");
+
+var incoming;
+try {
+    incoming = JSON.parse(runData);
+} catch (e) {
+    incoming = null;
+}
+
+var run = runNormalise(incoming);
+
+if (!run) {
+    sendJSONResp({ error: "Invalid cable run data" });
+} else if (run.label === "" && run.barcode === "") {
+    sendJSONResp({ error: "Give the run a label so it can be found again" });
+} else {
+    var store = runLoad();
+    var existing = run.id === "" ? -1 : runIndexOfId(store, run.id);
+
+    if (run.id !== "" && existing === -1) {
+        sendJSONResp({ error: "That cable run no longer exists" });
+    } else {
+        // A label is what an operator reads off the cable, so two runs sharing
+        // one would make a scan ambiguous
+        var clash = runFindByCode(store, run.barcode !== "" ? run.barcode : run.label);
+        if (clash && (existing === -1 || clash.id !== store.runs[existing].id)) {
+            sendJSONResp({ error: "Label or barcode already used by run " + clash.label });
+        } else {
+            var isNew = (existing === -1);
+            if (isNew) {
+                run.id = invNewId("cr_");
+                run.createdAt = invNow();
+            } else {
+                run.createdAt = store.runs[existing].createdAt;
+            }
+            run.updatedAt = invNow();
+
+            if (isNew) {
+                store.runs.push(run);
+            } else {
+                store.runs[existing] = run;
+            }
+            runSave(store);
+
+            sendJSONResp({ ok: true, run: run, runs: store.runs });
+        }
+    }
+}

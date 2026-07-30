@@ -3,11 +3,15 @@
 
     Ensures the data folder exists and returns everything the front end needs
     for offline-style client side search:
-        { items, locations, settings, movements, serverTime }
+        { items, locations, settings, movements, runs, catalogueSize,
+          countSession, serverTime }
 
     POST (optional): movementLimit (number, default 200)
 */
 includes("store.js");
+includes("catalogue.js");
+includes("cableruns.js");
+includes("countsession.js");
 
 filelib.mkdir(INV_DIR);
 
@@ -27,10 +31,18 @@ if (typeof movementLimit !== "undefined") {
 var movements = invLoadMovements();
 if (movements.length > limit) movements = movements.slice(0, limit);
 
+var openCount = countLoad();
+
 sendJSONResp({
     items: data.items,
     locations: data.locations,
     settings: data.settings,
     movements: movements,
+    runs: runLoad().runs,
+    catalogueSize: catCount(catLoad()),
+    countSession: openCount
+        ? { id: openCount.id, name: openCount.name, startedAt: openCount.startedAt,
+            lines: openCount.lines.length }
+        : null,
     serverTime: invNow()
 });

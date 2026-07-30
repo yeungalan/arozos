@@ -1,0 +1,36 @@
+/*
+    Inventory - open (or resume) a blind cycle count
+
+    POST:
+        name  (string) - what this count is called, e.g. "Aisle A3 Friday"
+        reset (string) - "true" to discard an unfinished count and start clean
+
+    A count already in progress is returned as-is rather than replaced, so
+    reopening the app mid-aisle picks the tally back up.
+
+    Returns { ok, session } where session is { id, name, startedAt, lines }.
+*/
+includes("store.js");
+includes("countsession.js");
+
+var wantsReset = (typeof reset !== "undefined") && ("" + reset) === "true";
+var givenName = (typeof name !== "undefined") ? ("" + name).trim() : "";
+
+if (wantsReset) countClear();
+
+var session = countLoad();
+
+if (!session) {
+    session = {
+        id: invNewId("cs_"),
+        name: givenName !== "" ? givenName : "Cycle count",
+        startedAt: invNow(),
+        lines: []
+    };
+    countSave(session);
+} else if (givenName !== "" && givenName !== session.name) {
+    session.name = givenName;
+    countSave(session);
+}
+
+sendJSONResp({ ok: true, session: session });

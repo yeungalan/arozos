@@ -7,6 +7,7 @@
     Returns { ok: true, item: <saved item>, locations: [...] } or { error }.
 */
 includes("store.js");
+includes("catalogue.js");
 
 var incoming;
 try {
@@ -57,6 +58,23 @@ if (!item) {
         invRememberLocation(data, item.location);
         invSave(data);
 
+        /*
+            Teach the local catalogue what this barcode is called. Next time the
+            same product turns up - here or in another location - the name is
+            already known, which is the whole point of keeping the catalogue
+            local rather than asking anyone else.
+        */
+        if (item.barcode !== "" && item.name !== "") {
+            var catalogue = catLoad();
+            if (catRemember(catalogue, item.barcode, {
+                name: item.name,
+                category: item.category,
+                unit: item.unit
+            }, "learned")) {
+                catSave(catalogue);
+            }
+        }
+
         invAddMovement({
             itemId: item.id,
             barcode: item.barcode,
@@ -69,6 +87,11 @@ if (!item) {
             note: isNew ? "Item created" : "Item details updated"
         });
 
-        sendJSONResp({ ok: true, item: item, locations: data.locations });
+        sendJSONResp({
+            ok: true,
+            item: item,
+            locations: data.locations,
+            barcodeSuspect: !catCheckDigitValid(item.barcode)
+        });
     }
 }

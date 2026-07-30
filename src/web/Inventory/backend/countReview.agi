@@ -1,0 +1,96 @@
+/*
+    Inventory - the blind count's variance report
+
+    Only now is the book quantity revealed, next to what was actually counted.
+    Lines are ordered worst variance first, since that is the work queue.
+
+    POST: none
+
+    Returns { ok, session, lines, summary } or { error, noSession }.
+*/
+includes("store.js");
+includes("countsession.js");
+
+var session = countLoad();
+
+if (!session) {
+    sendJSONResp({ error: "No count is open", noSession: true });
+} else {
+    var data = invLoad();
+    var lines = [];
+    var matched = 0;
+    var over = 0;
+    var under = 0;
+    var missing = 0;
+
+    for (var i = 0; i < session.lines.length; i++) {
+        var line = session.lines[i];
+        var index = invIndexOfId(data, line.itemId);
+
+        if (index === -1) {
+            // Deleted mid-count: report it rather than dropping the tally
+            lines.push({
+                itemId: line.itemId, batchId: line.batchId, batchLabel: line.batchLabel,
+                barcode: line.barcode, name: line.name, unit: line.unit,
+                counted: line.counted, expected: 0, variance: line.counted,
+                scans: line.scans, gone: true, location: ""
+            });
+            missing++;
+            continue;
+        }
+
+        var item = data.items[index];
+        var expected = item.qty;
+        if (line.batchId !== "") {
+            var batchIndex = invIndexOfBatch(item, line.batchId);
+            expected = batchIndex === -1 ? 0 : item.batches[batchIndex].qty;
+            if (batchIndex === -1) missing++;
+        }
+
+        var variance = line.counted - expected;
+        if (variance === 0) matched++;
+        else if (variance > 0) over++;
+        else under++;
+
+        lines.push({
+            itemId: item.id,
+            batchId: line.batchId,
+            batchLabel: line.batchLabel,
+            barcode: item.barcode,
+            name: item.name,
+            unit: item.unit,
+            location: item.location,
+            counted: line.counted,
+            expected: expected,
+            variance: variance,
+            scans: line.scans,
+            gone: false
+        });
+    }
+
+    // Biggest discrepancy first - that is what gets investigated
+    lines.sort(function (a, b) {
+        var da = a.variance < 0 ? -a.variance : a.variance;
+        var db = b.variance < 0 ? -b.variance : b.variance;
+        if (da !== db) return db - da;
+        return a.name < b.name ? -1 : 1;
+    });
+
+    /*
+        Items never scanned during the count are NOT reported as zero. A blind
+        count covers whatever the operator walked past, so treating an unvisited
+        item as "counted zero" would wipe out stock that was simply not in scope.
+    */
+    sendJSONResp({
+        ok: true,
+        session: { id: session.id, name: session.name, startedAt: session.startedAt },
+        lines: lines,
+        summary: {
+            lines: lines.length,
+            matched: matched,
+            over: over,
+            under: under,
+            missing: missing
+        }
+    });
+}

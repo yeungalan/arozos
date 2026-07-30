@@ -1,14 +1,16 @@
 /*
     Inventory - Export items or the movement journal as CSV
 
-    POST: kind (string) - "items" (default) or "movements"
+    POST: kind (string) - "items" (default), "batches", "movements" or "runs"
     Writes into user:/Document/Inventory/exports/ and returns the vpath so the
     front end can hand it to the file manager.
 */
 includes("store.js");
+includes("cableruns.js");
 
+var EXPORT_KINDS = ["items", "batches", "movements", "runs"];
 var exportKind = (typeof kind !== "undefined") ? ("" + kind).trim() : "items";
-if (exportKind !== "movements") exportKind = "items";
+if (EXPORT_KINDS.indexOf(exportKind) === -1) exportKind = "items";
 
 /* Escapes one CSV field per RFC 4180 */
 function csvCell(value) {
@@ -40,24 +42,55 @@ var csv = "";
 var rows = 0;
 
 if (exportKind === "items") {
-    csv += csvRow(["Barcode", "Name", "SKU", "Category", "Quantity", "Unit",
+    csv += csvRow(["Barcode", "Name", "Kind", "SKU", "Category", "Quantity", "Unit",
         "Min Quantity", "Location", "Unit Price", "Total Value", "Expiry Date",
-        "Warranty End", "Supplier", "Serial", "Notes", "Created", "Updated"]);
+        "Warranty End", "Batches", "Cable Type", "Length (m)", "Connector A",
+        "Connector B", "Supplier", "Serial", "Notes", "Created", "Updated"]);
     for (var i = 0; i < data.items.length; i++) {
         var it = data.items[i];
-        csv += csvRow([it.barcode, it.name, it.sku, it.category, it.qty, it.unit,
+        csv += csvRow([it.barcode, it.name, it.kind, it.sku, it.category, it.qty, it.unit,
             it.minQty, it.location, it.price, (it.price * it.qty).toFixed(2),
-            it.expiryDate, it.warrantyEnd, it.supplier, it.serial, it.notes,
+            it.expiryDate, it.warrantyEnd, it.batches.length,
+            it.cableType, it.cableLength, it.connectorA, it.connectorB,
+            it.supplier, it.serial, it.notes,
             csvTimestamp(it.createdAt), csvTimestamp(it.updatedAt)]);
         rows++;
     }
+} else if (exportKind === "batches") {
+    // One row per lot, which is what a shelf-life or recall report needs
+    csv += csvRow(["Barcode", "Name", "Batch", "Expiry Date", "Quantity", "Unit",
+        "Location", "Unit Price", "Batch Value", "Received", "Note"]);
+    for (var b = 0; b < data.items.length; b++) {
+        var owner = data.items[b];
+        for (var k = 0; k < owner.batches.length; k++) {
+            var lot = owner.batches[k];
+            csv += csvRow([owner.barcode, owner.name, lot.batch, lot.expiryDate,
+                lot.qty, owner.unit, owner.location, owner.price,
+                (owner.price * lot.qty).toFixed(2),
+                csvTimestamp(lot.receivedAt), lot.note]);
+            rows++;
+        }
+    }
+} else if (exportKind === "runs") {
+    csv += csvRow(["Label", "Barcode", "Cable Type", "Length (m)", "From Location",
+        "From Port", "To Location", "To Port", "State", "Tested On", "Notes",
+        "Created", "Updated"]);
+    var runs = runLoad().runs;
+    for (var r = 0; r < runs.length; r++) {
+        var cr = runs[r];
+        csv += csvRow([cr.label, cr.barcode, cr.cableType, cr.length,
+            cr.fromLocation, cr.fromPort, cr.toLocation, cr.toPort, cr.state,
+            cr.testedOn, cr.notes, csvTimestamp(cr.createdAt), csvTimestamp(cr.updatedAt)]);
+        rows++;
+    }
 } else {
-    csv += csvRow(["Timestamp", "Type", "Barcode", "Name", "Change",
+    csv += csvRow(["Timestamp", "Type", "Barcode", "Name", "Batch", "Change",
         "Quantity After", "From Location", "To Location", "Note"]);
     var movements = invLoadMovements();
     for (var j = 0; j < movements.length; j++) {
         var mv = movements[j];
-        csv += csvRow([csvTimestamp(mv.ts), mv.type, mv.barcode, mv.name, mv.delta,
+        csv += csvRow([csvTimestamp(mv.ts), mv.type, mv.barcode, mv.name,
+            mv.batch || "", mv.delta,
             mv.qtyAfter, mv.fromLocation, mv.toLocation, mv.note]);
         rows++;
     }

@@ -1,0 +1,93 @@
+/*
+    Inventory - add one scan to the blind count
+
+    One trigger pull is one unit, which is what makes a blind count fast: no
+    keypad, no reading a number off the screen, just keep scanning.
+
+    POST:
+        barcode (string) - the scan; itemId wins if both are given
+        itemId  (string)
+        batchId (string) - required when the item is batch tracked
+        step    (number) - units this scan represents, default 1
+
+    Deliberately does NOT return the item's book quantity. A blind count that
+    shows you the expected number is not a blind count.
+
+    Returns { ok, line, totalLines } or { error, unknownBarcode | needBatch }.
+*/
+includes("store.js");
+includes("countsession.js");
+
+var scanned = (typeof barcode !== "undefined") ? ("" + barcode).trim() : "";
+var targetId = (typeof itemId !== "undefined") ? ("" + itemId).trim() : "";
+var wantedBatch = (typeof batchId !== "undefined") ? ("" + batchId).trim() : "";
+
+var stepValue = 1;
+if (typeof step !== "undefined") {
+    var parsedStep = parseFloat(step);
+    if (!isNaN(parsedStep) && parsedStep !== 0) stepValue = parsedStep;
+}
+
+var session = countLoad();
+var data = invLoad();
+
+if (!session) {
+    sendJSONResp({ error: "No count is open", noSession: true });
+} else if (targetId === "" && scanned === "") {
+    sendJSONResp({ error: "Nothing to count" });
+} else {
+    var index = targetId !== "" ? invIndexOfId(data, targetId) : invIndexOfBarcode(data, scanned);
+
+    if (index === -1) {
+        sendJSONResp({ error: "No item matches this barcode", unknownBarcode: scanned });
+    } else {
+        var item = data.items[index];
+
+        if (invIsBatchTracked(item) && wantedBatch === "") {
+            // Counting a batch-tracked product without naming the lot would
+            // produce a number that cannot be posted to anything
+            sendJSONResp({
+                error: "This item has several batches - pick which one you are counting",
+                needBatch: true,
+                item: item,
+                batches: invBatchesByExpiry(item)
+            });
+        } else if (invIsBatchTracked(item) && invIndexOfBatch(item, wantedBatch) === -1) {
+            sendJSONResp({ error: "That batch is no longer on this item", needBatch: true,
+                item: item, batches: invBatchesByExpiry(item) });
+        } else {
+            var lineIndex = countIndexOfLine(session, item.id, wantedBatch);
+            var batchLabel = "";
+            if (wantedBatch !== "") {
+                batchLabel = item.batches[invIndexOfBatch(item, wantedBatch)].batch;
+            }
+
+            if (lineIndex === -1) {
+                session.lines.push({
+                    itemId: item.id,
+                    batchId: wantedBatch,
+                    batchLabel: batchLabel,
+                    barcode: item.barcode,
+                    name: item.name,
+                    unit: item.unit,
+                    counted: stepValue,
+                    scans: 1,
+                    firstAt: invNow(),
+                    lastAt: invNow()
+                });
+                lineIndex = session.lines.length - 1;
+            } else {
+                session.lines[lineIndex].counted += stepValue;
+                session.lines[lineIndex].scans++;
+                session.lines[lineIndex].lastAt = invNow();
+            }
+
+            countSave(session);
+            sendJSONResp({
+                ok: true,
+                line: session.lines[lineIndex],
+                totalLines: session.lines.length
+            });
+        }
+    }
+}

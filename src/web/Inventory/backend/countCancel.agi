@@ -1,0 +1,13 @@
+/*
+    Inventory - abandon the open blind count
+
+    Throws the tally away without touching stock.
+
+    POST: none
+    Returns { ok }.
+*/
+includes("store.js");
+includes("countsession.js");
+
+countClear();
+sendJSONResp({ ok: true });
